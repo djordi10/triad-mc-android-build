@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- A thin Material3 base; the real theming is in Compose (ui/theme/Theme.kt). v5.11 facelift:
+         the body is light paper, the status bar sits over the dark pine brand strip. -->
+    <style name="Theme.TriadMissionControl" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/paper</item>
+        <item name="android:statusBarColor">@color/pine</item>
+        <item name="android:navigationBarColor">@color/paper</item>
+    </style>
+</resources>

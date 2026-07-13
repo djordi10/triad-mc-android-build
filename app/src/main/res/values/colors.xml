@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The TRIAD palette (shared with the web dashboard, v5.11). -->
+    <color name="paper">#F7F6F2</color>
+    <color name="pine">#0E211A</color>
+    <color name="pine2">#16352A</color>
+    <color name="ink">#17251F</color>
+    <color name="emerald">#0F8A5F</color>
+    <color name="emerald_bright">#59C99A</color>
+</resources>

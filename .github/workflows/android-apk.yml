@@ -1,0 +1,42 @@
+name: android-apk
+
+# Standalone build of the TRIAD Mission Control v5.11 native Android app -> debug APK artifact.
+# The gradle project is at the repo root here. DEMO is the default build, so the APK is usable
+# with no live endpoint.
+
+on:
+  push: {}
+  workflow_dispatch: {}
+
+jobs:
+  apk:
+    name: assemble debug APK (+ unit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: triad-mission-control-v5.11-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
