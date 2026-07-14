@@ -13,8 +13,9 @@ android {
         applicationId = "agentic.triad.missioncontrol"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "5.11"
+        // Build-driven so the in-app updater can tell "newer": CI passes VERSION_CODE=run_number.
+        versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1)
+        versionName = "1.0.${System.getenv("VERSION_CODE") ?: "dev"}"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // A fresh install is fully usable pre-deployment (DEMO), exactly like the web client.
         buildConfigField("String", "DEFAULT_MODE", "\"DEMO\"")

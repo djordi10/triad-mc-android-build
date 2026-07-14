@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- The update APK is written to the app cache dir, then handed to the installer. -->
+    <cache-path name="apk" path="." />
+    <external-cache-path name="ext_apk" path="." />
+</paths>
