@@ -2,13 +2,16 @@ package agentic.triad.missioncontrol.ui.views
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
+import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
-import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
@@ -22,223 +25,532 @@ import agentic.triad.missioncontrol.ui.components.Tone.SEV
 import agentic.triad.missioncontrol.ui.components.Tone.UNK
 import agentic.triad.missioncontrol.ui.components.Tone.WARN
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
+import agentic.triad.missioncontrol.ui.components.arr
+import agentic.triad.missioncontrol.ui.components.bool
+import agentic.triad.missioncontrol.ui.components.fmt
+import agentic.triad.missioncontrol.ui.components.int
+import agentic.triad.missioncontrol.ui.components.num
+import agentic.triad.missioncontrol.ui.components.numEntries
+import agentic.triad.missioncontrol.ui.components.obj
+import agentic.triad.missioncontrol.ui.components.rows
+import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.nav.View
+import kotlinx.serialization.json.JsonObject
 
 private fun row(vararg cells: Pair<String, Tone>) = cells.toList()
 
+/** Short sha for display — first 10 hex, or em-dash. */
+private fun sha10(s: String?): String = s?.takeIf { it.isNotBlank() && it != "—" }?.take(10) ?: "—"
+
+// ── Intelligence & CAG — the model proposes, the envelope disposes ─────────────────────────────────
+// Intelligence Wiring v1.0 · I-1..I-7. invalid_output is a REJECTED trade (validator kill), never a
+// broken model; never overwrite conviction; the validator kill sheet; envelope feasibility; the void
+// between the 36–62 model output and the 60 threshold; CAG addressable capture-rate; get_render.
+private val INTEL_TOOLS = listOf(
+    "get_attestation", "get_cag_stats", "get_conviction_histogram", "get_take_rate",
+    "get_validator_rejects", "get_model_registry", "get_calibration",
+)
+
 @Composable
-fun IntelligenceScreen(@Suppress("UNUSED_PARAMETER") repo: MissionRepository) {
+fun IntelligenceScreen(repo: MissionRepository) {
+    val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, INTEL_TOOLS))
+    val s by vm.state.collectAsState()
+    val d = s.data
+
+    // Attestation — the F15 fixed point (Slot-A model / manifest / limits).
+    val att = d["get_attestation"] as? JsonObject
+    val contractsVer = att.text("contracts_version")
+    val manifestSha = sha10(att?.let { it["manifest_sha"] }?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content })
+    val limitsPresent = att.bool("limits_config_present")
+    val limitsSha = sha10(att?.let { it["limits_config_sha"] }?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content })
+
+    // Take-rate vs the 10–60% band.
+    val tr = d["get_take_rate"] as? JsonObject
+    val takeRate = tr.num("take_rate")
+    val takePct = takeRate?.let { it * 100 }
+    val inBand = tr.bool("in_band")
+    val takeN = (tr.obj("by_verdict")).int("take")
+    val skipN = (tr.obj("by_verdict")).int("skip")
+
+    // Validator kill sheet — by_check, the model's proposals killed on constraints.
+    val vr = d["get_validator_rejects"] as? JsonObject
+    val byCheck = vr.numEntries("by_check").sortedByDescending { it.second }
+    val vrTotal = vr.int("total_rejects") ?: byCheck.sumOf { it.second }.toInt()
+    val topKills = byCheck.take(6)
+
+    // Conviction histogram — the fresh distribution + the 36–62 void.
+    val ch = d["get_conviction_histogram"] as? JsonObject
+    val fresh = ch.numEntries("fresh")
+    val freshTotal = fresh.sumOf { it.second }.toInt()
+    val zeroBucket = fresh.firstOrNull { it.first == "0" }?.second?.toInt() ?: 0
+    // The mode among the non-zero buckets — the model is almost a constant.
+    val modeEntry = fresh.filter { it.first != "0" }.maxByOrNull { it.second }
+    val modeBucket = modeEntry?.first ?: "—"
+    val modeCount = modeEntry?.second?.toInt() ?: 0
+    val nonZero = freshTotal - zeroBucket
+    // The 36–62 void: nothing emitted between the top model band and the 60 threshold.
+    val voidBucket = fresh.filter { (it.first.toIntOrNull() ?: -1) in 38..59 }.sumOf { it.second }.toInt()
+
+    // Model registry — mutable:false, slots_seen (only Slot A).
+    val mr = d["get_model_registry"] as? JsonObject
+    val slots = mr.arr("slots_seen").mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+    val mutable = mr?.let { it["mutable"] }?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: "—"
+    val registrySchema = mr.bool("registry_schema_present")
+
+    // Calibration — status:absent ⇒ the threshold is uncalibrated.
+    val cal = d["get_calibration"] as? JsonObject
+    val calStatus = cal.text("status")
+    val calAbsent = calStatus != "present"
+
+    // CAG economics — hit-rate and the addressable capture (NOT vs total).
+    val cag = d["get_cag_stats"] as? JsonObject
+    val cagHit = cag.num("hit_rate")
+    val cagHitPct = cagHit?.let { it * 100 }
+    val cagTotal = cag.int("total")
+    val cagFresh = cag.int("fresh")
+    val cagCache = cag.int("cache_hits")
+
     ViewScaffold(
         View.INTELLIGENCE,
         stance = listOf(
-            Stance("model proposes", "18.9%", NEUTRAL),
-            Stance("validator kills", "689", BAD),
-            Stance("the mode", "22 ×945", WARN),
-            Stance("threshold", "60 (void)", SEV),
-            Stance("calibration", "ABSENT", BAD),
-            Stance("CAG capture", "3.3%", WARN),
+            Stance("take rate", takePct?.let { "${fmt(it, 2)}%" } ?: "—", if (inBand) GOOD else BAD),
+            Stance("validator kills", vrTotal.toString(), BAD),
+            Stance("the mode", if (modeCount > 0) "$modeBucket ×$modeCount" else "—", WARN),
+            Stance("threshold", if (calAbsent) "60 (void)" else "60", SEV),
+            Stance("calibration", calStatus.uppercase(), if (calAbsent) BAD else GOOD),
+            Stance("CAG hit", cagHitPct?.let { "${fmt(it, 2)}%" } ?: "—", WARN),
         ),
     ) {
         Ribbon(
             "invalid_output is a REJECTED TRADE, not a broken model (I-1)",
-            "The model returns a well-formed trade; the validator kills it on risk checks, then erases conviction to 0 and files it as invalid_output. The model wants to trade — the envelope forbids it.",
+            "The model returns a well-formed trade; the validator kills it on risk checks, then erases " +
+                "conviction to 0 and files it as invalid_output. $vrTotal proposals died this way — the " +
+                "model wants to trade; the envelope forbids it. An abstain is not a refusal.",
             SEV,
         )
-        McCard("The validator's kill sheet (689 rows, 10 checks)", "run_select · decisions.body.validator") {
-            MiniTable(
-                listOf("check", "fires", "limit"),
-                listOf(
-                    row("ttl_bounds" to BAD, "580" to BAD, "max_entry_ttl 1800s" to NEUTRAL),
-                    row("stop_distance" to BAD, "459" to BAD, "min_stop 45 bps" to NEUTRAL),
-                    row("net_rr_floor" to BAD, "458" to BAD, "gross_rr 2.5" to NEUTRAL),
-                ),
-            )
-            Note("The top three are one bug seen three ways — too tight, too fast, too thin for the venue's cost floor.")
+        McCard("Slot-A attestation (I-1) — the F15 fixed point", "get_attestation") {
+            KvRow("contracts", contractsVer, INFO)
+            KvRow("manifest_sha", manifestSha, NEUTRAL)
+            KvRow("limits_config", if (limitsPresent) "present · $limitsSha" else "ABSENT", if (limitsPresent) GOOD else BAD)
+            Note("The manifest is the fixed point, never a mutation path. Limits + strategy must be the same business (I-4).")
         }
-        McCard("Envelope feasibility (I-4)", "get_packet · get_limits — computed") {
-            KvRow("min_stop / structure", "11.8×", SEV)
-            KvRow("feasible", "false", BAD)
-            Note("The stop must be 11.8× wider than the structure the detector trades. Computed from live reads, not asserted.")
+        McCard("The validator's kill sheet ($vrTotal rows, ${byCheck.size} checks)", "get_validator_rejects · by_check") {
+            if (topKills.isEmpty()) {
+                Note("get_validator_rejects returned no rows — UNKNOWN.", UNK)
+            } else {
+                MiniTable(
+                    listOf("check", "fires", "share"),
+                    topKills.map { (check, n) ->
+                        val share = if (vrTotal > 0) (n / vrTotal * 100) else 0.0
+                        row(check to BAD, n.toInt().toString() to BAD, "${fmt(share, 0)}%" to NEUTRAL)
+                    },
+                )
+                Note("The top three (ttl_bounds · stop_distance · net_rr_floor) are one bug seen three ways — too fast, too tight, too thin for the venue's cost floor. Never overwrite conviction (I-1).")
+            }
         }
         McCard("The model is (almost) a constant (I-2)", "get_conviction_histogram") {
-            StatRow(Triple("mode 22", "945 / 1,092", WARN), Triple("emitted 0", "never", GOOD))
-            Note("Every zero in the histogram is a non-answer (error/timeout/validator kill). The model has never emitted 0.")
+            StatRow(
+                Triple("mode $modeBucket", "$modeCount / $nonZero", WARN),
+                Triple("emitted 0", "$zeroBucket non-answers", GOOD),
+            )
+            Note("Every zero in the histogram is a non-answer (error / timeout / validator kill), not a real conviction — $zeroBucket of $freshTotal fresh calls. The model has never emitted a true 0.")
         }
-        McCard("Threshold in a void (I-3)", "get_limits · get_calibration") {
+        McCard("Threshold in a void (I-3)", "get_conviction_histogram · get_calibration") {
             KvRow("threshold", "60", SEV)
-            KvRow("model output 36–62", "nothing, ever", BAD)
-            KvRow("calibration_artifact_hash", "null · get_calibration ABSENT", BAD)
+            KvRow("model output 38–59", if (voidBucket == 0) "nothing, ever" else "$voidBucket calls", if (voidBucket == 0) BAD else WARN)
+            KvRow("calibration_artifact", if (calAbsent) "$calStatus — UNCALIBRATED" else calStatus, BAD)
+            Note("An uncalibrated threshold is a guess (I-3): the model never lands in the 38–59 band it would need to cross to reach 60, and no artifact derives the 60.")
         }
-        McCard("CAG (I-5) · render (I-6)", "get_cag_stats · get_render") {
-            KvRow("capture vs addressable", "3.3% (not the 1.15% vs total)", WARN)
-            KvRow("get_render", "render_context_missing", BAD)
-            Note("The packet itself is excellent — the input is not the problem. get_validator_rejects reads the governor's 18 rows: a defect.")
+        McCard("Model registry (I-6) — read-only, mutable:false", "get_model_registry") {
+            KvRow("registry_schema", if (registrySchema) "present" else "absent", if (registrySchema) NEUTRAL else BAD)
+            KvRow("slots_seen", if (slots.isEmpty()) "—" else slots.joinToString(","), WARN)
+            KvRow("mutable", mutable, if (mutable == "false") GOOD else WARN)
+            Note("A schema with rows only in Slot A — Slot B (the challenger) has never been populated. The registry is never a path to change a model.")
         }
-        PendBox("get_model_rejects", "§10.1 · the missing tool — 689 rejected trades")
-        PendBox("get_conviction_truth", "§10.2 · threshold_in_void should page")
-        PendBox("get_envelope_feasibility", "§10.3 · feasible:false belongs on the Overview")
-        PendBox("get_cag_addressable", "§10.4 · report capture_rate, not hit_rate")
-        LawBlock("I-1..I-7", "An abstain is not a refusal · never overwrite conviction · an uncalibrated threshold is a guess · limits and strategy must be the same business · a cache missing 97% is overhead · you must see what you asked · read-only.")
+        McCard("CAG economics (I-5) · render (I-6)", "get_cag_stats") {
+            KvRow("hit_rate", cagHitPct?.let { "${fmt(it, 2)}% ($cagCache / $cagTotal)" } ?: "—", WARN)
+            KvRow("fresh vs cache", if (cagTotal != null) "$cagFresh fresh · $cagCache cache" else "—", NEUTRAL)
+            Note("A cache missing ~99% is overhead, not a memo — report the addressable capture-rate, not the hit vs total. You must see what you asked (I-6): the packet is excellent, the input is not the problem.")
+        }
+        LawBlock(
+            "I-1..I-7",
+            "An abstain is not a refusal · never overwrite conviction · an uncalibrated threshold is a guess · " +
+                "limits and strategy must be the same business · a cache missing 99% is overhead · you must see what you asked · read-only.",
+        )
     }
 }
 
+// ── Shadow & Personas — the only P&L this system has is counterfeit ─────────────────────────────────
+// Shadow Wiring v1.0 · S-1..S-7. The fee dial that crosses zero; triple-resolution loss/win/loss;
+// synthesised 2.50-RR geometry; verdict:HONEST-is-vacuous at 0 real fills; six personas at n=0.
+private val SHADOW_TOOLS = listOf("get_sim_gap", "get_persona_scoreboard", "get_shadow_bank")
+
 @Composable
-fun ShadowScreen(@Suppress("UNUSED_PARAMETER") repo: MissionRepository) {
+fun ShadowScreen(repo: MissionRepository) {
+    val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, SHADOW_TOOLS))
+    val s by vm.state.collectAsState()
+    val d = s.data
+
+    // Sim-gap honesty (P-MIRROR): fills ⊆ real, verdict HONEST is vacuous at 0 real fills.
+    val sg = d["get_sim_gap"] as? JsonObject
+    val realFills = sg.int("real_fills")
+    val simFills = sg.int("sim_fills")
+    val fillsSubset = sg.bool("fills_subset")
+    val verdict = sg.text("verdict")
+
+    // The shadow bank — net R and the outcome mix (the fee dial's raw material).
+    val bank = d["get_shadow_bank"] as? JsonObject
+    val bankLive = bank != null
+    val netR = bank.num("net_pnl_r")
+    val bankTotal = bank.int("total")
+    val byOutcome = bank.obj("by_outcome")
+    val winN = (byOutcome.obj("win")).int("n") ?: 0
+    val winAvg = (byOutcome.obj("win")).num("avg_pnl_r")
+    val lossN = (byOutcome.obj("loss")).int("n") ?: 0
+    val lossAvg = (byOutcome.obj("loss")).num("avg_pnl_r")
+    val expiredN = (byOutcome.obj("expired")).int("n") ?: 0
+    val noFillN = (byOutcome.obj("no_fill")).int("n") ?: 0
+
+    // Personas — six, all at n=0 pre-live.
+    val personas = (d["get_persona_scoreboard"] as? kotlinx.serialization.json.JsonElement).rows()
+    val personaN = personas.size
+    val personasArmed = personas.count { (it.int("n") ?: 0) > 0 }
+
     ViewScaffold(
         View.SHADOW,
         stance = listOf(
-            Stance("real fills", "0", UNK),
-            Stance("bank", "8,008 / 2,731 = 2.93×", SEV),
-            Stance("B0 reported", "+989R", NEUTRAL),
-            Stance("B0 priced", "−645R", BAD),
-            Stance("break-even", "3.09 bps", WARN),
-            Stance("personas", "0 / 6", BAD),
+            Stance("real fills", realFills?.toString() ?: "—", if ((realFills ?: 0) == 0) UNK else NEUTRAL),
+            Stance("sim fills", simFills?.toString() ?: "—", NEUTRAL),
+            Stance("bank net R", netR?.let { fmt(it, 1) } ?: "—", if ((netR ?: 0.0) < 0) BAD else NEUTRAL),
+            Stance("verdict", verdict.uppercase(), UNK),
+            Stance("personas armed", "$personasArmed / $personaN", if (personasArmed == 0) BAD else GOOD),
         ),
     ) {
         Ribbon(
-            "COUNTERFEIT — the only P&L number this system has",
-            "net_pnl_r +988.57 is the sum of three contradictory simulations of trades nobody proposed, on synthesised geometry, priced with a ~10 bps stop and no fees. Charge the real 9 bps and B0 goes −0.59 R/trade.",
+            "COUNTERFEIT — the only P&L number this system has (S-1)",
+            (netR?.let { "The bank's net_pnl_r is ${fmt(it, 1)} R over ${bankTotal ?: "—"} counterfactual rows" }
+                ?: "The bank is unavailable") +
+                ", priced on synthesised first-touch geometry against trades nobody executed. A counterfactual " +
+                "must be priced: charge the real round-trip fee and the sign flips. Break-even ≈ 3.09 bps; Binance taker is 9 bps.",
             SEV,
         )
-        McCard("The fee dial (signature)", "get_books_scoreboard × bank geometry") {
-            StatRow(
-                Triple("gross exp.", "+0.3093", GOOD),
-                Triple("cost @ 9bps", "−0.90", BAD),
-                Triple("net exp.", "−0.59", BAD),
-            )
-            Note("Drag the round-trip cost 0→20 bps: +988 R crosses zero at 3.09 bps. Binance taker is 9 bps; pure maker is 4 bps — B0 is unprofitable even at pure maker fees (AT-SH-1/2).")
+        McCard("Sim honesty — P-MIRROR (S-3)", "get_sim_gap") {
+            KvRow("real_fills", realFills?.toString() ?: "—", if ((realFills ?: 0) == 0) UNK else NEUTRAL)
+            KvRow("sim_fills", simFills?.toString() ?: "—", NEUTRAL)
+            KvRow("fills ⊆ real", if (fillsSubset) "true (vacuously)" else "FALSE — breach", if (fillsSubset) UNK else SEV)
+            KvRow("verdict", "$verdict on real_fills:${realFills ?: "—"}", UNK)
+            Note("∅ ⊆ anything is vacuous. verdict:HONEST at 0 real fills is not a passing check — an empty check isn't a passing check (S-3). The subset becomes a measured property the moment a real lane exists, and a breach pages.")
         }
-        McCard("Triple-resolution — one trade, three answers (S-2)", "get_shadow_bank") {
-            MiniTable(
-                listOf("#", "outcome", "pnl_r"),
-                listOf(
-                    row("1 first-touch" to NEUTRAL, "loss" to BAD, "−1.0000" to BAD),
-                    row("2 confirm" to NEUTRAL, "win" to GOOD, "+1.3551" to GOOD),
-                    row("3 ladder/trail" to NEUTRAL, "loss" to BAD, "−1.0000" to BAD),
-                ),
-            )
-            Note("Every RR is exactly 2.50; the BTC stop is 1.12 bps; loss avg = exactly −1.0000 — the frictionless tell (AT-SH-6).")
+        McCard("The fee dial (signature) — net R by outcome", "get_shadow_bank · by_outcome") {
+            if (!bankLive) {
+                Note("get_shadow_bank unavailable — no local bank on this deployment. UNKNOWN.", UNK)
+            } else {
+                MiniTable(
+                    listOf("outcome", "n", "avg pnl_r"),
+                    listOf(
+                        row("win" to GOOD, winN.toString() to GOOD, fmt(winAvg, 4) to GOOD),
+                        row("loss" to BAD, lossN.toString() to BAD, fmt(lossAvg, 4) to BAD),
+                        row("expired" to NEUTRAL, expiredN.toString() to NEUTRAL, "—" to NEUTRAL),
+                        row("no_fill" to UNK, noFillN.toString() to UNK, "—" to NEUTRAL),
+                    ),
+                )
+                Note(
+                    "Net ${fmt(netR, 1)} R across ${bankTotal ?: "—"} rows. The loss average sits near −1.0 (the frictionless " +
+                        "tell, S-2): the sim charges ~10 bps and no fees. Drag the round-trip cost 0→20 bps and the total crosses " +
+                        "zero at ≈3.09 bps — unprofitable even at pure-maker 4 bps.",
+                )
+            }
         }
-        McCard("Honesty instrument (S-3) · personas (S-6)", "get_sim_gap · get_persona_scoreboard") {
-            KvRow("verdict:HONEST on real_fills:0", "renders UNKNOWN", UNK)
-            KvRow("six personas", "all n=0", BAD)
-            Note("∅ ⊆ anything is vacuous. The bank has 8,008 rows and nothing is asking it anything.")
+        McCard("Six personas, nothing asked (S-6)", "get_persona_scoreboard") {
+            if (personas.isEmpty()) {
+                Note("get_persona_scoreboard returned no rows — UNKNOWN.", UNK)
+            } else {
+                MiniTable(
+                    listOf("persona", "n", "pnl_r"),
+                    personas.map { p ->
+                        val n = p.int("n") ?: 0
+                        row(
+                            p.text("id") to NEUTRAL,
+                            n.toString() to (if (n == 0) BAD else GOOD),
+                            fmt(p.num("pnl_r"), 2) to NEUTRAL,
+                        )
+                    },
+                )
+                Note("All $personaN personas at n=0. The bank has ${bankTotal ?: "many"} rows and nothing is asking it anything — the books must disagree with the gate (S-6), but no persona has run.")
+            }
         }
-        McCard("The reversal", "get_shadow_bank · get_limits") {
-            KvRow("10 bps stop → cost", "0.90 R (fatal)", BAD)
-            KvRow("45 bps floor → cost", "0.20 R (survivable)", GOOD)
-            Note("The 45 bps floor is the fee model, correctly enforced. The 'gate is skipping edge' note is quoted and refuted.")
+        McCard("The reversal — a priced floor survives (S-7)", "get_shadow_bank · geometry") {
+            KvRow("10 bps stop → cost", "≈0.90 R (fatal)", BAD)
+            KvRow("45 bps floor → cost", "≈0.20 R (survivable)", GOOD)
+            Note("The 45 bps stop floor the validator enforces is the fee model, correctly applied — the 'gate is skipping edge' note is quoted and refuted. Never inherit a lie (S-4): one decision, one resolution.")
         }
-        PendBox("get_bank_dedup", "§8.1 · disagreement_rate")
-        PendBox("get_bank_priced", "§8.2 · breakeven_roundtrip_bps belongs on the Overview")
-        PendBox("get_resolver_registry", "§8.3 · declared 1, observed 3")
-        PendBox("get_persona_backfill", "§8.4 · the 8,008 rows already exist")
-        LawBlock("S-1..S-7", "A counterfactual must be priced · one decision one resolution · an empty check isn't a passing check · never inherit a lie · a CI over dup rows isn't a CI · the books must disagree with the gate · read-only.")
+        LawBlock(
+            "S-1..S-7",
+            "A counterfactual must be priced · one decision one resolution · an empty check isn't a passing check · " +
+                "never inherit a lie · a CI over dup rows isn't a CI · the books must disagree with the gate · read-only.",
+        )
     }
 }
 
+// ── Books & Calibration — the learning loop is deadlocked, not slow ─────────────────────────────────
+// Books Wiring v1.0 · C-1..C-7. The design-default-60 pin; the missing conviction→outcome join across
+// two databases; conviction_tier is not a score; B1 is a reflection of M1; the verdict circularity;
+// the four-book runner; the ladder deadlock.
+private val BOOKS_TOOLS = listOf(
+    "get_books_scoreboard", "get_calibration", "get_calibration_curve", "get_bridge_lag",
+)
+
 @Composable
-fun BooksScreen(@Suppress("UNUSED_PARAMETER") repo: MissionRepository) {
+fun BooksScreen(repo: MissionRepository) {
+    val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, BOOKS_TOOLS))
+    val s by vm.state.collectAsState()
+    val d = s.data
+
+    // Four-book scoreboard.
+    val bs = d["get_books_scoreboard"] as? JsonObject
+    val books = bs.obj("books")
+    fun book(k: String) = books.obj(k)
+    val totalDecisions = bs.int("total_decisions")
+    val booksWithRows = listOf("B0", "B1", "M1", "K1").count { (book(it).int("n") ?: 0) > 0 }
+
+    // Calibration — status:absent ⇒ occupancy check, not slope.
+    val cal = d["get_calibration"] as? JsonObject
+    val calStatus = cal.text("status")
+    val calAbsent = calStatus != "present"
+
+    // Calibration curve — feasible:false is LOUD.
+    val cc = d["get_calibration_curve"] as? JsonObject
+    val feasible = cc.bool("feasible")
+    val mass = cc.num("mass_on_single_value")
+    val supportPts = cc.int("support_points")
+    val curveN = cc.int("n")
+    val deciles = cc.arr("deciles").rows()
+    val filledDeciles = deciles.count { (it.int("n") ?: 0) > 0 }
+
+    // Bridge lag — per-lane ingest-registry heartbeat ages.
+    val bl = d["get_bridge_lag"] as? JsonObject
+    val lanes = bl.arr("lanes").rows()
+
     ViewScaffold(
         View.BOOKS,
         stance = listOf(
-            Stance("calibration", "ABSENT", BAD),
-            Stance("pin", "false", BAD),
+            Stance("calibration", calStatus.uppercase(), if (calAbsent) BAD else GOOD),
+            Stance("curve feasible", if (feasible) "true" else "FALSE", if (feasible) GOOD else BAD),
             Stance("threshold", "60 (design-default)", SEV),
-            Stance("support pts", "11", BAD),
-            Stance("books w/ rows", "1 / 4", WARN),
-            Stance("slot B", "NEVER RUN", SEV),
+            Stance("support pts", supportPts?.toString() ?: "—", BAD),
+            Stance("books w/ rows", "$booksWithRows / 4", if (booksWithRows <= 1) SEV else WARN),
         ),
     ) {
         Ribbon(
-            "The learning loop is not slow — it is deadlocked",
-            "go_live needs edge → edge needs M1 rows → M1 needs a trade → a trade needs go_live. A dependency cycle is a stop-work condition; the only edge cut from outside is envelope.feasible.",
+            "The learning loop is not slow — it is deadlocked (C-7)",
+            "go_live needs edge → edge needs M1 rows → M1 needs a trade → a trade needs go_live. A dependency " +
+                "cycle is a stop-work condition; the only edge cut from outside is envelope.feasible. The ladder never skips the race.",
             SEV,
         )
-        McCard("The missing join (C-2)", "run_select · get_shadow_bank") {
-            KvRow("conviction", "DuckDB · the ledger", INFO)
-            KvRow("outcome", "SQLite on a Mac", INFO)
-            KvRow("edge between them", "none — no view, no join, no tool", BAD)
-            Note("And the bank throws conviction away: conviction_tier maps off gate_reason, not the score (C-3).")
+        McCard("The four-book scoreboard (C-5)", "get_books_scoreboard") {
+            if (books == null) {
+                Note("get_books_scoreboard unavailable — UNKNOWN.", UNK)
+            } else {
+                MiniTable(
+                    listOf("book", "n", "expectancy", "CI≠0"),
+                    listOf("B0", "B1", "M1", "K1").map { k ->
+                        val b = book(k)
+                        val n = b.int("n") ?: 0
+                        val exp = b.num("expectancy")
+                        val ex0 = b?.let { it["ci_excludes_zero"] }?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                        val tone = when {
+                            n == 0 -> BAD
+                            (exp ?: 0.0) > 0 -> GOOD
+                            else -> BAD
+                        }
+                        row(
+                            k to NEUTRAL,
+                            n.toString() to tone,
+                            (exp?.let { fmt(it, 3) } ?: "—") to tone,
+                            (ex0 ?: "—") to (if (ex0 == "true") GOOD else NEUTRAL),
+                        )
+                    },
+                )
+                Note(
+                    "B0 (take-every-candidate) is net-negative over ${book("B0").int("n") ?: "—"} rows — the setups lose before " +
+                        "the gate. B1 shipped 'take conviction ≥ MED', NOT the spec's GBT gate (C-4); racing M1 against a reflection " +
+                        "of itself measures nothing. M1 = ${book("M1").int("n") ?: 0} rows, K1 not wired. Total ${totalDecisions ?: "—"} decisions.",
+                )
+            }
         }
-        McCard("B1 is not what the spec says (C-4)", "get_books_scoreboard") {
-            KvRow("spec (×4 docs)", "GBT gate", NEUTRAL)
-            KvRow("shipped", "take conviction ≥ MED", BAD)
-            KvRow("independent_of_m1", "false → §14.5 unsatisfiable", SEV)
-            Note("Racing M1 against a copy of itself measures nothing.")
+        McCard("Calibration — occupancy, not slope (C-1)", "get_calibration") {
+            KvRow("status", if (calAbsent) "$calStatus — UNCALIBRATED" else calStatus, if (calAbsent) BAD else GOOD)
+            KvRow("threshold 60", "design-default, not derived", SEV)
+            Note("A threshold you didn't derive is a design default (C-1). With no artifact, the check is occupancy — is there dispersion to calibrate at all? — not reliability slope.")
         }
-        McCard("The circularity (C-5) · the curve", "run_select · get_calibration") {
-            KvRow("verdict := (conviction ≥ 60)", "takes = 1 iff conviction ≥ 60", WARN)
-            KvRow("Wilson deciles", "feasible:false — 11 pts, 86.5% on 22", BAD)
-        }
-        McCard("The four books", "get_books_scoreboard · get_sim_gap") {
-            MiniTable(
-                listOf("book", "n", "why zero"),
-                listOf(
-                    row("B0" to NEUTRAL, "3,196" to NEUTRAL, "unpriced, taker-filled" to NEUTRAL),
-                    row("B1" to BAD, "0" to BAD, "wrong book shipped" to NEUTRAL),
-                    row("M1" to BAD, "0" to BAD, "REAL:0, GATED:8008" to NEUTRAL),
-                    row("K1" to BAD, "0" to BAD, "not wired" to NEUTRAL),
-                ),
+        McCard("Calibration curve — feasible:false is LOUD (C-6)", "get_calibration_curve") {
+            StatRow(
+                Triple("support pts", supportPts?.toString() ?: "—", BAD),
+                Triple("mass@1 value", mass?.let { "${fmt(it * 100, 1)}%" } ?: "—", BAD),
+                Triple("deciles filled", "$filledDeciles / ${deciles.size}", WARN),
             )
-            Note("'No taker entries anywhere including sim' vs triad-cf/1 first-touch. Slot B: 1 distinct slot in 3,664 decisions — NEVER_RUN.")
+            if (deciles.isNotEmpty()) {
+                MiniTable(
+                    listOf("bucket", "n", "p_hat"),
+                    deciles.filter { (it.int("n") ?: 0) > 0 }.map { dec ->
+                        val lo = dec.int("lo"); val hi = dec.int("hi")
+                        val n = dec.int("n") ?: 0
+                        val p = dec.num("p_hat")
+                        row("$lo–$hi" to NEUTRAL, n.toString() to NEUTRAL, (p?.let { fmt(it, 3) } ?: "—") to WARN)
+                    },
+                )
+            }
+            Note("feasible:false — a curve needs conviction dispersion, and with ${mass?.let { "${fmt(it * 100, 0)}%" } ?: "most"} of the mass piled on one value there are not ten deciles to fill (n=${curveN ?: "—"}). You can't calibrate against a verdict you derived (C-5).")
         }
-        PendBox("get_bank_join", "§7.1 · the tool the whole loop is waiting for")
-        PendBox("get_calibration_curve", "§7.2 · feasible:false must be loud")
-        PendBox("get_book_definitions", "§7.3 · independent_of_m1 is the field that matters")
-        PendBox("get_ladder_status", "§7.4 · deadlock:true + the cycle, on the Overview")
-        LawBlock("C-1..C-7", "A threshold you didn't derive is a design default · calibration needs conviction joined to outcome · a tier is not a score · a baseline must be independent · you can't calibrate against a verdict you derived · the ladder never skips the race · read-only.")
+        McCard("Bridge lag — the ingest heartbeats (C-3)", "get_bridge_lag") {
+            if (lanes.isEmpty()) {
+                Note("get_bridge_lag unavailable — UNKNOWN.", UNK)
+            } else {
+                MiniTable(
+                    listOf("lane", "age_s", "note"),
+                    lanes.map { l ->
+                        val age = l.num("age_s")
+                        val tone = when {
+                            age == null -> UNK
+                            age > 300 -> BAD
+                            age > 120 -> WARN
+                            else -> GOOD
+                        }
+                        row(l.text("match_value") to NEUTRAL, (age?.let { fmt(it, 0) } ?: "—") to tone, l.text("note") to NEUTRAL)
+                    },
+                )
+                Note("The outcome lane (SQLite on a Mac) and the conviction lane (the DuckDB ledger) never join — no view, no join, no tool. Calibration needs conviction joined to outcome (C-2), and the bank throws conviction away, mapping tier off gate_reason not the score.")
+            }
+        }
+        LawBlock(
+            "C-1..C-7",
+            "A threshold you didn't derive is a design default · calibration needs conviction joined to outcome · " +
+                "a tier is not a score · a baseline must be independent · you can't calibrate against a verdict you derived · " +
+                "the ladder never skips the race · read-only.",
+        )
     }
 }
 
+// ── Learning Pipeline — one number, wrong in four independent ways ──────────────────────────────────
+// T-1..T-7. Five rungs collapse to one shared POISONED source (net_pnl_r) + one shared LOCKED gate.
+// The reward function is the product; the §3 hacks arrive before the RL; volume isn't the blocker, truth is.
+private val LEARN_TOOLS = listOf(
+    "get_learning_pipeline", "get_corpus_status", "get_eval_report",
+    "get_analytics", "get_attribution_ledger",
+)
+
 @Composable
-fun LearningPipelineScreen(@Suppress("UNUSED_PARAMETER") repo: MissionRepository) {
+fun LearningPipelineScreen(repo: MissionRepository) {
+    val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, LEARN_TOOLS))
+    val s by vm.state.collectAsState()
+    val d = s.data
+
+    // Pipeline SLO — worst-of CAG·DTBNK·TRADES·CORPUS·EVAL·RACE.
+    val lp = d["get_learning_pipeline"] as? JsonObject
+    val lpVerdict = lp.text("verdict")
+    val lanesObj = lp.obj("lanes")
+    val laneKeys = listOf("cag", "dtbnk", "trades", "corpus", "eval", "race")
+    fun laneStatus(k: String) = (lanesObj.obj(k)).text("status")
+    val greens = laneKeys.count { laneStatus(it) == "GREEN" }
+    // The trades lane carries the closed-horizon corpus feed + the 5000 T1 gate reference.
+    val tradesDetail = (lanesObj.obj("trades")).obj("detail")
+    val closedTriadA = tradesDetail.int("closed_triad_a")
+    val raceDetail = (lanesObj.obj("race")).obj("detail")
+    val slotBForward = raceDetail.int("slot_b_forward")
+
+    // Corpus — n_labeled vs the 5000 T1 gate; honest unavailable until built.
+    val corpus = d["get_corpus_status"] as? JsonObject
+    val corpusBuilt = corpus != null
+    val nLabeled = corpus.int("n_labeled")
+
+    // Eval — the seven pre-registered gates; unavailable pre-first-cut.
+    val eval = d["get_eval_report"] as? JsonObject
+    val evalBuilt = eval != null
+    val evalGates = eval.obj("gates")
+
+    // Attribution ledger — empty until the race.
+    val al = d["get_attribution_ledger"] as? JsonObject
+    val alWeeks = al.int("weeks")
+    val alEnough = al.bool("enough")
+    val alRequired = al.bool("required")
+
+    // T1 corpus gate reference (Spec §5).
+    val t1Gate = 5000
+
     ViewScaffold(
         View.LEARNING_PIPELINE,
         stance = listOf(
-            Stance("the source", "POISONED", SEV),
-            Stance("the gate", "LOCKED", BAD),
-            Stance("runnable rungs", "0 / 5", BAD),
-            Stance("labels", "1,091 · usable 0", BAD),
-            Stance("reward terms", "3 of 5 dead", BAD),
-            Stance("§3 hacks", "5 of 6 present", SEV),
+            Stance("pipeline SLO", lpVerdict.uppercase(), if (lpVerdict == "GREEN") GOOD else if (lpVerdict == "YELLOW") WARN else SEV),
+            Stance("lanes green", "$greens / ${laneKeys.size}", if (greens < laneKeys.size) BAD else GOOD),
+            Stance("corpus", if (corpusBuilt) "${nLabeled ?: "—"} / $t1Gate" else "0 / $t1Gate", BAD),
+            Stance("eval", if (evalBuilt) "SCORED" else "UNSCORED", BAD),
+            Stance("race", "${slotBForward ?: 0} slot-B", BAD),
         ),
     ) {
         Ribbon(
-            "One number, wrong in four independent ways",
-            "Five rungs collapse to one shared POISONED source (net_pnl_r: zero-fee, first-touch, three resolvers, 2.93× counted) and one shared LOCKED gate. Two failure points, not ten.",
+            "One number, wrong in four independent ways (T-1)",
+            "The pipeline SLO is worst-of six lanes = ${lpVerdict.uppercase()}. Every reward rung collapses to one " +
+                "shared POISONED source (net_pnl_r: zero-fee, first-touch, three resolvers) and one shared LOCKED gate. " +
+                "The reward function is the product — cost-adjusted, conservative fills, one simulator.",
             SEV,
         )
-        McCard("Reward function, term by term", "get_analytics · get_calibration · get_take_rate") {
-            MiniTable(
-                listOf("term", "needs", "status"),
-                listOf(
-                    row("w_pnl" to BAD, "net_pnl_r" to NEUTRAL, "POISONED" to SEV),
-                    row("w_cal" to BAD, "Brier(conv,tp1)" to NEUTRAL, "no join" to BAD),
-                    row("w_kl" to BAD, "π_SFT" to NEUTRAL, "no T1" to BAD),
-                    row("w_fmt" to WARN, "validator" to NEUTRAL, "fails 99.7%" to BAD),
-                ),
-            )
-            Note("Three of five terms cannot be computed today; the one that can fails 99.7% of the model's trade proposals.")
+        McCard("Pipeline SLO — worst-of six lanes", "get_learning_pipeline") {
+            if (lanesObj == null) {
+                Note("get_learning_pipeline unavailable — UNKNOWN.", UNK)
+            } else {
+                MiniTable(
+                    listOf("lane", "status", "note"),
+                    laneKeys.map { k ->
+                        val st = laneStatus(k)
+                        val tone = when (st) { "GREEN" -> GOOD; "YELLOW" -> WARN; "RED" -> BAD; else -> UNK }
+                        row(k.uppercase() to NEUTRAL, st to tone, (lanesObj.obj(k)).text("note") to NEUTRAL)
+                    },
+                )
+                Note("An unmeasurable lane is YELLOW, never fake-green (T-3): an audit that can't fail isn't an audit. CAG=0 hits, corpus/eval/race not yet started — pre-P3/P4.")
+            }
         }
-        McCard("§3 reward-hacks — already present pre-training", "get_take_rate · get_conviction_histogram · get_sim_gap") {
-            Row { Tag("skip-collapse 0.06%", SEV); Tag("conviction 86%@22", SEV); Tag("RR=2.50 floor", SEV) }
+        McCard("Corpus counter vs the T1 gate (§5)", "get_corpus_status") {
+            if (!corpusBuilt) {
+                KvRow("manifest", "not built — triad-corpus build", BAD)
+                KvRow("closed-horizon TRIAD-A feed", "${closedTriadA ?: "—"} rows available", NEUTRAL)
+                Note("Volume isn't the blocker, truth is (T-5): ${closedTriadA ?: "—"} closed rows are available to the builder, but no manifest progresses toward the $t1Gate T1 gate because usable_for_training is 0.")
+            } else {
+                StatRow(Triple("n_labeled", "${nLabeled ?: 0} / $t1Gate", BAD))
+                Note("Blocked on truth, not data — the corpus cannot be built while get_render fails and labels are unusable.")
+            }
+        }
+        McCard("Eval report — the seven gates (§5)", "get_eval_report") {
+            if (!evalBuilt) {
+                KvRow("report", "unavailable — no checkpoint scored (pre-P3)", BAD)
+                Note("A checkpoint has not been scored: the seven pre-registered pass/fail gates cannot render until triad-eval run writes a report. An audit that can't fail isn't an audit (T-3).")
+            } else if (evalGates != null) {
+                MiniTable(
+                    listOf("gate", "pass"),
+                    evalGates.entries.map { (g, v) ->
+                        val pass = (v as? kotlinx.serialization.json.JsonPrimitive)?.content == "true" ||
+                            (v as? JsonObject)?.let { it["pass"] }?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } == "true"
+                        row(g to NEUTRAL, (if (pass) "PASS" else "FAIL") to (if (pass) GOOD else BAD))
+                    },
+                )
+            } else {
+                Note("Eval report present but no gate rows — UNKNOWN.", UNK)
+            }
+        }
+        McCard("§3 reward-hacks — present pre-training", "get_take_rate · get_conviction_histogram · get_sim_gap") {
+            Row { Tag("skip-collapse", SEV); Tag("conviction mode@22", SEV); Tag("RR=2.50 floor", SEV) }
             Row { Tag("sim vacuous", SEV); Tag("reject 99.7%", SEV); Tag("rationale unauditable", WARN) }
-            Note("5 of 6 present in an untrained model. RL will not cause these — RL will amplify them. All six mitigations are absent / vacuous / already-failing.")
+            Note("5 of 6 present in an untrained model. RL will not cause these — RL will amplify them. The hacks arrive before the RL (T-4); all six mitigations are absent / vacuous / already-failing.")
         }
-        McCard("Normative principles", "get_deferred_register · get_decision_chain") {
-            Row { Tag("P4 VIOLATED", BAD); Tag("P6 VIOLATED", BAD); Tag("P7 VIOLATED", BAD); Tag("P9 VIOLATED", SEV); Tag("P11 VIOLATED", BAD); Tag("P8 HONORED", GOOD) }
-            Note("P9 hurts most: the validator repaired 689 rejected trades (set conviction 0) — repair hides defects; rejection surfaces them.")
+        McCard("Attribution ledger — empty until the race (E-0)", "get_attribution_ledger") {
+            KvRow("windows / weeks", "${alWeeks ?: 0}", if ((alWeeks ?: 0) == 0) BAD else NEUTRAL)
+            KvRow("enough", if (alEnough) "true" else "false — not yet", if (alEnough) GOOD else BAD)
+            KvRow("required at R1", if (alRequired) "true" else "false", if (alRequired) SEV else NEUTRAL)
+            Note("Everything foreign enters as a slot-B challenger (T-6). 'enough' = CI-positive ΔB0 AND CI-positive M1−B0 over ≥4 weeks / ≥300 forward candidates — ${slotBForward ?: 0} slot-B forward decisions so far, so the referee has no windows.")
         }
-        McCard("Volumes (§5) · the chair", "get_shadow_bank · get_model_registry") {
-            KvRow("T1 corpus", "1,091 / 5,000 · usable_for_training: 0", BAD)
-            KvRow("adjudicator", "fingpt-crypto:v5-full-test vs 'bias role'", WARN)
-            Note("Blocked on truth, not data. The registry has a schema and no rows (slots_seen:['A']).")
-        }
-        PendBox("get_label_quality", "§7.1 · build first — usable_for_training is 0")
-        PendBox("get_reward_audit", "§7.2 · pre_training:true must page")
-        PendBox("get_training_readiness", "§7.3 · shared_source + shared_gate are the whole API")
-        PendBox("get_corpus_export", "§7.4 · the corpus cannot be built (get_render fails)")
-        LawBlock("T-1..T-7", "The reward function is the product · cost-adjusted, conservative fills, one simulator · an audit that can't fail isn't an audit · the hacks arrive before the RL · volume isn't the blocker, truth is · everything foreign enters as a slot-B challenger · read-only.")
+        LawBlock(
+            "T-1..T-7",
+            "The reward function is the product · cost-adjusted, conservative fills, one simulator · an audit that can't fail isn't an audit · " +
+                "the hacks arrive before the RL · volume isn't the blocker, truth is · everything foreign enters as a slot-B challenger · read-only.",
+        )
     }
 }

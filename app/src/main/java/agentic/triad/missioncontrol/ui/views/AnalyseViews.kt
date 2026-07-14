@@ -6,7 +6,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -65,7 +69,7 @@ private val ANALYTICS_TOOLS = listOf(
     "get_governor_refusals", "get_exec_quality",
 )
 private val TRADE_LOGS_TOOLS = listOf("get_trade_logs")
-private val DATABANK_TOOLS = listOf("get_databank", "get_shadow_bank")
+private val DATABANK_TOOLS = listOf("get_databank", "get_shadow_bank", "get_book_definitions")
 
 private fun validityTone(pct: Double?): Tone = when {
     pct == null -> UNK
@@ -177,42 +181,89 @@ private fun continuityTone(v: String): Tone = when (v.uppercase()) {
     "GREEN" -> GOOD; "YELLOW" -> WARN; "RED" -> BAD; else -> UNK
 }
 
+private fun statusTone(status: String): Tone = when (status) {
+    "closed", "win" -> GOOD
+    "open" -> INFO
+    "rejected", "missed" -> WARN
+    "loss" -> BAD
+    else -> UNK
+}
+
+private fun pnlTone(r: Double?): Tone = when {
+    r == null -> UNK
+    r > 0 -> GOOD
+    r < 0 -> BAD
+    else -> NEUTRAL
+}
+
 @Composable
 fun TradeLogsScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, TRADE_LOGS_TOOLS))
     val s by vm.state.collectAsState()
     val d = s.data
 
-    // get_trade_logs returns the rows array directly under data.
+    // get_trade_logs returns the rows array directly under data (bare array — no summary object;
+    // per-symbol/lane summaries are derived here from the actual live fields).
     val logs = d["get_trade_logs"].rows()
     val n = logs.size
     val rejected = logs.count { it.text("status") == "rejected" }
     val closed = logs.count { it.text("status") == "closed" }
     val open = logs.count { it.text("status") == "open" }
+    val missed = logs.count { it.text("status") == "missed" }
+    val accts = logs.map { it.text("acct") }.filter { it != "—" }.distinct()
+    val netR = logs.mapNotNull { it.num("pnl_r") }.let { if (it.isEmpty()) null else it.sum() }
     val consulted = logs.count { it.text("gate") == "model" || (it.int("conviction") ?: 0) > 0 }
 
     ViewScaffold(
         View.TRADE_LOGS,
         stance = listOf(
             Stance("rows", "$n", NEUTRAL),
-            Stance("rejected", "$rejected", if (rejected > 0) BAD else NEUTRAL),
+            Stance("acct", if (accts.isEmpty()) "—" else "${accts.size}", NEUTRAL),
+            Stance("rejected", "$rejected", if (rejected > 0) WARN else NEUTRAL),
             Stance("closed", "$closed", if (closed > 0) GOOD else UNK),
-            Stance("model consulted", if (n > 0) "${consulted * 100 / n}%" else "—", NEUTRAL),
+            Stance("net R", netR?.let { fmt(it, 2) } ?: "—", pnlTone(netR)),
         ),
     ) {
         Ribbon(
             "Four lanes — refusal ⇒ rejected · outcome ⇒ closed · fill-no-outcome ⇒ open · take-no-fill ⇒ missed",
-            "Ledger-derived join (decisions ⟕ intents ⟕ fills ⟕ outcomes ⟕ refusals ⟕ packets) by decision_id. Account is LIVE-MAIN; the six persona accounts join once the shadow lane writes.",
+            "Ledger-derived join (decisions ⟕ intents ⟕ fills ⟕ outcomes ⟕ refusals ⟕ packets) by decision_id. Account is ${accts.joinToString(", ").ifEmpty { "—" }}; the six persona accounts join once the shadow lane writes.",
             INFO,
         )
+        McCard("Per-symbol summary (T-2)", "get_trade_logs") {
+            if (logs.isEmpty()) {
+                Note("No rows in the window — the ledger join returned empty.", UNK)
+            } else {
+                val bySym = logs.groupBy { it.text("symbol") }
+                    .entries.sortedByDescending { it.value.size }
+                MiniTable(
+                    listOf("symbol", "n", "open", "closed", "rej", "net R"),
+                    bySym.take(12).map { (sym, rows) ->
+                        val sOpen = rows.count { it.text("status") == "open" }
+                        val sClosed = rows.count { it.text("status") == "closed" }
+                        val sRej = rows.count { it.text("status") == "rejected" }
+                        val sNet = rows.mapNotNull { it.num("pnl_r") }.let { if (it.isEmpty()) null else it.sum() }
+                        row(
+                            sym to NEUTRAL,
+                            "${rows.size}" to NEUTRAL,
+                            "$sOpen" to (if (sOpen > 0) INFO else UNK),
+                            "$sClosed" to (if (sClosed > 0) GOOD else UNK),
+                            "$sRej" to (if (sRej > 0) WARN else NEUTRAL),
+                            (sNet?.let { fmt(it, 2) } ?: "—") to pnlTone(sNet),
+                        )
+                    },
+                )
+                Note("A chip reads BTC-USDT-PERP — n acct · n open · n closed · net ±R. net_r is a per-selection sum over resolved rows, never summed across cohorts (T-2).")
+            }
+        }
         McCard("Lane census (T-2)", "get_trade_logs") {
             MiniTable(
                 listOf("lane", "n", "note"),
                 listOf(
-                    row("rejected" to (if (rejected > 0) BAD else NEUTRAL), "$rejected" to (if (rejected > 0) BAD else NEUTRAL), "validator / governor kills" to NEUTRAL),
+                    row("rejected" to (if (rejected > 0) WARN else NEUTRAL), "$rejected" to (if (rejected > 0) WARN else NEUTRAL), "validator / governor kills" to NEUTRAL),
                     row("closed" to (if (closed > 0) GOOD else UNK), "$closed" to (if (closed > 0) GOOD else UNK), "resolved outcome" to NEUTRAL),
                     row("open" to (if (open > 0) INFO else UNK), "$open" to (if (open > 0) INFO else UNK), "filled, no outcome" to NEUTRAL),
-                    row("total" to NEUTRAL, "$n" to NEUTRAL, "window rows" to NEUTRAL),
+                    row("missed" to (if (missed > 0) UNK else NEUTRAL), "$missed" to (if (missed > 0) UNK else NEUTRAL), "take, no fill (adverse selection)" to NEUTRAL),
+                    row("total" to NEUTRAL, "$n" to NEUTRAL, "model consulted ${if (n > 0) "${consulted * 100 / n}%" else "—"}" to NEUTRAL),
                 ),
             )
         }
@@ -221,27 +272,42 @@ fun TradeLogsScreen(repo: MissionRepository) {
                 Note("No rows in the window — the ledger join returned empty.", UNK)
             } else {
                 MiniTable(
-                    listOf("ts", "symbol", "side", "class", "status", "gate", "conv"),
-                    logs.take(12).map { r ->
-                        val statusTone = when (r.text("status")) {
-                            "rejected" -> BAD; "closed" -> GOOD; "open" -> INFO; else -> UNK
-                        }
+                    listOf("ts", "acct", "symbol", "side", "status", "entry", "exit", "sl", "tp", "pnl_r"),
+                    logs.take(16).map { r ->
+                        val st = r.text("status")
                         row(
                             r.text("ts") to NEUTRAL,
+                            r.text("acct") to NEUTRAL,
                             r.text("symbol") to NEUTRAL,
                             r.text("side") to NEUTRAL,
-                            r.text("class") to WARN,
-                            r.text("status") to statusTone,
-                            r.text("gate") to NEUTRAL,
-                            "${r.int("conviction") ?: "—"}" to NEUTRAL,
+                            st to statusTone(st),
+                            fmt(r.num("entry"), 4) to NEUTRAL,
+                            fmt(r.num("exit"), 4) to NEUTRAL,
+                            fmt(r.num("sl"), 4) to NEUTRAL,
+                            fmt(r.num("tp"), 4) to NEUTRAL,
+                            (r.num("pnl_r")?.let { fmt(it, 2) } ?: "—") to pnlTone(r.num("pnl_r")),
                         )
                     },
                 )
-                Note("Every REAL/GATED/MISSED chip is the lane status; conviction 0 on a GATED row is a validator kill, not a low score (T-3).")
+                Note("Status is toned by lane — win/open ⇒ GOOD/INFO, loss ⇒ BAD, rejected/missed ⇒ WARN; pnl_r toned by sign. A null entry/exit/pnl_r on a rejected row is a real absence (the gate fired before a fill), never a fabricated zero (T-3).")
             }
         }
-        PendBox("get_row_integrity", "§6.1 · the dedup gate, server-side")
-        PendBox("get_fabrication_audit", "§6.3 · the four fabrications, measured")
+        McCard("Detector + gate mix (T-4)", "get_trade_logs") {
+            if (logs.isEmpty()) {
+                Note("No rows to attribute.", UNK)
+            } else {
+                val byGate = logs.groupBy { it.text("gate") }
+                    .entries.sortedByDescending { it.value.size }
+                MiniTable(
+                    listOf("gate / reason", "fires"),
+                    byGate.take(8).map { (g, rows) ->
+                        val t = if (g.startsWith("validator_reject") || g == "error" || g == "timeout") WARN else NEUTRAL
+                        row(g to t, "${rows.size}" to t)
+                    },
+                )
+                Note("abstain_reason is the most valuable column (T-3): the dominant gate names the kill — validator_reject:context_stale is the staleness veto, not a low conviction.")
+            }
+        }
         LawBlock("T-1..T-7", "Dedup before you count · a fill log is survivorship-biased · abstain_reason is the most valuable column · a fabrication is worse than a null · every row reaches its replay · two vocabularies is a defect · read-only.")
     }
 }
@@ -254,27 +320,31 @@ fun DatabankScreen(repo: MissionRepository) {
 
     val bank = d["get_databank"] as? JsonObject
     val shadow = d["get_shadow_bank"] as? JsonObject
+    val bookDefs = d["get_book_definitions"] as? JsonObject
 
     val lanes = bank.obj("lanes")
     val byClass = bank.obj("by_class")
     val resolver = bank.obj("resolver")
     val liveN = lanes.int("live")
     val shadowN = lanes.int("shadow")
-    val total = shadow.int("total") ?: bank.obj("resolver").int("resolved")
+    val total = shadow.int("total") ?: resolver.int("resolved")
     val netR = shadow.num("net_pnl_r")
+    val resolved = resolver.int("resolved")
+    val pending = resolver.int("pending")
 
     ViewScaffold(
         View.DATABANK,
         stance = listOf(
             Stance("bank rows", "${total ?: "—"}", NEUTRAL),
             Stance("live / shadow", "${liveN ?: "—"} / ${shadowN ?: "—"}", if ((liveN ?: 0) == 0) UNK else GOOD),
-            Stance("net R", netR?.let { fmt(it, 1) } ?: "—", if ((netR ?: 0.0) < 0) BAD else GOOD),
+            Stance("resolved / pending", "${resolved ?: "—"} / ${pending ?: "—"}", if ((pending ?: 0) > 0) WARN else GOOD),
+            Stance("net R", netR?.let { fmt(it, 1) } ?: "—", pnlTone(netR)),
             Stance("resolver", resolver.text("name", "—"), NEUTRAL),
         ),
     ) {
         Ribbon(
             "The bank this hour — lane counts, the outcome funnel, resolver status, capture manifest",
-            "A row is never born resolved — resolved:${resolver.int("resolved") ?: "—"} pending:${resolver.int("pending") ?: "—"}. The no-nulls law as analytics: every absence tells the current story.",
+            "A row is never born resolved — resolved:${resolved ?: "—"} pending:${pending ?: "—"}. The no-nulls law as analytics: every absence tells the current story. ${bank.text("note", "")}",
             INFO,
         )
         McCard("Lanes & class census (D-4)", "get_databank") {
@@ -283,22 +353,23 @@ fun DatabankScreen(repo: MissionRepository) {
                 Triple("shadow", "${shadowN ?: "—"}", NEUTRAL),
                 Triple("REAL", "${byClass.int("REAL") ?: "—"}", if ((byClass.int("REAL") ?: 0) > 0) GOOD else UNK),
                 Triple("GATED", "${byClass.int("GATED") ?: "—"}", WARN),
+                Triple("MISSED", "${byClass.int("MISSED") ?: "—"}", if ((byClass.int("MISSED") ?: 0) > 0) UNK else NEUTRAL),
             )
-            KvRow("schema · nonulls", "${bank.text("schema", "—")} · ${bank.text("nonulls", "—")}", INFO)
-            Note("`nonulls: AT-DTB11 green` is printed beside the real counts — an asserted green is measured only if the class census agrees.")
+            KvRow("schema · nonulls", "${bank.text("schema", "—")} · ${bank.text("nonulls", "—")}", if (bank.text("nonulls").contains("green")) GOOD else INFO)
+            KvRow("resolver lag", bank.num("lag_min")?.let { "${fmt(it, 1)} min" } ?: "— (no lag reported)", if (bank.num("lag_min") == null) UNK else NEUTRAL)
+            Note("`nonulls: AT-DTB11 green` is printed beside the real counts — an asserted green is measured only if the class census agrees (D-6). GATED dominating the census is the staleness-veto regime, not a low-signal market.")
         }
         McCard("Capture manifest — top reasons (D-6)", "get_databank.capture_top") {
             val capTop = bank.field("capture_top").list()
             if (capTop.isEmpty()) {
                 Note("Capture manifest empty — no captured absences this hour.", UNK)
             } else {
-                MiniTable(
-                    listOf("reason", "n"),
-                    capTop.take(8).map { e ->
-                        val pair = e.list()
-                        row(pair.getOrNull(0).str() to WARN, pair.getOrNull(1).str() to BAD)
-                    },
-                )
+                // BarMeter-style: each reason with its count as a KvRow ranked by n.
+                capTop.take(8).forEach { e ->
+                    val pair = e.list()
+                    KvRow(pair.getOrNull(0).str(), pair.getOrNull(1).str(), WARN)
+                }
+                Note("Each captured absence is a real reason (timeout / model / error / validator_reject) with its n — the manifest is the no-nulls law made countable.")
             }
         }
         McCard("Shadow bank — outcome funnel (D-1)", "get_shadow_bank") {
@@ -308,15 +379,45 @@ fun DatabankScreen(repo: MissionRepository) {
             } else {
                 MiniTable(
                     listOf("outcome", "n", "avg pnl_r"),
-                    byOutcome.entries.map { (k, v) ->
+                    byOutcome.entries.sortedByDescending { (it.value as? JsonObject).int("n") ?: 0 }.map { (k, v) ->
                         val o = v as? JsonObject
                         val outTone = when (k) {
-                            "win" -> GOOD; "loss" -> BAD; "gap", "no_fill" -> UNK; else -> NEUTRAL
+                            "win" -> GOOD; "loss" -> BAD; "expired" -> WARN
+                            "gap", "no_fill", "pending", "open" -> UNK; else -> NEUTRAL
                         }
-                        row(k to outTone, "${o.int("n") ?: "—"}" to NEUTRAL, fmt(o.num("avg_pnl_r"), 3) to outTone)
+                        val avg = o.num("avg_pnl_r")
+                        row(k to outTone, "${o.int("n") ?: "—"}" to NEUTRAL, (avg?.let { fmt(it, 3) } ?: "null") to (if (avg == null) UNK else outTone))
                     },
                 )
-                Note("`gap` / `no_fill` carry avg_pnl_r null — a measured absence, not zero. Loss avg near −1.000 is the frictionless-stop tell (D-1).")
+                Note("`gap` / `no_fill` / `pending` carry avg_pnl_r null — a measured absence shown honestly, not zero. Loss avg near −1.000 is the frictionless-stop tell (D-1).")
+                KvRow(
+                    "net_pnl_r (integrity)",
+                    netR?.let { fmt(it, 2) } ?: "—",
+                    pnlTone(netR),
+                )
+                Note("net_pnl_r is per-selection over distinct decisions — never a cross-cohort P&L sum (${shadow.text("note", "triad-cf/1")}). ${total ?: "—"} rows, ${byOutcome.entries.size} outcome classes.")
+            }
+        }
+        McCard("Book definitions & independence", "get_book_definitions") {
+            val books = bookDefs.obj("books")
+            if (books == null) {
+                Note("Book definitions unavailable.", UNK)
+            } else {
+                MiniTable(
+                    listOf("book", "independent", "mismatch"),
+                    books.entries.map { (name, v) ->
+                        val b = v as? JsonObject
+                        val indep = b?.bool("independent_of_m1") ?: false
+                        val mismatch = b?.bool("mismatch") ?: false
+                        row(
+                            (name + (b.text("status", "").let { if (it.isNotEmpty() && it != "—") " ($it)" else "" })) to NEUTRAL,
+                            (if (indep) "yes" else "no") to (if (indep) GOOD else BAD),
+                            (if (mismatch) "MISMATCH" else "ok") to (if (mismatch) BAD else GOOD),
+                        )
+                    },
+                )
+                KvRow("promotion satisfiable", "${bookDefs.bool("promotion_satisfiable")}", if (bookDefs.bool("promotion_satisfiable")) GOOD else BAD)
+                Note(bookDefs.text("note", "B1 shipped as a threshold on M1's own conviction — the §14.5 uplift-over-B1 gate is unsatisfiable."), WARN)
             }
         }
         McCard("Ingest heartbeats (D-2)", "get_databank.ingest") {
@@ -324,13 +425,20 @@ fun DatabankScreen(repo: MissionRepository) {
             if (ingest.isEmpty()) {
                 Note("No ingest registry rows — a writer's silence is itself a finding.", WARN)
             } else {
-                ingest.forEach { i ->
-                    KvRow(i.text("stream"), "${i.text("owner")} · age ${i.field("age_s").str()}s", NEUTRAL)
-                }
+                MiniTable(
+                    listOf("stream", "owner", "age_s"),
+                    ingest.map { i ->
+                        val age = i.field("age_s").str()
+                        row(
+                            i.text("stream") to NEUTRAL,
+                            i.text("owner") to NEUTRAL,
+                            (if (age == "—" || age == "null") "— (silent)" else age) to (if (age == "—" || age == "null") UNK else NEUTRAL),
+                        )
+                    },
+                )
+                Note("A null age_s is a writer whose last heartbeat is unknown — rendered honestly, since a writer's silence is itself a finding (D-2).")
             }
         }
-        PendBox("get_table_census", "§10.1 · views + counters-without-views")
-        PendBox("get_column_census", "§10.2 · every column, null-rate + defect")
         LawBlock("D-1..D-7", "Counter and table must agree · every column every time · a null primary key is not a row · append-only makes fabrication permanent · the audit log audits the auditor · asserted ≠ measured green · read-only (SELECT-only).")
     }
 }
@@ -359,7 +467,21 @@ fun QueryConsoleScreen(repo: MissionRepository) {
             WARN,
         )
         McCard("Editor (Q-1)", "run_select — live") {
-            BasicTextField(
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                CannedButton("funnel") {
+                    sql = "SELECT gate_reason, COUNT(*) AS n FROM shadow_trades GROUP BY gate_reason ORDER BY n DESC"
+                }
+                CannedButton("gate P&L") {
+                    sql = "SELECT shadow_outcome, COUNT(*) AS n, ROUND(AVG(pnl_r), 3) AS avg_pnl_r FROM shadow_trades WHERE pnl_r IS NOT NULL GROUP BY shadow_outcome ORDER BY n DESC"
+                }
+                CannedButton("validity") {
+                    sql = "SELECT conviction_tier, COUNT(*) AS n, SUM(gate_accepted) AS accepted FROM shadow_trades GROUP BY conviction_tier ORDER BY n DESC"
+                }
+            }
+            OutlinedTextField(
                 value = sql,
                 onValueChange = { sql = it },
                 textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
@@ -398,13 +520,29 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                     KvRow("returned", status?.first ?: "—", GOOD)
                     MiniTable(columns, resultRows.take(25))
                     if (resultRows.size > 25) Note("Showing first 25 of ${resultRows.size} returned rows.", UNK)
+                    Note("AP/1 — a cohort with n < 30 is an anecdote, not evidence: read any COUNT(*) column against the 30-row floor before you draw a conclusion.", WARN)
                 }
             }
         }
-        PendBox("get_query_lint", "§5.1 · one server ruleset, versioned")
-        PendBox("get_view_catalog", "§5.4 · machine-readable schema + defects")
         LawBlock("Q-1..Q-7", "Lint before you run · read-only and say so · show the query that ran · a silent truncation is a lie · an aggregate over a dup table is a lie · the saved query is the unit of knowledge · the schema is in the room.")
     }
+}
+
+/** A canned-query pill — sets the editor SQL to a pre-registered analysis (funnel / gate P&L / …). */
+@Composable
+private fun CannedButton(label: String, onTap: () -> Unit) {
+    val fg = androidx.compose.ui.graphics.Color(0xFF5B7FB5)
+    Text(
+        label,
+        color = fg,
+        fontFamily = FontFamily.Monospace,
+        fontSize = 11.sp,
+        modifier = Modifier
+            .clickable { onTap() }
+            .background(fg.copy(alpha = 0.10f), RoundedCornerShape(6.dp))
+            .border(1.dp, fg.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 9.dp, vertical = 5.dp),
+    )
 }
 
 /** A minimal tappable run affordance — a mono pill that fires [onRun] (disabled while running). */
