@@ -14,6 +14,11 @@ object MutatingDenylist {
 
     fun assertReadOnly(tool: String) {
         val low = tool.lowercase()
+        if (low.startsWith("get_") || low.startsWith("list_") ||
+            low.startsWith("run_") || low.startsWith("search_")
+        ) {
+            return // a read/replay tool (e.g. get_kill_state READS the switch, it doesn't kill)
+        }
         require(FORBIDDEN.none { low.startsWith(it) || low.contains(it) }) {
             "MutatingDenylist: '$tool' is not a read tool — the app reads, replays, and proposes; " +
                 "re-opening always takes a human at triadctl"

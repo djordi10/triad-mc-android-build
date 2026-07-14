@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -24,7 +25,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -85,6 +89,8 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
     val route = current?.destination?.route ?: View.start.route
     val wide = widthClass != WindowWidthSizeClass.Compact
     val here = View.entries.firstOrNull { it.route == route }
+    // On a phone the bottom bar only holds the primary views; this opens the full 19-view index.
+    var showMenu by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = Paper,
@@ -101,8 +107,9 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
                     Text(
                         app.repository.mode.name, color = Emerald, fontFamily = Mono,
                         fontWeight = FontWeight.Bold, fontSize = 11.sp,
-                        modifier = Modifier.padding(horizontal = 8.dp),
+                        modifier = Modifier.padding(horizontal = 6.dp),
                     )
+                    TextButton(onClick = { showMenu = true }) { Text("Views") }
                     TextButton(onClick = { nav.go(ROUTE_CONNECTION) }) { Text("Connect") }
                     TextButton(onClick = { nav.go(ROUTE_PROPOSE) }) { Text("Propose") }
                 },
@@ -125,6 +132,37 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
             if (wide) SegmentedRail(route) { nav.go(it) }
             NavHost(nav, startDestination = View.start.route, modifier = Modifier.fillMaxSize()) {
                 graph(app, nav)
+            }
+        }
+    }
+
+    // The full-view index — every one of the 19 views by segment, reachable on a phone.
+    if (showMenu) {
+        ModalBottomSheet(onDismissRequest = { showMenu = false }, containerColor = Pine) {
+            Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 28.dp),
+            ) {
+                Text(
+                    "  ALL VIEWS", color = Unk, fontFamily = Mono, fontSize = 10.sp,
+                    letterSpacing = 1.sp, modifier = Modifier.padding(16.dp),
+                )
+                Segment.entries.forEach { seg ->
+                    Text(
+                        "  ${seg.label}", color = Emerald, fontFamily = Mono, fontSize = 10.sp,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp),
+                    )
+                    View.bySegment(seg).forEach { v ->
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clickable { showMenu = false; nav.go(v.route) }
+                                .padding(horizontal = 16.dp, vertical = 11.dp),
+                        ) {
+                            Text(v.num, color = if (route == v.route) Emerald else Unk, fontFamily = Mono, fontSize = 11.sp)
+                            Text("  ${v.label}", color = Paper, fontSize = 14.sp)
+                        }
+                    }
+                }
             }
         }
     }
