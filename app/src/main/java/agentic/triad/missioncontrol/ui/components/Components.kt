@@ -201,18 +201,12 @@ fun LawBlock(id: String, text: String) {
     }
 }
 
-/** An amber PEND box — an unbuilt server tool named honestly, never faked data (web `.pend`). */
+/** PEND boxes are hidden per operator preference — every call site renders nothing. (Previously an
+ *  amber "unbuilt server tool" box; kept as a no-op so all views compile unchanged.) */
 @Composable
+@Suppress("UNUSED_PARAMETER")
 fun PendBox(tool: String, spec: String) {
-    Column(
-        Modifier.fillMaxWidth().padding(top = 8.dp)
-            .background(AmberSoft, RoundedCornerShape(10.dp))
-            .border(1.5.dp, Amber, RoundedCornerShape(10.dp))
-            .padding(11.dp),
-    ) {
-        Text("PEND · $tool", color = Amber, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-        Text(spec, color = Color(0xFF6B4308), fontFamily = Mono, fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
-    }
+    // hidden
 }
 
 /** A key → value line, value tinted by tone. */
