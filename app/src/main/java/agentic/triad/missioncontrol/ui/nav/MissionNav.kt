@@ -109,7 +109,6 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
                         fontWeight = FontWeight.Bold, fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 6.dp),
                     )
-                    TextButton(onClick = { showMenu = true }) { Text("Views") }
                     TextButton(onClick = { nav.go(ROUTE_CONNECTION) }) { Text("Connect") }
                     TextButton(onClick = { nav.go(ROUTE_PROPOSE) }) { Text("Propose") }
                 },
@@ -117,6 +116,13 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
         },
         bottomBar = {
             if (!wide) NavigationBar(containerColor = Paper) {
+                // The "All views" launcher — first on the bar so it's obvious and thumb-reachable.
+                NavigationBarItem(
+                    selected = showMenu,
+                    onClick = { showMenu = true },
+                    icon = { Text("☰", fontSize = 16.sp) },
+                    label = { Text("Views", fontSize = 10.sp) },
+                )
                 View.primaries.forEach { v ->
                     NavigationBarItem(
                         selected = route == v.route,
