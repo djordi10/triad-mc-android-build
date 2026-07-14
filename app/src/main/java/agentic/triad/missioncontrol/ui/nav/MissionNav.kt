@@ -51,14 +51,19 @@ import agentic.triad.missioncontrol.ui.views.AnalyticsScreen
 import agentic.triad.missioncontrol.ui.views.BooksScreen
 import agentic.triad.missioncontrol.ui.views.CheckupScreen
 import agentic.triad.missioncontrol.ui.views.ConfigScreen
+import agentic.triad.missioncontrol.ui.views.ConnectionsScreen
 import agentic.triad.missioncontrol.ui.views.DatabankScreen
 import agentic.triad.missioncontrol.ui.views.ExecutorScreen
 import agentic.triad.missioncontrol.ui.views.GovernanceScreen
 import agentic.triad.missioncontrol.ui.views.IntelligenceScreen
+import agentic.triad.missioncontrol.ui.views.LanesScreen
 import agentic.triad.missioncontrol.ui.views.LearningPipelineScreen
+import agentic.triad.missioncontrol.ui.views.McpScreen
 import agentic.triad.missioncontrol.ui.views.OpsScreen
+import agentic.triad.missioncontrol.ui.views.PromptStudioScreen
 import agentic.triad.missioncontrol.ui.views.QueryConsoleScreen
 import agentic.triad.missioncontrol.ui.views.ShadowScreen
+import agentic.triad.missioncontrol.ui.views.TopologyScreen
 import agentic.triad.missioncontrol.ui.views.TradeLogsScreen
 import kotlinx.coroutines.launch
 
@@ -164,6 +169,7 @@ private fun SegmentedRail(route: String, onGo: (String) -> Unit) {
 
 private fun NavGraphBuilder.graph(app: TriadApp, nav: NavController) {
     val repo = app.repository
+    composable(View.TOPOLOGY.route) { TopologyScreen(repo) }
     composable(View.OVERVIEW.route) { OverviewScreen(repo) }
     composable(View.EXECUTOR.route) { ExecutorScreen(repo) }
     composable(View.CHECKUP.route) { CheckupScreen(repo) }
@@ -173,11 +179,15 @@ private fun NavGraphBuilder.graph(app: TriadApp, nav: NavController) {
     composable(View.DATABANK.route) { DatabankScreen(repo) }
     composable(View.QUERY_CONSOLE.route) { QueryConsoleScreen(repo) }
     composable(View.INTELLIGENCE.route) { IntelligenceScreen(repo) }
+    composable(View.PROMPT_STUDIO.route) { PromptStudioScreen(repo) }
     composable(View.SHADOW.route) { ShadowScreen(repo) }
     composable(View.BOOKS.route) { BooksScreen(repo) }
     composable(View.LEARNING_PIPELINE.route) { LearningPipelineScreen(repo) }
     composable(View.CONFIG.route) { ConfigScreen(repo) }
+    composable(View.LANES.route) { LanesScreen(repo) }
     composable(View.GOVERNANCE.route) { GovernanceScreen(repo) }
+    composable(View.CONNECTIONS.route) { ConnectionsScreen(app) }
+    composable(View.MCP.route) { McpScreen(app) }
 
     composable(ROUTE_CONNECTION) {
         ConnectionScreen(app = app, onDone = { nav.popBackStack() })

@@ -57,6 +57,41 @@ class LiveMcpClient(
             put("source", run.source)
         })
 
+    /**
+     * The real "Test connection": the same session flow as [toolCall] — [ensureSession] then a
+     * `tools/list` RPC carrying the session header — parsed for `result.tools[].name`. A `tools/list`
+     * reply is not a tool payload, so it does NOT go through [parseEnvelope] (which unwraps
+     * `result.content[0].text`); we read `result.tools` off the raw RPC message directly. Any failure
+     * — dropped session, transport error, unparseable body — returns an empty list, so the caller
+     * reads "0 tools" as a failed handshake, never a fabricated green.
+     */
+    override suspend fun listTools(): List<String> = runCatching {
+        ensureSession()
+        val body = rpc("tools/list", buildJsonObject { })
+        var resp = send(body)
+        if (resp.status.value == 400) { // session likely expired — re-handshake once
+            sessionId = null
+            ensureSession()
+            resp = send(body)
+        }
+        parseToolNames(resp.bodyAsText())
+    }.getOrDefault(emptyList())
+
+    /** Pull `result.tools[].name` from an SSE (`data:` line) or plain-JSON `tools/list` response. */
+    private fun parseToolNames(raw: String): List<String> {
+        val payload =
+            if (raw.contains("data:")) {
+                raw.lineSequence().firstOrNull { it.startsWith("data:") }?.substringAfter("data:")?.trim() ?: raw
+            } else {
+                raw
+            }
+        val msg = runCatching { JSON.parseToJsonElement(payload).jsonObject }.getOrNull() ?: return emptyList()
+        if (msg["error"] is JsonObject) return emptyList()
+        val result = msg["result"] as? JsonObject ?: return emptyList()
+        val tools = result["tools"] as? JsonArray ?: return emptyList()
+        return tools.mapNotNull { ((it as? JsonObject)?.get("name") as? JsonPrimitive)?.content }
+    }
+
     private suspend fun toolCall(tool: String, args: JsonObject): McpEnvelope {
         ensureSession()
         val body = rpc("tools/call", buildJsonObject { put("name", tool); put("arguments", args) })
