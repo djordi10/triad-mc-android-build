@@ -30,6 +30,9 @@ class TriadApp : Application() {
     override fun onCreate() {
         super.onCreate()
         vault = BearerVault(this)
+        // Boot straight to LIVE against the baked triad-mcp endpoint (token in the ?token= query).
+        // The Connection sheet can still re-point it or drop to DEMO.
+        goLive(LIVE_ENDPOINT)
         // Schedule the checkup broadcast at boot (respects the stored policy/interval; OFF is a no-op
         // beyond keeping the periodic work registered).
         BroadcastScheduler.schedule(this)
@@ -57,5 +60,11 @@ class TriadApp : Application() {
         val env = c.propose(action)
         return if (env.ok) "Filed to the proposals inbox — a human applies it at triadctl"
         else "Refused: ${env.error ?: "unknown"}"
+    }
+
+    companion object {
+        /** The baked LIVE MCP endpoint (auth token in the `?token=` query). */
+        const val LIVE_ENDPOINT =
+            "https://triad-mc.bgzr.io/mcp?token=tmc_4f1183d581f36abcf9c1f28da0dd"
     }
 }
