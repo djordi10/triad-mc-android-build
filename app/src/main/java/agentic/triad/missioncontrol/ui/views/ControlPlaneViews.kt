@@ -74,7 +74,7 @@ private val CONNECTIONS_TOOLS = listOf("get_go_no_go_status", "get_service_statu
  * handshake) on top of this read-only go/no-go interlock. Kept for reference; not wired.
  */
 @Composable
-fun ConnectionsScreenLegacy(repo: MissionRepository) {
+fun ConnectionsScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, CONNECTIONS_TOOLS))
     val s by vm.state.collectAsState()
     val d = s.data
@@ -191,7 +191,7 @@ private val MCP_TOOLS = listOf("list_docs")
  * for reference; not wired.
  */
 @Composable
-fun McpScreenLegacy(repo: MissionRepository) {
+fun McpScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, MCP_TOOLS))
     val s by vm.state.collectAsState()
     val d = s.data

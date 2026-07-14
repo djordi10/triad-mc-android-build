@@ -186,8 +186,8 @@ private fun NavGraphBuilder.graph(app: TriadApp, nav: NavController) {
     composable(View.CONFIG.route) { ConfigScreen(repo) }
     composable(View.LANES.route) { LanesScreen(repo) }
     composable(View.GOVERNANCE.route) { GovernanceScreen(repo) }
-    composable(View.CONNECTIONS.route) { ConnectionsScreen(app) }
-    composable(View.MCP.route) { McpScreen(app) }
+    composable(View.CONNECTIONS.route) { ConnectionsScreen(repo) }
+    composable(View.MCP.route) { McpScreen(repo) }
 
     composable(ROUTE_CONNECTION) {
         ConnectionScreen(app = app, onDone = { nav.popBackStack() })
