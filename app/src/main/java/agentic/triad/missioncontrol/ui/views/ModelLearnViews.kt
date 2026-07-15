@@ -7,6 +7,11 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.ui.ToolsViewModel
+import agentic.triad.missioncontrol.ui.components.Bar
+import agentic.triad.missioncontrol.ui.components.DecileBars
+import agentic.triad.missioncontrol.ui.components.Funnel
+import agentic.triad.missioncontrol.ui.components.HBarChart
+import agentic.triad.missioncontrol.ui.components.Histogram
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -134,10 +139,31 @@ fun IntelligenceScreen(repo: MissionRepository) {
             KvRow("limits_config", if (limitsPresent) "present · $limitsSha" else "ABSENT", if (limitsPresent) GOOD else BAD)
             Note("The manifest is the fixed point, never a mutation path. Limits + strategy must be the same business (I-4).")
         }
+        // The kill-FUNNEL — candidates flow down; the collapse point is the story (pFunnel).
+        // Live counts derive from the histogram total (calls seen), take-rate verdicts, and the
+        // validator kill total. Absent inputs collapse to the funnel's empty state, never faked.
+        McCard("The funnel — where the money path dies", "get_conviction_histogram · get_take_rate · get_validator_rejects") {
+            val takes = takeN ?: 0
+            val proposed = takes + (skipN ?: 0)
+            val candidates = freshTotal.takeIf { it > 0 } ?: (proposed + vrTotal)
+            val funnel = buildList {
+                if (candidates > 0) add(Bar("candidates", candidates.toDouble(), NEUTRAL, "the detector fired"))
+                add(Bar("model answer", proposed.toDouble(), WARN, "of which PROPOSED a trade"))
+                add(Bar("validator", (proposed - vrTotal).coerceAtLeast(0).toDouble(), SEV, "$vrTotal REJECTED trades"))
+                add(Bar("governor", takes.toDouble(), if (takes > 0) GOOD else BAD, "reached execution"))
+            }.filter { it.value > 0.0 || it.label == "governor" }
+            Funnel(funnel)
+            Note("The gateway is a symptom; the validator is the wall — the widest kill in the system, and $vrTotal proposals die there. An abstain is not a refusal (I-1).")
+        }
         McCard("The validator's kill sheet ($vrTotal rows, ${byCheck.size} checks)", "get_validator_rejects · by_check") {
             if (topKills.isEmpty()) {
                 Note("get_validator_rejects returned no rows — UNKNOWN.", UNK)
             } else {
+                HBarChart(
+                    topKills.mapIndexed { i, (check, n) -> Bar(check, n, if (i < 3) SEV else BAD) },
+                    unit = "kills",
+                    labelWidth = 132,
+                )
                 MiniTable(
                     listOf("check", "fires", "share"),
                     topKills.map { (check, n) ->
@@ -153,6 +179,20 @@ fun IntelligenceScreen(repo: MissionRepository) {
                 Triple("mode $modeBucket", "$modeCount / $nonZero", WARN),
                 Triple("emitted 0", "$zeroBucket non-answers", GOOD),
             )
+            // The fresh conviction distribution — threshold marker at 60, the 36–62 void shaded.
+            // Buckets are numeric conviction values; the threshold/void indices are found by value.
+            if (fresh.isNotEmpty()) {
+                val sorted = fresh.sortedBy { it.first.toIntOrNull() ?: -1 }
+                val thrIdx = sorted.indexOfFirst { (it.first.toIntOrNull() ?: -1) >= 60 }.takeIf { it >= 0 }
+                val voidLo = sorted.indexOfFirst { (it.first.toIntOrNull() ?: -1) in 36..62 }
+                val voidHi = sorted.indexOfLast { (it.first.toIntOrNull() ?: -1) in 36..62 }
+                val voidRange = if (voidLo >= 0 && voidHi >= voidLo) voidLo..voidHi else null
+                Histogram(
+                    sorted.map { (bucket, n) -> Bar(bucket, n, if (bucket == "0") SEV else WARN) },
+                    thresholdIndex = thrIdx,
+                    voidRange = voidRange,
+                )
+            }
             Note("Every zero in the histogram is a non-answer (error / timeout / validator kill), not a real conviction — $zeroBucket of $freshTotal fresh calls. The model has never emitted a true 0.")
         }
         McCard("Threshold in a void (I-3)", "get_conviction_histogram · get_calibration") {
@@ -245,14 +285,15 @@ fun ShadowScreen(repo: MissionRepository) {
             if (!bankLive) {
                 Note("get_shadow_bank unavailable — no local bank on this deployment. UNKNOWN.", UNK)
             } else {
-                MiniTable(
-                    listOf("outcome", "n", "avg pnl_r"),
+                // The fee dial's raw material — the by_outcome row counts, the frictionless mix.
+                HBarChart(
                     listOf(
-                        row("win" to GOOD, winN.toString() to GOOD, fmt(winAvg, 4) to GOOD),
-                        row("loss" to BAD, lossN.toString() to BAD, fmt(lossAvg, 4) to BAD),
-                        row("expired" to NEUTRAL, expiredN.toString() to NEUTRAL, "—" to NEUTRAL),
-                        row("no_fill" to UNK, noFillN.toString() to UNK, "—" to NEUTRAL),
+                        Bar("win", winN.toDouble(), GOOD, if (winAvg != null) "avg ${fmt(winAvg, 4)} R" else ""),
+                        Bar("loss", lossN.toDouble(), BAD, if (lossAvg != null) "avg ${fmt(lossAvg, 4)} R" else ""),
+                        Bar("expired", expiredN.toDouble(), NEUTRAL),
+                        Bar("no_fill", noFillN.toDouble(), UNK),
                     ),
+                    unit = "rows",
                 )
                 Note(
                     "Net ${fmt(netR, 1)} R across ${bankTotal ?: "—"} rows. The loss average sits near −1.0 (the frictionless " +
@@ -265,16 +306,18 @@ fun ShadowScreen(repo: MissionRepository) {
             if (personas.isEmpty()) {
                 Note("get_persona_scoreboard returned no rows — UNKNOWN.", UNK)
             } else {
-                MiniTable(
-                    listOf("persona", "n", "pnl_r"),
+                // Scoreboard as bars — row count per persona; every zero-row persona is a question
+                // never asked. Uses n when any persona has run, else the pnl_r magnitudes.
+                val anyN = personas.any { (it.int("n") ?: 0) > 0 }
+                HBarChart(
                     personas.map { p ->
                         val n = p.int("n") ?: 0
-                        row(
-                            p.text("id") to NEUTRAL,
-                            n.toString() to (if (n == 0) BAD else GOOD),
-                            fmt(p.num("pnl_r"), 2) to NEUTRAL,
-                        )
+                        val pnl = p.num("pnl_r") ?: 0.0
+                        val v = if (anyN) n.toDouble() else pnl
+                        Bar(p.text("id"), v, if (n == 0) BAD else GOOD, if (anyN && pnl != 0.0) "${fmt(pnl, 2)} R" else "")
                     },
+                    unit = if (anyN) "n" else "R",
+                    labelWidth = 128,
                 )
                 Note("All $personaN personas at n=0. The bank has ${bankTotal ?: "many"} rows and nothing is asking it anything — the books must disagree with the gate (S-6), but no persona has run.")
             }
@@ -351,6 +394,28 @@ fun BooksScreen(repo: MissionRepository) {
             if (books == null) {
                 Note("get_books_scoreboard unavailable — UNKNOWN.", UNK)
             } else {
+                // Scoreboard as bars — net_pnl_r per book when any book has rows, else expectancy.
+                // Zero-row books read BAD (never run); the one book with rows carries the whole chart.
+                val bookRows = listOf("B0", "B1", "M1", "K1").map { k ->
+                    val b = book(k)
+                    val n = b.int("n") ?: 0
+                    val exp = b.num("expectancy")
+                    val pnl = b.num("pnl_r")
+                    val tone = when {
+                        n == 0 -> BAD
+                        (exp ?: 0.0) > 0 -> GOOD
+                        else -> BAD
+                    }
+                    Triple(k, tone, if (pnl != null && n > 0) pnl else (exp ?: 0.0) * n)
+                }
+                val anyBookRows = bookRows.any { it.third != 0.0 }
+                if (anyBookRows) {
+                    HBarChart(
+                        bookRows.map { (k, tone, v) -> Bar(k, v, tone) },
+                        unit = "R",
+                        labelWidth = 60,
+                    )
+                }
                 MiniTable(
                     listOf("book", "n", "expectancy", "CI≠0"),
                     listOf("B0", "B1", "M1", "K1").map { k ->
@@ -390,6 +455,16 @@ fun BooksScreen(repo: MissionRepository) {
                 Triple("deciles filled", "$filledDeciles / ${deciles.size}", WARN),
             )
             if (deciles.isNotEmpty()) {
+                // The Wilson decile table as bars — sized by the row count per decile (pCurve). Only
+                // populated deciles draw; the empty ones ARE the story of feasible:false.
+                DecileBars(
+                    deciles.filter { (it.int("n") ?: 0) > 0 }.map { dec ->
+                        val lo = dec.int("lo"); val hi = dec.int("hi")
+                        val n = dec.int("n") ?: 0
+                        val hot = 60 in (lo ?: -1)..(hi ?: -1)
+                        Bar("$lo–$hi", n.toDouble(), if (hot) SEV else NEUTRAL)
+                    },
+                )
                 MiniTable(
                     listOf("bucket", "n", "p_hat"),
                     deciles.filter { (it.int("n") ?: 0) > 0 }.map { dec ->
@@ -406,6 +481,21 @@ fun BooksScreen(repo: MissionRepository) {
             if (lanes.isEmpty()) {
                 Note("get_bridge_lag unavailable — UNKNOWN.", UNK)
             } else {
+                // Per-lane heartbeat ages as bars — a tall bar is a stale lane (>300s BAD, >120s WARN).
+                HBarChart(
+                    lanes.map { l ->
+                        val age = l.num("age_s") ?: 0.0
+                        val tone = when {
+                            l.num("age_s") == null -> UNK
+                            age > 300 -> BAD
+                            age > 120 -> WARN
+                            else -> GOOD
+                        }
+                        Bar(l.text("match_value"), age, tone)
+                    },
+                    unit = "s",
+                    labelWidth = 96,
+                )
                 MiniTable(
                     listOf("lane", "age_s", "note"),
                     lanes.map { l ->
@@ -474,6 +564,20 @@ fun LearningPipelineScreen(repo: MissionRepository) {
     val alEnough = al.bool("enough")
     val alRequired = al.bool("required")
 
+    // Analytics — the 24h checks_failed census (the failure histogram, WIRED · LIVE).
+    val analytics = d["get_analytics"] as? JsonObject
+    val checksFailed = analytics.numEntries("checks_failed").sortedByDescending { it.second }
+
+    // The reward-function terms (Spec §2 weights) crossed with what is computable today: the pnl and
+    // calibration terms need the conviction↔outcome join (absent); the format gate is the only live one.
+    val rewardTerms = listOf(
+        Triple("w_fmt · format gate", "COMPUTABLE", GOOD),
+        Triple("w_pnl · payoff core", "POISONED", SEV),
+        Triple("w_cal · Brier honesty", "CANNOT COMPUTE", BAD),
+        Triple("w_tr · take-band", "MEASURABLE", WARN),
+        Triple("w_kl · SFT anchor", "CANNOT COMPUTE", BAD),
+    )
+
     // T1 corpus gate reference (Spec §5).
     val t1Gate = 5000
 
@@ -498,6 +602,18 @@ fun LearningPipelineScreen(repo: MissionRepository) {
             if (lanesObj == null) {
                 Note("get_learning_pipeline unavailable — UNKNOWN.", UNK)
             } else {
+                // The six lanes as a status bar-chart — each lane scored GREEN=1/YELLOW=0.5/RED=0/UNK=0
+                // so the worst-of collapse is visible as a wall of short bars. Same statuses as the table.
+                HBarChart(
+                    laneKeys.map { k ->
+                        val st = laneStatus(k)
+                        val tone = when (st) { "GREEN" -> GOOD; "YELLOW" -> WARN; "RED" -> BAD; else -> UNK }
+                        val score = when (st) { "GREEN" -> 1.0; "YELLOW" -> 0.5; "RED" -> 0.0; else -> 0.0 }
+                        Bar(k.uppercase(), score, tone, st)
+                    },
+                    max = 1.0,
+                    labelWidth = 72,
+                )
                 MiniTable(
                     listOf("lane", "status", "note"),
                     laneKeys.map { k ->
@@ -507,6 +623,20 @@ fun LearningPipelineScreen(repo: MissionRepository) {
                     },
                 )
                 Note("An unmeasurable lane is YELLOW, never fake-green (T-3): an audit that can't fail isn't an audit. CAG=0 hits, corpus/eval/race not yet started — pre-P3/P4.")
+            }
+        }
+        McCard("Failure histogram (24h) — checks_failed", "get_analytics · checks_failed") {
+            if (checksFailed.isEmpty()) {
+                Note("get_analytics returned no checks_failed rows — UNKNOWN.", UNK)
+            } else {
+                // The 24h failure census as bars — the same checks the validator kills on, seen at the
+                // pipeline scale (context_stale = scheduler debt; ttl_bounds dies at grammar v1.1).
+                HBarChart(
+                    checksFailed.take(8).map { (check, n) -> Bar(check, n, BAD) },
+                    unit = "fails",
+                    labelWidth = 132,
+                )
+                Note("Stale-context is scheduler debt (curriculum-banned); ttl_bounds/stop_distance/net_rr_floor are the venue-cost floor seen three ways. Volume isn't the blocker, truth is (T-5).")
             }
         }
         McCard("Corpus counter vs the T1 gate (§5)", "get_corpus_status") {
@@ -535,6 +665,19 @@ fun LearningPipelineScreen(repo: MissionRepository) {
             } else {
                 Note("Eval report present but no gate rows — UNKNOWN.", UNK)
             }
+        }
+        McCard("The reward function, term by term (§2)", "FINE-TUNING-PLAYBOOK §2 · the live ledger") {
+            // Reward terms scored by computability — COMPUTABLE=1 / MEASURABLE=0.5 / POISONED /
+            // CANNOT COMPUTE=0. Three of five cannot be computed today; the core term is poisoned.
+            HBarChart(
+                rewardTerms.map { (term, status, tone) ->
+                    val score = when (status) { "COMPUTABLE" -> 1.0; "MEASURABLE" -> 0.5; else -> 0.0 }
+                    Bar(term, score, tone, status)
+                },
+                max = 1.0,
+                labelWidth = 128,
+            )
+            Note("Three of five reward terms cannot be computed today; the one that can (w_fmt) fails 99.7% of proposals. The reward function is the product (T-1) — and it is poisoned before any RL runs.")
         }
         McCard("§3 reward-hacks — present pre-training", "get_take_rate · get_conviction_histogram · get_sim_gap") {
             Row { Tag("skip-collapse", SEV); Tag("conviction mode@22", SEV); Tag("RR=2.50 floor", SEV) }

@@ -6,7 +6,11 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.ui.ToolsViewModel
+import agentic.triad.missioncontrol.ui.components.Bar
+import agentic.triad.missioncontrol.ui.components.Funnel
+import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.LineChart
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
@@ -188,6 +192,22 @@ fun OverviewScreen(repo: MissionRepository) {
         val skips = take.obj("by_verdict")?.int("skip")
         val takes = take.obj("by_verdict")?.int("take")
         McCard("MONEY PATH — the signature spine", "get_databank · get_take_rate · get_positions") {
+            // The money-path spine as a Funnel (web §1.2 pSpine): candidates→decisions→takes→intents→
+            // orders→fills→positions→outcomes. `candidates` = Σ detector emitted; the ledger legs
+            // (intents/orders/fills/outcomes) are honestly 0 today. `takes` is the red chokepoint.
+            val candidates = detectors.arr("detectors").rows()
+                .sumOf { (it as JsonObject).int("emitted_count") ?: 0 }
+            val spine = listOfNotNull(
+                if (candidates > 0) Bar("candidates", candidates.toDouble(), Tone.NEUTRAL, "from detectors") else null,
+                totalDecisions?.let { Bar("decisions", it.toDouble(), Tone.NEUTRAL) },
+                takes?.let { Bar("takes", it.toDouble(), Tone.BAD, "⌁ chokepoint · model gate") },
+                Bar("intents", 0.0, Tone.UNK, "ledger empty"),
+                Bar("orders", 0.0, Tone.UNK),
+                Bar("fills", 0.0, Tone.UNK),
+                openPositionsN?.let { Bar("positions", it.toDouble(), Tone.NEUTRAL) },
+                Bar("outcomes", 0.0, Tone.UNK, "labeler"),
+            )
+            if (take != null || positions != null) Funnel(spine)
             StatRow(
                 Triple("decisions", totalDecisions?.toString() ?: "—", if (take == null) Tone.UNK else Tone.NEUTRAL),
                 Triple("takes", takes?.toString() ?: "—", if (take == null) Tone.UNK else Tone.BAD),
@@ -259,6 +279,13 @@ fun OverviewScreen(repo: MissionRepository) {
                         )
                     },
                 )
+                // The 4-book edge as net-R bars (O-6: comparable, never additive). Losers render BAD.
+                val edgeBars = listOf("B0", "B1", "M1", "K1").mapNotNull { key ->
+                    b.obj(key)?.num("pnl_r")?.let { r ->
+                        Bar(key, r, if (r < 0) Tone.BAD else Tone.GOOD)
+                    }
+                }
+                if (edgeBars.isNotEmpty()) HBarChart(edgeBars, unit = "R")
             } else {
                 KvRow("scoreboard", "UNKNOWN — get_books_scoreboard unavailable", Tone.UNK)
             }
@@ -289,6 +316,9 @@ fun OverviewScreen(repo: MissionRepository) {
                     listOf("detector", "emitted"),
                     dets.map { listOf((it as JsonObject).text("detector_id") to Tone.NEUTRAL, (it.int("emitted_count")?.toString() ?: "—") to Tone.NEUTRAL) },
                 )
+                // Emitted-count series across detectors as a sparkline (LineChart degrades if <2 points).
+                val emittedSeries = dets.map { ((it as JsonObject).int("emitted_count") ?: 0).toDouble() }
+                LineChart(emittedSeries)
             }
             Note("Refusal census (get_databank.capture_top) surfaces the real reasons the path is dead — invalid_output:* is a P9 violation surface (reject, never repair).")
         }

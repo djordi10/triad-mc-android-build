@@ -27,7 +27,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
 import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.ui.ToolsViewModel
+import agentic.triad.missioncontrol.ui.components.Bar
+import agentic.triad.missioncontrol.ui.components.Gauge
+import agentic.triad.missioncontrol.ui.components.HBarChart
+import agentic.triad.missioncontrol.ui.components.Histogram
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.LineChart
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
@@ -117,6 +122,13 @@ fun AnalyticsScreen(repo: MissionRepository) {
                 Triple("take rate", takePct?.let { "${fmt(it, 2)}%" } ?: "—", if (inBand) GOOD else WARN),
                 Triple("validity (live)", validity?.let { "${fmt(it, 0)}%" } ?: "—", validityTone(validity)),
             )
+            // Take-band gauge — the live take_rate against the 10–60% band (web: get_take_rate band[10,60]).
+            if (takePct != null) Gauge(takePct, 10.0, 60.0, "take-band", "%")
+            // Validity / equity series as a sparkline — only when the wire actually carries a series
+            // array; absent (the current shape) → nothing drawn, never a fabricated curve (web: axline).
+            val series = (analytics.field("validity_series") ?: analytics.field("equity_series"))
+                .list().mapNotNull { it.str().toDoubleOrNull() }
+            if (series.size >= 2) LineChart(series)
             Note("Take rate ${takePct?.let { fmt(it, 2) + "%" } ?: "—"} vs the 10–60% band — ${if (inBand) "in band" else "out of band"}. Validity ${validity?.let { fmt(it, 0) + "%" } ?: "—"} over n=${validityN ?: "—"}.")
             Note("Definition law: positive-outcome rate = pnl_r > 0 · full-win = pnl_r ≥ 1.9 · net_r never summed across cohorts · every WR renders with its Wilson CI against BE 28.6% (single-TP).", INFO)
         }
@@ -124,15 +136,14 @@ fun AnalyticsScreen(repo: MissionRepository) {
             if (checksFailedList.isEmpty()) {
                 Note("No failing checks in the window — or the ledger has no rows.", UNK)
             } else {
-                MiniTable(
-                    listOf("check", "fires"),
-                    checksFailedList.take(8).map { e ->
-                        val pair = e.list()
-                        val name = pair.getOrNull(0).str()
-                        val n = pair.getOrNull(1).str()
-                        row(name to WARN, n to BAD)
-                    },
-                )
+                // Failure histogram — [check, fires] pairs as a horizontal bar chart (web: hBars(checks_failed)).
+                val failBars = checksFailedList.take(10).mapNotNull { e ->
+                    val pair = e.list()
+                    val name = pair.getOrNull(0).str()
+                    val n = pair.getOrNull(1).str().toDoubleOrNull() ?: return@mapNotNull null
+                    Bar(name, n, if (name == "context_stale") BAD else WARN)
+                }
+                HBarChart(failBars, labelWidth = 132)
                 Note("semantic = 1 − econ-fails/decisions; the top check names the dominant kill.")
             }
         }
@@ -140,6 +151,18 @@ fun AnalyticsScreen(repo: MissionRepository) {
             val fresh = hist.obj("fresh")
             val cache = hist.obj("cache")
             val freshMode = fresh?.entries?.maxByOrNull { (it.value.str()).toDoubleOrNull() ?: 0.0 }
+            // Dense 0..70 conviction axis so index == conviction value — the void band (36–62) renders
+            // empty and the take threshold (60) lands at the right x (web: pConviction, voidLo/voidHi 36/62).
+            if (fresh != null && fresh.isNotEmpty()) {
+                val convBars = (0..70).map { c ->
+                    val f = fresh.text("$c", "").toDoubleOrNull() ?: 0.0
+                    val tone = if (c >= 60) GOOD else if (c == 0) UNK else WARN
+                    Bar(if (c % 10 == 0) "$c" else "", f, tone)
+                }
+                Histogram(convBars, thresholdIndex = 60, voidRange = 36..62)
+            } else {
+                Note("Conviction histogram empty — no fresh buckets this window.", UNK)
+            }
             KvRow("fresh buckets", "${fresh?.size ?: 0}", NEUTRAL)
             KvRow("cache buckets", "${cache?.size ?: 0}", NEUTRAL)
             if (freshMode != null) KvRow("fresh mode", "${freshMode.key} → ${freshMode.value.str()}", WARN)
@@ -235,6 +258,13 @@ fun TradeLogsScreen(repo: MissionRepository) {
             } else {
                 val bySym = logs.groupBy { it.text("symbol") }
                     .entries.sortedByDescending { it.value.size }
+                // Per-symbol row count as a horizontal bar chart (web: emission board hBars by symbol).
+                HBarChart(
+                    bySym.take(12).map { (sym, rows) ->
+                        Bar(sym.removeSuffix("-USDT-PERP"), rows.size.toDouble(), NEUTRAL)
+                    },
+                    labelWidth = 92,
+                )
                 MiniTable(
                     listOf("symbol", "n", "open", "closed", "rej", "net R"),
                     bySym.take(12).map { (sym, rows) ->
@@ -256,6 +286,18 @@ fun TradeLogsScreen(repo: MissionRepository) {
             }
         }
         McCard("Lane census (T-2)", "get_trade_logs") {
+            // Four-lane census as a horizontal bar chart — rejected first (web: pLanes flow order).
+            // Lanes are exactly the ledger-derived counts (no fabricated "skipped" — that lane comes
+            // from get_take_rate, which this screen does not read).
+            HBarChart(
+                listOf(
+                    Bar("rejected", rejected.toDouble(), if (rejected > 0) WARN else NEUTRAL),
+                    Bar("missed", missed.toDouble(), if (missed > 0) UNK else NEUTRAL),
+                    Bar("open", open.toDouble(), if (open > 0) INFO else UNK),
+                    Bar("closed", closed.toDouble(), if (closed > 0) GOOD else UNK),
+                ),
+                labelWidth = 88,
+            )
             MiniTable(
                 listOf("lane", "n", "note"),
                 listOf(
@@ -355,6 +397,18 @@ fun DatabankScreen(repo: MissionRepository) {
                 Triple("GATED", "${byClass.int("GATED") ?: "—"}", WARN),
                 Triple("MISSED", "${byClass.int("MISSED") ?: "—"}", if ((byClass.int("MISSED") ?: 0) > 0) UNK else NEUTRAL),
             )
+            // by_class census (REAL / GATED / MISSED) as a horizontal bar chart (web: pCensus).
+            val realN = byClass.int("REAL"); val gatedN = byClass.int("GATED"); val missedN = byClass.int("MISSED")
+            if (realN != null || gatedN != null || missedN != null) {
+                HBarChart(
+                    listOf(
+                        Bar("REAL", (realN ?: 0).toDouble(), if ((realN ?: 0) > 0) GOOD else UNK),
+                        Bar("GATED", (gatedN ?: 0).toDouble(), WARN),
+                        Bar("MISSED", (missedN ?: 0).toDouble(), if ((missedN ?: 0) > 0) UNK else NEUTRAL),
+                    ),
+                    labelWidth = 72,
+                )
+            }
             KvRow("schema · nonulls", "${bank.text("schema", "—")} · ${bank.text("nonulls", "—")}", if (bank.text("nonulls").contains("green")) GOOD else INFO)
             KvRow("resolver lag", bank.num("lag_min")?.let { "${fmt(it, 1)} min" } ?: "— (no lag reported)", if (bank.num("lag_min") == null) UNK else NEUTRAL)
             Note("`nonulls: AT-DTB11 green` is printed beside the real counts — an asserted green is measured only if the class census agrees (D-6). GATED dominating the census is the staleness-veto regime, not a low-signal market.")
@@ -364,11 +418,14 @@ fun DatabankScreen(repo: MissionRepository) {
             if (capTop.isEmpty()) {
                 Note("Capture manifest empty — no captured absences this hour.", UNK)
             } else {
-                // BarMeter-style: each reason with its count as a KvRow ranked by n.
-                capTop.take(8).forEach { e ->
+                // capture_top [reason, n] pairs as a horizontal bar chart ranked by n (web: hBars).
+                val capBars = capTop.take(8).mapNotNull { e ->
                     val pair = e.list()
-                    KvRow(pair.getOrNull(0).str(), pair.getOrNull(1).str(), WARN)
+                    val name = pair.getOrNull(0).str()
+                    val n = pair.getOrNull(1).str().toDoubleOrNull() ?: return@mapNotNull null
+                    Bar(name, n, WARN)
                 }
+                HBarChart(capBars, labelWidth = 148)
                 Note("Each captured absence is a real reason (timeout / model / error / validator_reject) with its n — the manifest is the no-nulls law made countable.")
             }
         }
@@ -377,6 +434,19 @@ fun DatabankScreen(repo: MissionRepository) {
             if (byOutcome == null) {
                 Note("Shadow bank unavailable — the deployment has no local bank.", UNK)
             } else {
+                // Outcome funnel (win / loss / no_fill / gated / expired) as a horizontal bar chart
+                // ranked by n — each bar's count is the live by_outcome.n (web: outcome funnel hBars).
+                val funnelBars = byOutcome.entries
+                    .sortedByDescending { (it.value as? JsonObject).int("n") ?: 0 }
+                    .mapNotNull { (k, v) ->
+                        val n = (v as? JsonObject).int("n") ?: return@mapNotNull null
+                        val t = when (k) {
+                            "win" -> GOOD; "loss" -> BAD; "expired" -> WARN
+                            "gap", "no_fill", "gated", "pending", "open" -> UNK; else -> NEUTRAL
+                        }
+                        Bar(k, n.toDouble(), t)
+                    }
+                HBarChart(funnelBars, labelWidth = 84)
                 MiniTable(
                     listOf("outcome", "n", "avg pnl_r"),
                     byOutcome.entries.sortedByDescending { (it.value as? JsonObject).int("n") ?: 0 }.map { (k, v) ->

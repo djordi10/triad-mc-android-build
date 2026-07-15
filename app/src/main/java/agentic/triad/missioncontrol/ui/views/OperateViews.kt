@@ -6,6 +6,10 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.ui.ToolsViewModel
+import agentic.triad.missioncontrol.ui.components.Bar
+import agentic.triad.missioncontrol.ui.components.Funnel
+import agentic.triad.missioncontrol.ui.components.HBarChart
+import agentic.triad.missioncontrol.ui.components.Histogram
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -101,6 +105,16 @@ fun ExecutorScreen(repo: MissionRepository) {
             SEV,
         )
         McCard("The two rails", "get_governor_refusals · get_open_orders") {
+            // ENTRY-RAIL as a Funnel: decisions→refusals→intents→orders→fills. Live today: every take
+            // died at the governor (refusals), so intents/fills are honestly 0; orders = live open count.
+            val entryRail = listOf(
+                Bar("decisions", refusalTotal.toDouble(), NEUTRAL, "reached the governor"),
+                Bar("refusals", refusalTotal.toDouble(), BAD, "all takes died here"),
+                Bar("intents", 0.0, UNK, "none emitted"),
+                Bar("orders", openOrderN.toDouble(), if (openOrderN > 0) NEUTRAL else UNK),
+                Bar("fills", 0.0, UNK),
+            )
+            Funnel(entryRail)
             KvRow("entry rail", "FAIL-CLOSED (correct)", GOOD)
             KvRow(
                 "exit rail",
@@ -115,6 +129,16 @@ fun ExecutorScreen(repo: MissionRepository) {
                 Triple("passed", "0", SEV),
                 Triple("never run", "$neverRun / 14", UNK),
             )
+            // The 14-check chain as fired-count bars: get_governor_refusals.by_check {check_id: n}.
+            // Only checks that have fired appear (the rest are the `never run` count above · X-1).
+            val byCheck = gr.obj("by_check")
+            val checkBars = byCheck?.entries
+                ?.mapNotNull { (k, v) ->
+                    (v as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.let { Bar(k, it, BAD) }
+                }
+                ?.sortedByDescending { it.value }
+                ?: emptyList()
+            if (checkBars.isNotEmpty()) HBarChart(checkBars, labelWidth = 132)
             if (nullCheckId > 0) {
                 KvRow("null check_id (X-6)", "$nullCheckId of $refusalTotal refusals", BAD)
             }
@@ -136,6 +160,19 @@ fun ExecutorScreen(repo: MissionRepository) {
         McCard("Replay (X-7)", "get_decision_chain") {
             KvRow("chain_verified", "false → Sev-1", SEV)
             Note("The rationale renders inside an untrusted_text box and is never used for control flow (AT-EX9).")
+        }
+        McCard("Latency budgets (§17.1)", "get_latency_budgets") {
+            // Budget-ms bars per stage from get_latency_budgets (budgets[]/rows[]). Live values are
+            // Prometheus-blind today, so the chart shows the BUDGET each stage must beat, not the live ms.
+            val lat = d["get_latency_budgets"] as? JsonObject
+            val latRows = lat.arr("budgets").rows().ifEmpty { lat.arr("rows").rows() }
+            val latBars = latRows.mapNotNull { r ->
+                val ms = (r.int("budget_ms") ?: r.int("budget")) ?: return@mapNotNull null
+                Bar(r.text("name", r.text("stage", r.text("id", "—"))), ms.toDouble(), NEUTRAL)
+            }
+            if (latBars.isNotEmpty()) HBarChart(latBars, unit = "ms", labelWidth = 132)
+            else KvRow("budgets", "not served", UNK)
+            Note("X-2: a budget you are not measuring is a wish — live values render UNK until Prometheus is present.")
         }
         PendBox("get_governor_chain", "§3.1 · the ordered 14-check chain with exercised flags")
         PendBox("get_stop_geometry", "§3.2 · the stop-width distribution behind the anecdote")
@@ -276,6 +313,16 @@ fun CheckupScreen(repo: MissionRepository) {
             Note("C-2: a verdict carries its denominator. C-4: silence is not health.")
         }
         McCard("Probe depth (C-1)", "get_checkup · classified client-side") {
+            // The depth ladder D0..D4 as bars (client-side classification of each green's reason).
+            // Shallow depths (D0 declared) are UNK; the runtime/behavioural depths (D3/D4) are what matters.
+            val ladder = listOf(
+                Bar("D0 declared", declared.toDouble(), UNK, "exists in census"),
+                Bar("D1 loads", d1.toDouble(), WARN, "imports, ≠ works"),
+                Bar("D2 artifact", d2.toDouble(), WARN, "hash recomputes"),
+                Bar("D3 probed", d3.toDouble(), BAD, "runtime tested"),
+                Bar("D4 exercised", d4.toDouble(), BAD, "behaviourally"),
+            )
+            HBarChart(ladder, labelWidth = 96)
             MiniTable(
                 listOf("depth", "n", "meaning"),
                 listOf(
@@ -297,6 +344,21 @@ fun CheckupScreen(repo: MissionRepository) {
             Note("Each green's reason string is printed unedited, `not probed` caveat included — a green that indicts itself.")
         }
         McCard("The census — $total, per plane (§1.3)", "get_checkup · grouped by plane") {
+            // Per-plane coverage % as bars, and the census count per plane as a Histogram (§1.3).
+            val planesSorted = byPlane.entries.sortedByDescending { it.value.size }
+            val coverageBars = planesSorted.map { (plane, comps) ->
+                val n = comps.size
+                val prb = comps.count { it.text("status", "UNKNOWN") == "GREEN" }
+                val pct = if (n > 0) prb * 100.0 / n else 0.0
+                Bar(plane, pct, if (prb == 0) BAD else WARN, "$prb/$n probed")
+            }
+            val censusBars = planesSorted.map { (plane, comps) ->
+                Bar(plane.take(6), comps.size.toDouble(), NEUTRAL)
+            }
+            if (coverageBars.isNotEmpty()) {
+                HBarChart(coverageBars, max = 100.0, unit = "%")
+                Histogram(censusBars, heightDp = 96)
+            }
             if (planeRows.isNotEmpty()) {
                 MiniTable(listOf("plane", "probed", "coverage"), planeRows)
             } else {
@@ -516,6 +578,17 @@ fun OpsScreen(repo: MissionRepository) {
         }
         McCard("Failure matrix (§10) — 14 rows, spec order", "get_bus_status · get_watchdog_stats · …") {
             KvRow("header", "VIOLATED $fViolated · BLIND $fBlind · UNDRILLED $fUndrilled · GREEN 0", NEUTRAL)
+            // The 14-row verdict distribution as bars: VIOLATED/BLIND/UNDRILLED/GREEN over the live matrix.
+            HBarChart(
+                listOf(
+                    Bar("VIOLATED", fViolated.toDouble(), SEV),
+                    Bar("BLIND", fBlind.toDouble(), UNK),
+                    Bar("UNDRILLED", fUndrilled.toDouble(), WARN),
+                    Bar("GREEN", (fmatrix.size - fViolated - fBlind - fUndrilled).toDouble(), GOOD),
+                ),
+                max = fmatrix.size.toDouble(),
+                labelWidth = 96,
+            )
             MiniTable(listOf("id", "failure", "detector?", "drilled?", "verdict"), fmRows)
             Note("AT-OPS1/2/3: 14 rows in §10 order, two columns. No row is green without both. F12 is VIOLATED with evidence — never 'undrilled'.")
         }
@@ -557,6 +630,12 @@ fun OpsScreen(repo: MissionRepository) {
             Note("AT-OPS11: the machine is alive — this page is not pessimism. The question is whether you would know if it stopped.")
         }
         McCard("Latency law & §17.1 (§2.8)", "get_latency_budgets") {
+            // Budget-ms per stage as bars (target each stage must beat). Live ms is Prometheus-blind.
+            val latBudgetBars = latRows0.mapNotNull { b ->
+                val ms = (b.int("budget_ms") ?: b.int("budget")) ?: return@mapNotNull null
+                Bar(b.text("name", b.text("id", "—")), ms.toDouble(), NEUTRAL)
+            }
+            if (latBudgetBars.isNotEmpty()) HBarChart(latBudgetBars, unit = "ms", labelWidth = 132)
             if (latRows.isNotEmpty()) {
                 MiniTable(listOf("budget", "target", "live"), latRows)
             } else {
