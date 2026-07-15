@@ -1,6 +1,5 @@
 package agentic.triad.missioncontrol.ui.views
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -27,12 +26,12 @@ import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
+import agentic.triad.missioncontrol.ui.components.NodeCard
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
-import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
 import agentic.triad.missioncontrol.ui.components.Tone.GOOD
 import agentic.triad.missioncontrol.ui.components.Tone.INFO
@@ -40,6 +39,7 @@ import agentic.triad.missioncontrol.ui.components.Tone.NEUTRAL
 import agentic.triad.missioncontrol.ui.components.Tone.SEV
 import agentic.triad.missioncontrol.ui.components.Tone.UNK
 import agentic.triad.missioncontrol.ui.components.Tone.WARN
+import agentic.triad.missioncontrol.ui.components.VerdictBanner
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.arr
 import agentic.triad.missioncontrol.ui.components.field
@@ -629,23 +629,22 @@ fun TopologyScreen(repo: MissionRepository) {
             Stance("real lanes", m.lanes.size.toString(), if (m.lanes.isEmpty()) UNK else NEUTRAL),
         ),
     ) {
-        // ── pStance · the verdict banner (verbatim wording from TPVIEW) ──
-        Ribbon(
-            "INFERRED · twelve nodes, three heartbeats — that is not health, it is an autopsy",
-            "get_service_status is named for services and returns LEDGER TABLES; get_bus_status says NATS is " +
-                "unavailable; get_feed_health says Prometheus is unavailable. The only genuine process liveness " +
-                "in this estate is get_bridge_lag — three sync workers. Every green dot on a process — Signal, " +
-                "Gateway, Executor, the venue gateway, the LLM server — is inferred from whether a table has rows. " +
-                "And the map draws a NATS bus with seven streams that does not exist, while the three ingest lanes " +
-                "actually carrying the data are not on it at all.",
-            SEV,
-        )
-        StatRow(
-            Triple("measured", "$measured / ${ESTATE_NODES.size}", if (measured <= 3) BAD else GOOD),
-            Triple("inferred", "$inferred", INFO),
-            Triple("no health src", "$unknown", BAD),
-            Triple("dead edges", "$deadEdges", BAD),
-            Triple("real lanes", m.lanes.size.toString(), NEUTRAL),
+        // ── pStance · the styled verdict banner (web `.stance` — word + said + dot pills) ──
+        VerdictBanner(
+            word = "INFERRED",
+            said = "Twelve nodes, three heartbeats — that is not health, it is an autopsy. get_service_status is " +
+                "named for services and returns LEDGER TABLES; get_bus_status says NATS is unavailable; " +
+                "get_feed_health says Prometheus is unavailable. The only genuine process liveness in this estate " +
+                "is get_bridge_lag — three sync workers. Every green dot on a process — Signal, Gateway, Executor, " +
+                "the venue gateway, the LLM server — is inferred from whether a table has rows. And the map draws a " +
+                "NATS bus with seven streams that does not exist, while the three ingest lanes actually carrying the " +
+                "data are not on it at all.",
+            pills = listOf(
+                "MEASURED·GREEN $measured/${ESTATE_NODES.size}" to GOOD,
+                "NO-HEALTH-SOURCE·UNKNOWN $unknown" to UNK,
+                "TRANSPORT·RED ${if (m.busErr) "NATS DOWN" else "ok"}" to (if (m.busErr) BAD else GOOD),
+            ),
+            wordTone = WARN,
         )
 
         // ── pMap · the estate node list — tap any node to open its drawer (M-3) ──
@@ -655,21 +654,20 @@ fun TopologyScreen(repo: MissionRepository) {
                     "for its evidence, its findings, and the view that owns it.",
                 INFO,
             )
+            // every node is a bordered white card, visible without tapping — tap to open its drawer (M-3)
             nodeStatuses.forEachIndexed { i, (n, st) ->
                 val open = expanded == i
-                Row(
-                    androidx.compose.ui.Modifier.fillMaxWidth().padding(top = 6.dp)
-                        .clickable { expanded = if (open) -1 else i },
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                NodeCard(
+                    name = n.label,
+                    sub = "${n.plane} · ${n.role}",
+                    status = st.label,
+                    tone = st.tone,
+                    expanded = open,
+                    keyholder = n.keyholder,
+                    onClick = { expanded = if (open) -1 else i },
                 ) {
-                    Tag(st.label, st.tone)
-                    Tag(n.role, if (n.keyholder) SEV else NEUTRAL)
-                    if (n.keyholder) Tag("KEYHOLDER", SEV)
-                    Tag(if (open) "▾" else "▸", NEUTRAL)
-                }
-                KvRow(n.label, n.ev(m), st.tone)
-                if (open) {
-                    // the node drawer — status ribbon + plane/emits/consumes + findings + control (M-3)
+                    // the node drawer — evidence line, status ribbon, plane/emits/consumes, findings + control (M-3)
+                    KvRow(n.healthSrc, n.ev(m), st.tone)
                     Ribbon("${st.label} — ${st.meaning}", "health source: ${n.healthSrc}   ·   reads: ${n.ev(m)}", st.tone)
                     KvRow("plane", n.plane, NEUTRAL)
                     KvRow("emits", n.emits, INFO)

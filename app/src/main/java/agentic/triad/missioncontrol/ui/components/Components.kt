@@ -2,6 +2,7 @@ package agentic.triad.missioncontrol.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -289,6 +290,49 @@ fun Tag(text: String, tone: Tone = Tone.NEUTRAL) {
             .background(tone.soft(), RoundedCornerShape(12.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp),
     )
+}
+
+/**
+ * One estate node row — the web `.nc` node card: a bordered white row carrying a tone-coloured status
+ * dot, the node name in a bold display face (with an optional `· KEYHOLDER` flag), a mono plane/host
+ * sub-line, and a trailing status [Tag]. The whole row is clickable ([onClick]); when [expanded] the
+ * chevron flips and [drawer] renders underneath, inside the same card, so the node's evidence reads as
+ * part of it. Visible without tapping — the roster is a list of cards, not a hidden map.
+ */
+@Composable
+fun NodeCard(
+    name: String,
+    sub: String,
+    status: String,
+    tone: Tone,
+    expanded: Boolean = false,
+    keyholder: Boolean = false,
+    onClick: () -> Unit = {},
+    drawer: @Composable ColumnScope.() -> Unit = {},
+) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 8.dp)
+            .background(Card, RoundedCornerShape(11.dp))
+            .border(1.dp, if (expanded) tone.fg() else Line, RoundedCornerShape(11.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 13.dp, vertical = 11.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(9.dp).background(tone.fg(), CircleShape))
+            Column(Modifier.padding(start = 11.dp).weight(1f)) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(name, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Ink, fontSize = 13.sp, letterSpacing = (-0.2).sp)
+                    if (keyholder) {
+                        Text("· KEYHOLDER", color = Sev, fontFamily = Mono, fontSize = 8.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 6.dp, bottom = 1.dp))
+                    }
+                }
+                Text(sub, color = Unk, fontFamily = Mono, fontSize = 10.sp, letterSpacing = 0.3.sp, modifier = Modifier.padding(top = 3.dp))
+            }
+            Tag(status, tone)
+            Text(if (expanded) "▾" else "▸", color = Ink2, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp))
+        }
+        if (expanded) Column(Modifier.padding(top = 4.dp)) { drawer() }
+    }
 }
 
 /**

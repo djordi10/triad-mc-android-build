@@ -19,6 +19,7 @@ import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone
+import agentic.triad.missioncontrol.ui.components.VerdictBanner
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.arr
 import agentic.triad.missioncontrol.ui.components.bool
@@ -284,14 +285,19 @@ fun OverviewScreen(repo: MissionRepository) {
     ) {
         s.stale?.let { Ribbon("⚠ $it", tone = Tone.WARN) }
 
-        // ── 1.1 STANCE — the verdict word + the one sentence + three pills (RISK/LOOP/TRUTH) ─────────
-        McCard("STANCE — ${M.stance}", "derived · O-1..O-8") {
-            Note(M.said)
-            StatRow(
-                Triple("RISK", M.risk, verdictTone(M.risk)),
-                Triple("LOOP", M.loop, verdictTone(M.loop)),
-                Triple("TRUTH", M.truth, verdictTone(M.truth)),
-            )
+        // ── 1.1 STANCE — the styled verdict band (web `.stance`): word + said + RISK/LOOP/TRUTH pills ──
+        VerdictBanner(
+            word = M.stance,
+            said = M.said,
+            pills = listOf(
+                "RISK·${M.risk}" to verdictTone(M.risk),
+                "LOOP·${M.loop}" to verdictTone(M.loop),
+                "TRUTH·${M.truth}" to verdictTone(M.truth),
+            ),
+            wordTone = verdictTone(M.stance),
+        )
+        // the evidence rows behind each pill (kept as a detail card under the band)
+        McCard("STANCE — the evidence", "derived · O-1..O-8") {
             KvRow(
                 "RISK — ${if (M.unprotected == 0) "0 unprotected" else if (M.unprotected == null) "not derivable" else "${M.unprotected} unprotected"}",
                 M.risk, verdictTone(M.risk),
