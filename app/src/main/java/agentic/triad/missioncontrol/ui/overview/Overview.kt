@@ -285,8 +285,9 @@ fun OverviewScreen(repo: MissionRepository) {
     ) {
         s.stale?.let { Ribbon("⚠ $it", tone = Tone.WARN) }
 
-        // ── 1.1 STANCE — the styled verdict band (web `.stance`): word + said + RISK/LOOP/TRUTH pills ──
+        // ── 1.1 STANCE — the verdict as LIGHT flowing content on cream paper (the screenshots) ──
         VerdictBanner(
+            title = "Overview",
             word = M.stance,
             said = M.said,
             pills = listOf(

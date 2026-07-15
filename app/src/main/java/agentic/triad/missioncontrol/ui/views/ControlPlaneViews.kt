@@ -629,8 +629,9 @@ fun TopologyScreen(repo: MissionRepository) {
             Stance("real lanes", m.lanes.size.toString(), if (m.lanes.isEmpty()) UNK else NEUTRAL),
         ),
     ) {
-        // ── pStance · the styled verdict banner (web `.stance` — word + said + dot pills) ──
+        // ── pStance · the verdict as LIGHT flowing content on cream paper (the screenshots), not a band ──
         VerdictBanner(
+            title = "Topology",
             word = "INFERRED",
             said = "Twelve nodes, three heartbeats — that is not health, it is an autopsy. get_service_status is " +
                 "named for services and returns LEDGER TABLES; get_bus_status says NATS is unavailable; " +

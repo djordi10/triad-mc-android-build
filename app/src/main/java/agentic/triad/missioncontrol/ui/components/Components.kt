@@ -25,8 +25,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agentic.triad.missioncontrol.ui.nav.View
@@ -43,19 +46,12 @@ import agentic.triad.missioncontrol.ui.theme.Ink2
 import agentic.triad.missioncontrol.ui.theme.Line
 import agentic.triad.missioncontrol.ui.theme.Paper
 import agentic.triad.missioncontrol.ui.theme.Pine
-import agentic.triad.missioncontrol.ui.theme.PineDivider
-import agentic.triad.missioncontrol.ui.theme.PinePillBg
-import agentic.triad.missioncontrol.ui.theme.PineText
 import agentic.triad.missioncontrol.ui.theme.PineTextDim
 import agentic.triad.missioncontrol.ui.theme.Red
 import agentic.triad.missioncontrol.ui.theme.RedSoft
 import agentic.triad.missioncontrol.ui.theme.Sev
 import agentic.triad.missioncontrol.ui.theme.Unk
 import agentic.triad.missioncontrol.ui.theme.UnkSoft
-import agentic.triad.missioncontrol.ui.theme.VerdictArmed
-import agentic.triad.missioncontrol.ui.theme.VerdictHalted
-import agentic.triad.missioncontrol.ui.theme.VerdictShadow
-import agentic.triad.missioncontrol.ui.theme.VerdictUnknown
 
 // ── design tokens (mirrors the web :root) ─────────────────────────────────────────────────────────
 // The typeface roles from the HTML: --sans (IBM Plex Sans) = the default UI font; --mono (IBM Plex
@@ -83,12 +79,6 @@ fun Tone.fg(): Color = when (this) {
 fun Tone.soft(): Color = when (this) {
     Tone.GOOD -> EmeraldSoft; Tone.WARN -> AmberSoft; Tone.BAD -> RedSoft; Tone.SEV -> RedSoft
     Tone.UNK -> UnkSoft; Tone.INFO -> BlueSoft; Tone.NEUTRAL -> UnkSoft
-}
-
-/** The brighter tint of a tone as used on the dark pine band (`.stance` word / `.pill .pv`). */
-private fun Tone.pineFg(): Color = when (this) {
-    Tone.GOOD -> VerdictShadow; Tone.WARN -> VerdictArmed; Tone.BAD, Tone.SEV -> VerdictHalted
-    Tone.UNK -> VerdictUnknown; Tone.INFO -> EmeraldBright; Tone.NEUTRAL -> Color.White
 }
 
 // ── the per-view scaffold: dark brand strip + stance strip + a scroll of cards on paper ──────────
@@ -162,12 +152,13 @@ fun StanceStrip(items: List<Stance>) {
     }
 }
 
-// ── the verdict banner (web `.stance`) ────────────────────────────────────────────────────────────
+// ── the verdict banner (light flowing verdict — the screenshots) ────────────────────────────────────
 /**
- * The pine-dark verdict band from the web `.stance`: a huge display word (the stance — SHADOW /
- * ARMED / HALTED / …) with a right divider, a "said" paragraph in dimmed off-white, and a trailing
- * row of dot+label status pills. [word]'s tone colours it against the dark field; each pill carries
- * its own tone (dot + bright value on a tinted well). Exported for views to adopt.
+ * The verdict as LIGHT flowing content on cream paper (per the screenshots), NOT a dark pine band:
+ * a green mono uppercase eyebrow, a huge Archivo-ExtraBold [title] (the view name), the bold verdict
+ * [word] leading the [said] paragraph as ink prose, and the status [pills] as a row of light [Tag]s.
+ * [word]'s tone colours it; each pill carries its own tone. Signature unchanged for existing callers —
+ * [title] is optional (falls back to the word as the eyebrow so old call-sites still read correctly).
  */
 @Composable
 fun VerdictBanner(
@@ -175,54 +166,43 @@ fun VerdictBanner(
     said: String,
     pills: List<Pair<String, Tone>> = emptyList(),
     wordTone: Tone = Tone.GOOD,
+    title: String = "",
 ) {
-    Column(
-        Modifier.fillMaxWidth().padding(bottom = 12.dp)
-            .background(Pine, RoundedCornerShape(16.dp))
-            .padding(horizontal = 20.dp, vertical = 18.dp),
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // the huge stance word + its vertical divider (border-right #2c4a3e)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    word.uppercase(), color = wordTone.pineFg(), fontFamily = Disp,
-                    fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, letterSpacing = (-0.6).sp,
-                    modifier = Modifier.padding(end = 18.dp),
-                )
-                Box(Modifier.width(1.dp).height(40.dp).background(PineDivider))
-            }
-            if (said.isNotEmpty()) {
-                Text(
-                    said, color = PineTextDim, fontSize = 13.sp, lineHeight = 19.sp,
-                    modifier = Modifier.padding(start = 18.dp).weight(1f),
-                )
-            }
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        // green mono uppercase eyebrow (the web `.viewhead .eyebrow`, --em)
+        Text(
+            (if (title.isNotEmpty()) "VERDICT · $word" else word).uppercase(),
+            color = Emerald, fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.4.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        // the huge ExtraBold title — the view name (Archivo 800, `.viewhead h1`)
+        if (title.isNotEmpty()) {
+            Text(
+                title, color = Ink, fontFamily = Disp, fontWeight = FontWeight.ExtraBold,
+                fontSize = 30.sp, letterSpacing = (-0.8).sp,
+                modifier = Modifier.padding(top = 5.dp),
+            )
         }
+        // the verdict word (bold, tone-coloured) leading the said paragraph as ink prose
+        if (said.isNotEmpty()) {
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = wordTone.fg(), fontWeight = FontWeight.ExtraBold)) {
+                        append(word.uppercase())
+                    }
+                    append("  ")
+                    withStyle(SpanStyle(color = Ink2, fontWeight = FontWeight.Normal)) { append(said) }
+                },
+                fontSize = 13.5.sp, lineHeight = 20.sp,
+                modifier = Modifier.padding(top = 9.dp),
+            )
+        }
+        // the status lines as a row of light Tags (pine-fill/tinted wells → light chips)
         if (pills.isNotEmpty()) {
             Row(
-                Modifier.fillMaxWidth().padding(top = 14.dp).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) { pills.forEach { (label, tone) -> VerdictPill(label, tone) } }
-        }
-    }
-}
-
-/** One `.pill`: a tinted well, a coloured status dot, and a bold display value. */
-@Composable
-private fun VerdictPill(label: String, tone: Tone) {
-    val parts = label.split("·", limit = 2)
-    val key = if (parts.size == 2) parts[0].trim() else ""
-    val value = (if (parts.size == 2) parts[1] else label).trim()
-    Column(
-        Modifier.width(104.dp)
-            .background(PinePillBg, RoundedCornerShape(10.dp))
-            .border(1.dp, PineDivider, RoundedCornerShape(10.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    ) {
-        if (key.isNotEmpty()) Text(key.uppercase(), color = PineText.copy(alpha = 0.62f), fontFamily = Mono, fontSize = 9.sp, letterSpacing = 1.sp)
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 5.dp)) {
-            Box(Modifier.size(7.dp).background(tone.pineFg(), CircleShape))
-            Text(value, color = tone.pineFg(), fontFamily = Disp, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp))
+                Modifier.fillMaxWidth().padding(top = 11.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) { pills.forEach { (label, tone) -> Tag(label, tone) } }
         }
     }
 }
