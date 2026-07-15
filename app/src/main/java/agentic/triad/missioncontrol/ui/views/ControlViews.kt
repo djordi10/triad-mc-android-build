@@ -30,6 +30,7 @@ import agentic.triad.missioncontrol.ui.components.Tone.WARN
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.field
+import agentic.triad.missioncontrol.ui.components.guardDerive
 import agentic.triad.missioncontrol.ui.components.list
 import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.rows
@@ -84,11 +85,15 @@ fun ConfigScreen(repo: MissionRepository) {
     val d = s.data
 
     // ── topbar / stance from get_config_active ──
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): the fingerprint string
+    // ops below degrade to an honest em-dash rather than throwing out of composition and blanking.
     val active = d["get_config_active"] as? JsonObject
     val preset = active.text("preset")
     val dirty = active?.bool("dirty") ?: false
     val fpRaw = active.text("fingerprint")
-    val fpShort = if (fpRaw.startsWith("sha256:")) "sha256:" + fpRaw.removePrefix("sha256:").take(8) else fpRaw
+    val fpShort = guardDerive(fpRaw) {
+        if (fpRaw.startsWith("sha256:")) "sha256:" + fpRaw.removePrefix("sha256:").take(8) else fpRaw
+    }
     val stateTone = if (dirty) WARN else GOOD
     val stateLabel = if (dirty) "DIRTY" else "CLEAN"
 
@@ -354,13 +359,14 @@ private fun Boolean.yn(): String = if (this) "true" else "false"
 
 private val GOVERNANCE_TOOLS = listOf("get_go_no_go_status", "get_proposals")
 
-/** Parse a checklist markdown item — "1. **Name** — evidence…" — into (number, name, evidence). */
-private fun parseGate(item: String): Triple<String, String, String> {
+/** Parse a checklist markdown item — "1. **Name** — evidence…" — into (number, name, evidence).
+ *  Crash-proof: any parse trip degrades to an em-dash triple, never a throw out of composition. */
+private fun parseGate(item: String): Triple<String, String, String> = guardDerive(Triple("—", "—", "—")) {
     val num = item.substringBefore(".", "").trim().ifEmpty { "—" }
     val rest = item.substringAfter(".", item).trim()
     val name = rest.substringAfter("**", "").substringBefore("**", rest).trim().ifEmpty { rest.take(28) }
     val ev = rest.substringAfter("—", "").trim().replace("**", "").take(46)
-    return Triple(num, name, ev.ifEmpty { "—" })
+    Triple(num, name, ev.ifEmpty { "—" })
 }
 
 @Composable
@@ -369,13 +375,15 @@ fun GovernanceScreen(repo: MissionRepository) {
     val s by vm.state.collectAsState()
     val d = s.data
 
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): a malformed payload
+    // degrades to empty gate/proposal lists rather than throwing out of composition and blanking.
     val gng = d["get_go_no_go_status"] as? JsonObject
-    val items = gng.field("items").list().map { it.str() }
+    val items = guardDerive(emptyList<String>()) { gng.field("items").list().map { it.str() } }
     val gateCount = items.size
     val missingTen = gateCount < 10
 
-    val proposals = d["get_proposals"].rows()
-    val pending = proposals.count { it.text("disposition") == "pending" }
+    val proposals = guardDerive(emptyList<JsonObject>()) { d["get_proposals"].rows() }
+    val pending = guardDerive(0) { proposals.count { it.text("disposition") == "pending" } }
 
     ViewScaffold(
         View.GOVERNANCE,

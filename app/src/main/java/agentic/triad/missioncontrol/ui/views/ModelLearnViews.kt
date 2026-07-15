@@ -33,6 +33,7 @@ import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.arr
 import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.fmt
+import agentic.triad.missioncontrol.ui.components.guardDerive
 import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.num
 import agentic.triad.missioncontrol.ui.components.numEntries
@@ -78,27 +79,29 @@ fun IntelligenceScreen(repo: MissionRepository) {
     val skipN = (tr.obj("by_verdict")).int("skip")
 
     // Validator kill sheet — by_check, the model's proposals killed on constraints.
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): the sort/sum/map chains
+    // below degrade to honest-empty fallbacks rather than throwing out of composition and blanking.
     val vr = d["get_validator_rejects"] as? JsonObject
-    val byCheck = vr.numEntries("by_check").sortedByDescending { it.second }
-    val vrTotal = vr.int("total_rejects") ?: byCheck.sumOf { it.second }.toInt()
+    val byCheck = guardDerive(emptyList<Pair<String, Double>>()) { vr.numEntries("by_check").sortedByDescending { it.second } }
+    val vrTotal = guardDerive(0) { vr.int("total_rejects") ?: byCheck.sumOf { it.second }.toInt() }
     val topKills = byCheck.take(6)
 
     // Conviction histogram — the fresh distribution + the 36–62 void.
     val ch = d["get_conviction_histogram"] as? JsonObject
-    val fresh = ch.numEntries("fresh")
-    val freshTotal = fresh.sumOf { it.second }.toInt()
-    val zeroBucket = fresh.firstOrNull { it.first == "0" }?.second?.toInt() ?: 0
+    val fresh = guardDerive(emptyList<Pair<String, Double>>()) { ch.numEntries("fresh") }
+    val freshTotal = guardDerive(0) { fresh.sumOf { it.second }.toInt() }
+    val zeroBucket = guardDerive(0) { fresh.firstOrNull { it.first == "0" }?.second?.toInt() ?: 0 }
     // The mode among the non-zero buckets — the model is almost a constant.
-    val modeEntry = fresh.filter { it.first != "0" }.maxByOrNull { it.second }
+    val modeEntry = guardDerive(null) { fresh.filter { it.first != "0" }.maxByOrNull { it.second } }
     val modeBucket = modeEntry?.first ?: "—"
-    val modeCount = modeEntry?.second?.toInt() ?: 0
+    val modeCount = guardDerive(0) { modeEntry?.second?.toInt() ?: 0 }
     val nonZero = freshTotal - zeroBucket
     // The 36–62 void: nothing emitted between the top model band and the 60 threshold.
-    val voidBucket = fresh.filter { (it.first.toIntOrNull() ?: -1) in 38..59 }.sumOf { it.second }.toInt()
+    val voidBucket = guardDerive(0) { fresh.filter { (it.first.toIntOrNull() ?: -1) in 38..59 }.sumOf { it.second }.toInt() }
 
     // Model registry — mutable:false, slots_seen (only Slot A).
     val mr = d["get_model_registry"] as? JsonObject
-    val slots = mr.arr("slots_seen").mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+    val slots = guardDerive(emptyList<String>()) { mr.arr("slots_seen").mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } }
     val mutable = mr?.let { it["mutable"] }?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: "—"
     val registrySchema = mr.bool("registry_schema_present")
 
@@ -252,7 +255,9 @@ fun ShadowScreen(repo: MissionRepository) {
     val noFillN = (byOutcome.obj("no_fill")).int("n") ?: 0
 
     // Personas — six, all at n=0 pre-live.
-    val personas = (d["get_persona_scoreboard"] as? kotlinx.serialization.json.JsonElement).rows()
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): a malformed payload
+    // degrades to an empty persona set rather than throwing out of composition and blanking.
+    val personas = guardDerive(emptyList<JsonObject>()) { (d["get_persona_scoreboard"] as? kotlinx.serialization.json.JsonElement).rows() }
     val personaN = personas.size
     val personasArmed = personas.count { (it.int("n") ?: 0) > 0 }
 
@@ -350,11 +355,13 @@ fun BooksScreen(repo: MissionRepository) {
     val d = s.data
 
     // Four-book scoreboard.
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): the count/rows chains
+    // below degrade to honest-empty fallbacks rather than throwing out of composition and blanking.
     val bs = d["get_books_scoreboard"] as? JsonObject
     val books = bs.obj("books")
     fun book(k: String) = books.obj(k)
     val totalDecisions = bs.int("total_decisions")
-    val booksWithRows = listOf("B0", "B1", "M1", "K1").count { (book(it).int("n") ?: 0) > 0 }
+    val booksWithRows = guardDerive(0) { listOf("B0", "B1", "M1", "K1").count { (book(it).int("n") ?: 0) > 0 } }
 
     // Calibration — status:absent ⇒ occupancy check, not slope.
     val cal = d["get_calibration"] as? JsonObject
@@ -367,12 +374,12 @@ fun BooksScreen(repo: MissionRepository) {
     val mass = cc.num("mass_on_single_value")
     val supportPts = cc.int("support_points")
     val curveN = cc.int("n")
-    val deciles = cc.arr("deciles").rows()
-    val filledDeciles = deciles.count { (it.int("n") ?: 0) > 0 }
+    val deciles = guardDerive(emptyList<JsonObject>()) { cc.arr("deciles").rows() }
+    val filledDeciles = guardDerive(0) { deciles.count { (it.int("n") ?: 0) > 0 } }
 
     // Bridge lag — per-lane ingest-registry heartbeat ages.
     val bl = d["get_bridge_lag"] as? JsonObject
-    val lanes = bl.arr("lanes").rows()
+    val lanes = guardDerive(emptyList<JsonObject>()) { bl.arr("lanes").rows() }
 
     ViewScaffold(
         View.BOOKS,
@@ -536,12 +543,14 @@ fun LearningPipelineScreen(repo: MissionRepository) {
     val d = s.data
 
     // Pipeline SLO — worst-of CAG·DTBNK·TRADES·CORPUS·EVAL·RACE.
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): the count/sort chains
+    // below degrade to honest-empty fallbacks rather than throwing out of composition and blanking.
     val lp = d["get_learning_pipeline"] as? JsonObject
     val lpVerdict = lp.text("verdict")
     val lanesObj = lp.obj("lanes")
     val laneKeys = listOf("cag", "dtbnk", "trades", "corpus", "eval", "race")
     fun laneStatus(k: String) = (lanesObj.obj(k)).text("status")
-    val greens = laneKeys.count { laneStatus(it) == "GREEN" }
+    val greens = guardDerive(0) { laneKeys.count { laneStatus(it) == "GREEN" } }
     // The trades lane carries the closed-horizon corpus feed + the 5000 T1 gate reference.
     val tradesDetail = (lanesObj.obj("trades")).obj("detail")
     val closedTriadA = tradesDetail.int("closed_triad_a")
@@ -566,7 +575,7 @@ fun LearningPipelineScreen(repo: MissionRepository) {
 
     // Analytics — the 24h checks_failed census (the failure histogram, WIRED · LIVE).
     val analytics = d["get_analytics"] as? JsonObject
-    val checksFailed = analytics.numEntries("checks_failed").sortedByDescending { it.second }
+    val checksFailed = guardDerive(emptyList<Pair<String, Double>>()) { analytics.numEntries("checks_failed").sortedByDescending { it.second } }
 
     // The reward-function terms (Spec §2 weights) crossed with what is computable today: the pnl and
     // calibration terms need the conviction↔outcome join (absent); the format gate is the only live one.

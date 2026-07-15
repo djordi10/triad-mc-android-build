@@ -53,6 +53,7 @@ import agentic.triad.missioncontrol.ui.components.Tone.UNK
 import agentic.triad.missioncontrol.ui.components.Tone.WARN
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.fg
+import agentic.triad.missioncontrol.ui.components.guardDerive
 import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.num
 import agentic.triad.missioncontrol.ui.components.obj
@@ -144,10 +145,12 @@ fun PromptStudioScreen(repo: MissionRepository) {
     val rrFloor = lim.obj("per_trade").num("gross_rr_floor")
 
     // Preset budget (P-3 / AT-P8) — from get_config_preset, with the doc's numbers as an honest floor.
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): the deep preset chain
+    // below degrades to the honest floor rather than throwing out of composition and blanking.
     val presetEnv = d["get_config_preset"] as? JsonObject
     val intel = presetEnv.obj("preset").obj("domains").obj("intelligence")
-    val deadlineP95 = intel.num("deadline_p95_s")?.toInt() ?: 10
-    val deadlineCap = intel.num("deadline_cap_s")?.toInt() ?: 12
+    val deadlineP95 = guardDerive(10) { intel.num("deadline_p95_s")?.toInt() ?: 10 }
+    val deadlineCap = guardDerive(12) { intel.num("deadline_cap_s")?.toInt() ?: 12 }
     val budgetTokens = 2009 // the export target tokens (§5); the meter grades against it
 
     // ── composer state — the 14 blocks (AT-P1) ──

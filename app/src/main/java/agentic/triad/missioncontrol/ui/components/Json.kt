@@ -61,3 +61,12 @@ fun JsonObject?.numEntries(key: String): List<Pair<String, Double>> =
 /** Sum the numeric values of a nested object (⇔ web `Object.values(x).reduce(+)`). */
 fun JsonObject?.sumValues(key: String): Int =
     obj(key)?.values?.sumOf { (it as? JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.0 }?.toInt() ?: 0
+
+/**
+ * Crash-proof derive: run a view's model derivation and, if a malformed live payload makes any inline
+ * law throw (indexing, casts, numeric conversion, division, …), degrade to [fallback] instead of
+ * throwing out of composition and blanking the whole screen. This is the blank-screen guard applied
+ * across every view (mirrors the TopologyScreen fix): the derive is fallible, the screen is not.
+ */
+inline fun <T> guardDerive(fallback: T, derive: () -> T): T =
+    try { derive() } catch (_: Throwable) { fallback }

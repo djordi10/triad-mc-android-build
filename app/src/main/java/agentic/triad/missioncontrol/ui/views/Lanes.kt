@@ -37,6 +37,7 @@ import agentic.triad.missioncontrol.ui.components.Tone.WARN
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.field
+import agentic.triad.missioncontrol.ui.components.guardDerive
 import agentic.triad.missioncontrol.ui.components.list
 import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.rows
@@ -80,11 +81,15 @@ fun LanesScreen(repo: MissionRepository) {
     val d = s.data
 
     // ── the ONE preset identity, live from get_config_active ──
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): the string ops and
+    // list/map chains below degrade to honest-absent fallbacks rather than throwing out of composition.
     val active = d["get_config_active"] as? JsonObject
     val presetName = active.text("preset")
     val dirty = active.bool("dirty")
     val fpRaw = active.text("fingerprint")
-    val fpShort = if (fpRaw.startsWith("sha256:")) "sha256:" + fpRaw.removePrefix("sha256:").take(8) else fpRaw
+    val fpShort = guardDerive(fpRaw) {
+        if (fpRaw.startsWith("sha256:")) "sha256:" + fpRaw.removePrefix("sha256:").take(8) else fpRaw
+    }
     val dirtyTone = if (dirty) WARN else GOOD
     val dirtyLabel = if (dirty) "DIRTY" else "CLEAN"
 
@@ -111,16 +116,16 @@ fun LanesScreen(repo: MissionRepository) {
 
     // §5 contracts — the three named absences against the live vendored list.
     val contractsEnv = d["list_contracts"] as? JsonObject
-    val schemas = contractsEnv.field("schemas").list().map { it.str() }
+    val schemas = guardDerive(emptyList<String>()) { contractsEnv.field("schemas").list().map { it.str() } }
     val schemaCount = schemas.size
-    fun vendored(name: String): Boolean = schemas.any { it.contains(name) }
+    fun vendored(name: String): Boolean = guardDerive(false) { schemas.any { it.contains(name) } }
     val hasLane = vendored("triad-lane")
     val hasChangePlan = vendored("change-plan")
     val hasPreset = vendored("triad-preset") // the store CLAIMS to serve triad-preset/1
 
     // AT-L5 / AT-L12 — the live lane interlock: evidenced gates over the go/no-go board.
     val gng = d["get_go_no_go_status"] as? JsonObject
-    val gates = gng.field("items").list().map { it.str() }
+    val gates = guardDerive(emptyList<String>()) { gng.field("items").list().map { it.str() } }
     val gateCount = gates.size
     // Each item ships as a question, not a verdict — no PASS field means 0 are evidenced.
     val gatesEvidenced = 0
@@ -128,7 +133,7 @@ fun LanesScreen(repo: MissionRepository) {
 
     // AT-L9 — the applied preset's real shape.
     val domainCount = domains?.size ?: 0
-    val whitelist = domains.obj("symbols").field("whitelist").rows()
+    val whitelist = guardDerive(emptyList<JsonObject>()) { domains.obj("symbols").field("whitelist").rows() }
     val symbolCount = whitelist.size
 
     // ── the lane board (AT-L1/L4/L5) — five lanes, resolved live ──

@@ -52,6 +52,7 @@ import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.field
 import agentic.triad.missioncontrol.ui.components.fmt
+import agentic.triad.missioncontrol.ui.components.guardDerive
 import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.list
 import agentic.triad.missioncontrol.ui.components.num
@@ -61,11 +62,25 @@ import agentic.triad.missioncontrol.ui.components.str
 import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.nav.View
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 private fun row(vararg cells: Pair<String, Tone>) = cells.toList()
+
+// ── crash-proof derive holders (blank-screen guard) — the honest-absent fallback each screen degrades
+//    to when a live payload is malformed enough to make its inline derive throw. All defaults are the
+//    "no tool answered" shape (null numbers / false flags), so the panels paint UNKNOWN, never blank. ──
+/** AnalyticsScreen derive holder. */
+private data class AnaModel(
+    val validity: Double? = null,
+    val validityN: Int? = null,
+    val closed24h: Int? = null,
+    val wins24h: Int? = null,
+    val takePct: Double? = null,
+    val inBand: Boolean = false,
+)
 
 // The tool sets each screen polls — declared once, handed to the ToolsViewModel factory.
 private val ANALYTICS_TOOLS = listOf(
@@ -98,13 +113,26 @@ fun AnalyticsScreen(repo: MissionRepository) {
     val cont = d["get_continuity"] as? JsonObject
     val exec = d["get_exec_quality"] as? JsonObject
 
-    val validity = analytics.num("validity_pct")
-    val validityN = analytics.int("validity_n")
-    val closed24h = analytics.int("closed_24h")
-    val wins24h = analytics.int("wins_24h")
-    val takePct = takeRate.num("take_rate")?.let { it * 100 }
-    val inBand = takeRate?.bool("in_band") ?: false
-    val checksFailedList = analytics.field("checks_failed").list()
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): a malformed live payload
+    // degrades to the honest-absent AnaModel() rather than throwing out of composition. The reads below
+    // already use null-safe helpers, so an absent tool never throws; this hardens the malformed case too.
+    val m = guardDerive(AnaModel()) {
+        AnaModel(
+            validity = analytics.num("validity_pct"),
+            validityN = analytics.int("validity_n"),
+            closed24h = analytics.int("closed_24h"),
+            wins24h = analytics.int("wins_24h"),
+            takePct = takeRate.num("take_rate")?.let { it * 100 },
+            inBand = takeRate?.bool("in_band") ?: false,
+        )
+    }
+    val validity = m.validity
+    val validityN = m.validityN
+    val closed24h = m.closed24h
+    val wins24h = m.wins24h
+    val takePct = m.takePct
+    val inBand = m.inBand
+    val checksFailedList = guardDerive(emptyList<JsonElement>()) { analytics.field("checks_failed").list() }
 
     ViewScaffold(
         View.ANALYTICS,
@@ -227,15 +255,17 @@ fun TradeLogsScreen(repo: MissionRepository) {
 
     // get_trade_logs returns the rows array directly under data (bare array — no summary object;
     // per-symbol/lane summaries are derived here from the actual live fields).
-    val logs = d["get_trade_logs"].rows()
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): a malformed payload
+    // degrades to an empty log set instead of throwing out of composition and blanking the screen.
+    val logs = guardDerive(emptyList<JsonObject>()) { d["get_trade_logs"].rows() }
     val n = logs.size
-    val rejected = logs.count { it.text("status") == "rejected" }
-    val closed = logs.count { it.text("status") == "closed" }
-    val open = logs.count { it.text("status") == "open" }
-    val missed = logs.count { it.text("status") == "missed" }
-    val accts = logs.map { it.text("acct") }.filter { it != "—" }.distinct()
-    val netR = logs.mapNotNull { it.num("pnl_r") }.let { if (it.isEmpty()) null else it.sum() }
-    val consulted = logs.count { it.text("gate") == "model" || (it.int("conviction") ?: 0) > 0 }
+    val rejected = guardDerive(0) { logs.count { it.text("status") == "rejected" } }
+    val closed = guardDerive(0) { logs.count { it.text("status") == "closed" } }
+    val open = guardDerive(0) { logs.count { it.text("status") == "open" } }
+    val missed = guardDerive(0) { logs.count { it.text("status") == "missed" } }
+    val accts = guardDerive(emptyList<String>()) { logs.map { it.text("acct") }.filter { it != "—" }.distinct() }
+    val netR = guardDerive(null) { logs.mapNotNull { it.num("pnl_r") }.let { if (it.isEmpty()) null else it.sum() } }
+    val consulted = guardDerive(0) { logs.count { it.text("gate") == "model" || (it.int("conviction") ?: 0) > 0 } }
 
     ViewScaffold(
         View.TRADE_LOGS,
@@ -364,15 +394,17 @@ fun DatabankScreen(repo: MissionRepository) {
     val shadow = d["get_shadow_bank"] as? JsonObject
     val bookDefs = d["get_book_definitions"] as? JsonObject
 
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): a malformed payload
+    // degrades to all-absent readers rather than throwing out of composition and blanking the screen.
     val lanes = bank.obj("lanes")
     val byClass = bank.obj("by_class")
     val resolver = bank.obj("resolver")
-    val liveN = lanes.int("live")
-    val shadowN = lanes.int("shadow")
-    val total = shadow.int("total") ?: resolver.int("resolved")
-    val netR = shadow.num("net_pnl_r")
-    val resolved = resolver.int("resolved")
-    val pending = resolver.int("pending")
+    val liveN = guardDerive(null) { lanes.int("live") }
+    val shadowN = guardDerive(null) { lanes.int("shadow") }
+    val total = guardDerive(null) { shadow.int("total") ?: resolver.int("resolved") }
+    val netR = guardDerive(null) { shadow.num("net_pnl_r") }
+    val resolved = guardDerive(null) { resolver.int("resolved") }
+    val pending = guardDerive(null) { resolver.int("pending") }
 
     ViewScaffold(
         View.DATABANK,

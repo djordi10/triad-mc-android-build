@@ -31,6 +31,7 @@ import agentic.triad.missioncontrol.ui.components.Tone.WARN
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.arr
 import agentic.triad.missioncontrol.ui.components.field
+import agentic.triad.missioncontrol.ui.components.guardDerive
 import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.rows
@@ -59,16 +60,22 @@ fun ExecutorScreen(repo: MissionRepository) {
     val s by vm.state.collectAsState()
     val d = s.data
 
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): the count/size chains
+    // below degrade to honest-empty fallbacks rather than throwing out of composition and blanking.
     val gr = d["get_governor_refusals"] as? JsonObject
     val refusals = gr.arr("refusals")
-    val refusalTotal = gr?.get("total")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
-        ?: refusals.size
-    // X-6: a refusal with a null check_id is a no-nulls violation — counted from the live rows.
-    val nullCheckId = refusals.rows().count {
-        val v = it["check_id"]
-        v == null || v is JsonNull
+    val refusalTotal = guardDerive(refusals.size) {
+        gr?.get("total")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
+            ?: refusals.size
     }
-    val byCheckN = (gr.obj("by_check")?.size) ?: 0
+    // X-6: a refusal with a null check_id is a no-nulls violation — counted from the live rows.
+    val nullCheckId = guardDerive(0) {
+        refusals.rows().count {
+            val v = it["check_id"]
+            v == null || v is JsonNull
+        }
+    }
+    val byCheckN = guardDerive(0) { (gr.obj("by_check")?.size) ?: 0 }
     // 14-check chain: the server does not ship the ordered chain (that's the PEND get_governor_chain);
     // "never run" = 14 minus the distinct checks that have actually fired (X-1).
     val neverRun = (14 - byCheckN).coerceIn(0, 14)
@@ -76,7 +83,7 @@ fun ExecutorScreen(repo: MissionRepository) {
     // Venue & reconcile (X-4): last_reconcile_ts == null is a defect, not a clean slate.
     val oo = d["get_open_orders"] as? JsonObject
     val reconcileNull = (oo?.get("last_reconcile_ts") ?: JsonNull) is JsonNull
-    val openOrderN = oo.arr("open_orders").size
+    val openOrderN = guardDerive(0) { oo.arr("open_orders").size }
 
     // Breakers / kill — "unknown" is UNKNOWN, never SAFE.
     val breaker = (d["get_breaker_state"] as? JsonObject).text("state", "unknown")
@@ -195,11 +202,14 @@ fun CheckupScreen(repo: MissionRepository) {
     val s by vm.state.collectAsState()
     val d = s.data
 
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): every rows/count/group
+    // chain below degrades to an honest-empty fallback rather than throwing out of composition. The
+    // components list is the spine — if it can't be read, the whole census paints empty, never blank.
     val checkup = d["get_checkup"] as? JsonObject
-    val components = checkup.arr("components").rows()
+    val components = guardDerive(emptyList<JsonObject>()) { checkup.arr("components").rows() }
     // AT-CK1: exactly components.length cells — never a hardcoded 61.
     val total = components.size
-    val greens = components.count { it.text("status", "UNKNOWN") == "GREEN" }
+    val greens = guardDerive(0) { components.count { it.text("status", "UNKNOWN") == "GREEN" } }
     val probed = greens // no runtime probe exists — every green is a config/artifact-level D1/D2
     val verdict = checkup.text("verdict", "UNKNOWN")
     // AT-CK12 / C-6 guard: never render the word GREEN as a verdict below 80% coverage.
@@ -214,11 +224,11 @@ fun CheckupScreen(repo: MissionRepository) {
         listOf("registry-level", "config-level", "loads", "parses").any { reason.contains(it, true) } -> "D1"
         else -> "D0"
     }
-    val greenReasons = components.filter { it.text("status", "") == "GREEN" }
-    val d1 = greenReasons.count { depthOf(it.text("reason", "")) == "D1" }
-    val d2 = greenReasons.count { depthOf(it.text("reason", "")) == "D2" }
-    val d3 = greenReasons.count { depthOf(it.text("reason", "")) == "D3" }
-    val d4 = greenReasons.count { depthOf(it.text("reason", "")) == "D4" }
+    val greenReasons = guardDerive(emptyList<JsonObject>()) { components.filter { it.text("status", "") == "GREEN" } }
+    val d1 = guardDerive(0) { greenReasons.count { depthOf(it.text("reason", "")) == "D1" } }
+    val d2 = guardDerive(0) { greenReasons.count { depthOf(it.text("reason", "")) == "D2" } }
+    val d3 = guardDerive(0) { greenReasons.count { depthOf(it.text("reason", "")) == "D3" } }
+    val d4 = guardDerive(0) { greenReasons.count { depthOf(it.text("reason", "")) == "D4" } }
     val declared = (total - probed).coerceAtLeast(0)
 
     // C-1 (AT-CK4): every GREEN quotes its own reason verbatim, including the `not probed` caveat.
@@ -231,7 +241,7 @@ fun CheckupScreen(repo: MissionRepository) {
     }
 
     // §1.3 census by plane — group by `plane`; probed = a green whose reason is not UNKNOWN-shaped.
-    val byPlane = components.groupBy { it.text("plane", "—") }
+    val byPlane = guardDerive(emptyMap<String, List<JsonObject>>()) { components.groupBy { it.text("plane", "—") } }
     val planeRows = byPlane.entries.sortedByDescending { it.value.size }.map { (plane, comps) ->
         val n = comps.size
         val prb = comps.count { it.text("status", "UNKNOWN") != "UNKNOWN" && it.text("status", "") == "GREEN" }
@@ -240,12 +250,12 @@ fun CheckupScreen(repo: MissionRepository) {
     }
     // The four money planes: 0% probed line (AT-CK5).
     val moneyPlanes = listOf("TriadEngine", "TriadIntelligence", "TriadExecutor", "TriadLearning")
-    val moneyComps = components.filter { c -> moneyPlanes.any { c.text("plane", "").contains(it, true) || c.text("plane", "").equals(it, true) } }
-    val moneyDark = moneyComps.count { it.text("status", "UNKNOWN") == "UNKNOWN" }
+    val moneyComps = guardDerive(emptyList<JsonObject>()) { components.filter { c -> moneyPlanes.any { c.text("plane", "").contains(it, true) || c.text("plane", "").equals(it, true) } } }
+    val moneyDark = guardDerive(0) { moneyComps.count { it.text("status", "UNKNOWN") == "UNKNOWN" } }
     val moneyTotal = moneyComps.size
 
     // §1.4 WORK LIST — group UNKNOWNs by inferred source (C-3). Inferred until get_checkup_sources.
-    val unknowns = components.filter { it.text("status", "UNKNOWN") == "UNKNOWN" }
+    val unknowns = guardDerive(emptyList<JsonObject>()) { components.filter { it.text("status", "UNKNOWN") == "UNKNOWN" } }
     fun inferSource(c: JsonObject): String {
         val plane = c.text("plane", "").lowercase()
         val reason = (c.text("reason", "") + " " + c.text("fix", "")).lowercase()
@@ -259,7 +269,7 @@ fun CheckupScreen(repo: MissionRepository) {
             else -> "checkup.v1.json"
         }
     }
-    val workBySource = unknowns.groupBy { inferSource(it) }
+    val workBySource = guardDerive(emptyMap<String, List<JsonObject>>()) { unknowns.groupBy { inferSource(it) } }
     val workRows = workBySource.entries.sortedByDescending { it.value.size }.map { (src, comps) ->
         row(src to NEUTRAL, comps.size.toString() to WARN, "unblocks" to NEUTRAL)
     }
@@ -268,9 +278,9 @@ fun CheckupScreen(repo: MissionRepository) {
     val continuity = d["get_continuity"] as? JsonObject
     val bankQuote = (continuity.obj("bank")?.text("reason", "—")) ?: continuity.text("bank", "—")
     val bridge = d["get_bridge_lag"] as? JsonObject
-    val bridgeLanes = bridge.arr("lanes").rows().ifEmpty { bridge.arr("streams").rows() }
-    val hbList = bridgeLanes.mapNotNull { it.int("heartbeat_s") ?: it.int("heartbeat") }
-    val bridgeQuote = "${bridgeLanes.size} lanes" + if (hbList.isNotEmpty()) " · heartbeats ${hbList.min()}–${hbList.max()}s" else ""
+    val bridgeLanes = guardDerive(emptyList<JsonObject>()) { bridge.arr("lanes").rows().ifEmpty { bridge.arr("streams").rows() } }
+    val hbList = guardDerive(emptyList<Int>()) { bridgeLanes.mapNotNull { it.int("heartbeat_s") ?: it.int("heartbeat") } }
+    val bridgeQuote = guardDerive("${bridgeLanes.size} lanes") { "${bridgeLanes.size} lanes" + if (hbList.isNotEmpty()) " · heartbeats ${hbList.min()}–${hbList.max()}s" else "" }
     val logger = d["get_logger_status"] as? JsonObject
     val loggerQuote = logger.text("error", logger.text("reason", "—"))
     val contradiction = bridgeLanes.isNotEmpty() && bankQuote.contains("DSN", true)
@@ -279,16 +289,18 @@ fun CheckupScreen(repo: MissionRepository) {
     val cl = d["get_checklist_status"] as? JsonObject
     val clTotal = cl.int("total") ?: 143
     val clChecked = cl.int("checked") ?: 5
-    val gngItems = (d["get_go_no_go_status"] as? JsonObject).arr("items").size
+    val gngItems = guardDerive(0) { (d["get_go_no_go_status"] as? JsonObject).arr("items").size }
     val incidents = (d["list_incidents"] as? JsonArray)?.size ?: 0
 
     // §1.7 RUN HISTORY (C-7) — from get_checkup.field("history") when served.
-    val historyRows = checkup.field("history").rows()
+    val historyRows = guardDerive(emptyList<JsonObject>()) { checkup.field("history").rows() }
     val historyServed = historyRows.isNotEmpty()
-    val dupTs = historyRows.groupingBy { it.text("source", "") + "|" + it.text("ts", it.text("ts_iso", "")) }
-        .eachCount().count { it.value > 1 }
+    val dupTs = guardDerive(0) {
+        historyRows.groupingBy { it.text("source", "") + "|" + it.text("ts", it.text("ts_iso", "")) }
+            .eachCount().count { it.value > 1 }
+    }
     // SEV a client-vs-mcp verdict divergence at the same ts window.
-    val byWriter = historyRows.groupBy { it.text("source", "") }
+    val byWriter = guardDerive(emptyMap<String, List<JsonObject>>()) { historyRows.groupBy { it.text("source", "") } }
     val clientVerdicts = (byWriter["client"] ?: emptyList()).map { it.text("verdict", "—") }.toSet()
     val mcpVerdicts = (byWriter["mcp"] ?: emptyList()).map { it.text("verdict", "—") }.toSet()
     val divergent = historyServed && clientVerdicts.isNotEmpty() && mcpVerdicts.isNotEmpty() &&
@@ -444,10 +456,12 @@ fun OpsScreen(repo: MissionRepository) {
     val s by vm.state.collectAsState()
     val d = s.data
 
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): every arr/rows/group/
+    // count chain below degrades to an honest-empty fallback rather than throwing out of composition.
     // L-1: liveness probes are not loops. get_loop_status returns native probes only.
-    val loops = (d["get_loop_status"] as? JsonObject).arr("loops").size
+    val loops = guardDerive(0) { (d["get_loop_status"] as? JsonObject).arr("loops").size }
     // L-4: services are ledger tables, not processes.
-    val services = (d["get_service_status"] as? JsonObject).arr("services").size
+    val services = guardDerive(0) { (d["get_service_status"] as? JsonObject).arr("services").size }
 
     // Invariant breach evidence — shadow bank rows (its error IS the evidence when absent).
     val bank = d["get_shadow_bank"] as? JsonObject
@@ -478,10 +492,12 @@ fun OpsScreen(repo: MissionRepository) {
     // §2.2 breach evidence — shadow bank distinct decisions + checkup-history duplicate ts.
     val bankDistinct = bank.int("distinct") ?: bank.int("distinct_decisions")
     val checkup = d["get_checkup"] as? JsonObject
-    val historyRows = checkup.field("history").rows()
-    val historyDup = historyRows.groupingBy { it.text("source", "") + "|" + it.text("ts", it.text("ts_iso", "")) }
-        .eachCount().count { it.value > 1 }
-    val checkupUnknown = checkup.arr("components").rows().count { it.text("status", "UNKNOWN") == "UNKNOWN" }
+    val historyRows = guardDerive(emptyList<JsonObject>()) { checkup.field("history").rows() }
+    val historyDup = guardDerive(0) {
+        historyRows.groupingBy { it.text("source", "") + "|" + it.text("ts", it.text("ts_iso", "")) }
+            .eachCount().count { it.value > 1 }
+    }
+    val checkupUnknown = guardDerive(0) { checkup.arr("components").rows().count { it.text("status", "UNKNOWN") == "UNKNOWN" } }
 
     // §2.3 the FULL 14-row failure matrix, §10 order. detector-live from the live read bus.
     val watchdogLiveM = d["get_watchdog_stats"] != null
@@ -524,7 +540,7 @@ fun OpsScreen(repo: MissionRepository) {
     val bankLeg = continuity.obj("bank")?.text("status", "—") ?: "—"
     val bankReason = continuity.obj("bank")?.text("reason", "") ?: ""
     val bridge = d["get_bridge_lag"] as? JsonObject
-    val laneRows0 = bridge.arr("lanes").rows().ifEmpty { bridge.arr("streams").rows() }
+    val laneRows0 = guardDerive(emptyList<JsonObject>()) { bridge.arr("lanes").rows().ifEmpty { bridge.arr("streams").rows() } }
     val laneRows = laneRows0.map { l ->
         row(
             l.text("stream", l.text("name", "—")) to NEUTRAL,
@@ -537,7 +553,7 @@ fun OpsScreen(repo: MissionRepository) {
 
     // §2.8 latency law — budgets printed; live value UNK when unavailable.
     val latency = d["get_latency_budgets"] as? JsonObject
-    val latRows0 = latency.arr("budgets").rows().ifEmpty { latency.arr("rows").rows() }
+    val latRows0 = guardDerive(emptyList<JsonObject>()) { latency.arr("budgets").rows().ifEmpty { latency.arr("rows").rows() } }
     val latRows = latRows0.take(13).map { b ->
         val liveVal = b.int("live")?.toString() ?: b.text("live", "").takeIf { it != "—" && it != "unavailable" }
         row(

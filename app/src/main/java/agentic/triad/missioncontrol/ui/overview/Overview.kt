@@ -249,11 +249,19 @@ private class Model(d: Map<String, JsonElement?>) {
     ).joinToString(" · ") + "."
 }
 
+/** The empty model — every panel reads honest UNKNOWN/em-dash from this before any tool answers,
+ *  OR whenever a live payload is malformed enough to make derivation throw. Built from an empty map
+ *  so every field folds down its null-safe path (never a fabricated value). (M-1 · always-render fix) */
+private val EMPTY_MODEL = Model(emptyMap())
+
 @Composable
 fun OverviewScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, OVERVIEW_TOOLS))
     val s by vm.state.collectAsState()
-    val M = Model(s.data)
+    // The v22 rewrite folds ~20 tools of laws inline at construction; a single bad/oddly-shaped
+    // payload used to throw here and blank the whole Overview. Crash-proof it: a failed derive
+    // degrades to EMPTY_MODEL (all fields UNKNOWN) so the stance strip + all 8 panels still paint.
+    val M = runCatching { Model(s.data) }.getOrDefault(EMPTY_MODEL)
 
     // ── the stance strip (web renderStrip): phase · services · lane · coverage · take-rate · bank ──
     val servicesUp = M.so.int("services_up")

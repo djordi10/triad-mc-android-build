@@ -43,6 +43,7 @@ import agentic.triad.missioncontrol.ui.components.VerdictBanner
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.arr
 import agentic.triad.missioncontrol.ui.components.field
+import agentic.triad.missioncontrol.ui.components.guardDerive
 import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.list
 import agentic.triad.missioncontrol.ui.components.num
@@ -71,13 +72,14 @@ import kotlinx.serialization.json.JsonObject
 
 private fun row(vararg cells: Pair<String, agentic.triad.missioncontrol.ui.components.Tone>) = cells.toList()
 
-/** Parse a go/no-go checklist item — "1. **Name** — evidence…" — into (number, name, evidence). */
-private fun parseGoNoGoGate(item: String): Triple<String, String, String> {
+/** Parse a go/no-go checklist item — "1. **Name** — evidence…" — into (number, name, evidence).
+ *  Crash-proof: any parse trip degrades to an em-dash triple, never a throw out of composition. */
+private fun parseGoNoGoGate(item: String): Triple<String, String, String> = guardDerive(Triple("—", "—", "—")) {
     val num = item.substringBefore(".", "").trim().ifEmpty { "—" }
     val rest = item.substringAfter(".", item).trim()
     val name = rest.substringAfter("**", "").substringBefore("**", rest).trim().ifEmpty { rest.take(28) }
     val ev = rest.substringAfter("—", "").trim().replace("**", "").take(46)
-    return Triple(num, name, ev.ifEmpty { "—" })
+    Triple(num, name, ev.ifEmpty { "—" })
 }
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -102,15 +104,19 @@ fun ConnectionsScreen(repo: MissionRepository) {
     var testing by remember { mutableStateOf(false) }
 
     // ── C-5 · the LIVE interlock — read the go/no-go board live and count evidenced gates ──
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): a malformed payload
+    // degrades to an empty board rather than throwing out of composition and blanking the screen.
     val gng = d["get_go_no_go_status"] as? JsonObject
-    val gates = gng.field("items").list().map { it.str() }
+    val gates = guardDerive(emptyList<String>()) { gng.field("items").list().map { it.str() } }
     val gateCount = gates.size
     // A gate is "clean" only when it carries evidence (best-effort scan; the tool never fabricates a
     // PASS field). No evidence text ⇒ UNKNOWN, which is NOT a pass. Today: 0 of 9 clean.
-    val evidenced = gates.count { raw ->
-        val ev = parseGoNoGoGate(raw).third
-        ev != "—" && ev.isNotBlank() &&
-            !ev.contains("UNKNOWN", true) && !ev.contains("absent", true) && !ev.contains("FAIL", true)
+    val evidenced = guardDerive(0) {
+        gates.count { raw ->
+            val ev = parseGoNoGoGate(raw).third
+            ev != "—" && ev.isNotBlank() &&
+                !ev.contains("UNKNOWN", true) && !ev.contains("absent", true) && !ev.contains("FAIL", true)
+        }
     }
     val boardClean = gateCount > 0 && evidenced == gateCount
 
@@ -262,8 +268,10 @@ fun McpScreen(repo: MissionRepository) {
     val d = s.data
 
     // list_docs proves the CLIENT connection is live — a real tools call over the connected window.
-    val docs = d["list_docs"].rows()
-    val docCount = if (docs.isNotEmpty()) docs.size else (d["list_docs"].list().size)
+    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): a malformed payload
+    // degrades to a zero doc count rather than throwing out of composition and blanking the screen.
+    val docs = guardDerive(emptyList<JsonObject>()) { d["list_docs"].rows() }
+    val docCount = guardDerive(docs.size) { if (docs.isNotEmpty()) docs.size else (d["list_docs"].list().size) }
 
     // ── CLIENT tier — a live tool-count over the connected window (AT-C2) ──
     val app = LocalContext.current.applicationContext as TriadApp
