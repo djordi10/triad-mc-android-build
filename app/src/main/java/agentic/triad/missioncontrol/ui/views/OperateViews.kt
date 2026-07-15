@@ -24,8 +24,10 @@ import agentic.triad.missioncontrol.ui.components.Tone.UNK
 import agentic.triad.missioncontrol.ui.components.Tone.WARN
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.arr
+import agentic.triad.missioncontrol.ui.components.field
 import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.rows
+import agentic.triad.missioncontrol.ui.components.str
 import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.nav.View
 import kotlinx.serialization.json.JsonArray
@@ -39,7 +41,7 @@ private fun row(vararg cells: Pair<String, Tone>) = cells.toList()
 // get_exit_lane_status / get_venue_session) DO NOT exist and stay PEND boxes.
 private val EXEC_TOOLS = listOf(
     "get_open_orders", "get_positions", "get_exposure", "get_limits",
-    "get_governor_refusals", "get_validator_rejects", "get_decision", "get_decision_chain",
+    "get_governor_refusals", "get_validator_rejects",
     "get_exec_quality", "get_lane_headroom", "get_watchdog_stats", "get_latency_budgets",
     "get_breaker_state", "get_kill_state", "get_sim_gap",
 )
@@ -245,7 +247,7 @@ private val OPS_TOOLS = listOf(
     "get_loop_status", "get_service_status", "get_bus_status", "get_continuity",
     "get_bridge_lag", "get_cag_stats", "get_shadow_bank", "get_checkup",
     "get_watchdog_stats", "get_clock_skew", "get_feed_health", "get_exec_quality",
-    "get_open_orders", "get_breaker_state", "get_kill_state", "get_decision_chain",
+    "get_open_orders", "get_breaker_state", "get_kill_state",
     "get_alerts", "list_incidents", "get_journal", "get_hole_report", "get_latency_budgets",
 )
 

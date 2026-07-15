@@ -303,7 +303,7 @@ fun OverviewScreen(repo: MissionRepository) {
                 if (proposals == null) "UNKNOWN" else if (props.isEmpty()) "0 (empty — a fact)" else "${props.size} pending",
                 if (proposals == null) Tone.UNK else if (props.isEmpty()) Tone.GOOD else Tone.WARN)
             props.firstOrNull()?.let { p ->
-                Note("next: ${(p as JsonObject).text("title")} · ${p.text("severity")} · disposition ${p.text("disposition")}")
+                Note("next: ${(p as JsonObject).obj("args").text("title", (p as JsonObject).text("proposal_id"))} · ${(p as JsonObject).text("severity")} · disposition ${(p as JsonObject).text("disposition")}")
             }
             Note("O-5: the page is read-only — the only outbound write is propose_action (operator-action/1), executed by a human at triadctl (AT-OV7).")
         }

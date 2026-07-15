@@ -136,10 +136,11 @@ fun PromptStudioScreen(repo: MissionRepository) {
     val rrKills = byCheck.int("net_rr_floor")
     val totalKills = (ttlKills ?: 0) + (stopKills ?: 0) + (rrKills ?: 0)
 
-    val lim = d["get_limits"] as? JsonObject
-    val maxTtl = lim.num("max_entry_ttl_s")
-    val minStop = lim.num("min_stop_width_bps")
-    val rrFloor = lim.num("gross_rr_floor")
+    // Live limits nest under data.limits.{execution_bounds,per_trade} — read the real paths.
+    val lim = (d["get_limits"] as? JsonObject).obj("limits")
+    val maxTtl = lim.obj("execution_bounds").num("max_entry_ttl_s")
+    val minStop = lim.obj("per_trade").num("min_stop_width_bps")
+    val rrFloor = lim.obj("per_trade").num("gross_rr_floor")
 
     // Preset budget (P-3 / AT-P8) — from get_config_preset, with the doc's numbers as an honest floor.
     val presetEnv = d["get_config_preset"] as? JsonObject

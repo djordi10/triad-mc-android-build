@@ -311,7 +311,7 @@ fun GovernanceScreen(repo: MissionRepository) {
                         "rejected" -> BAD
                         else -> NEUTRAL
                     }
-                    KvRow(p.text("title", p.text("proposal_id")), disp.uppercase(), dispTone)
+                    KvRow(p.obj("args").text("title", p.text("proposal_id")), disp.uppercase(), dispTone)
                     KvRow("  kind · severity", p.text("kind") + " · " + p.text("severity"), NEUTRAL)
                     KvRow("  id", p.text("proposal_id"), NEUTRAL)
                     Note(p.text("rationale"), NEUTRAL)

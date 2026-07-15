@@ -43,7 +43,7 @@ object Updater {
 
             // tag_name like "v37" → 37
             val tag = (obj["tag_name"] as? JsonPrimitive)?.content ?: return
-            val latest = tag.filter { it.isDigit() }.toIntOrNull() ?: return
+            val latest = Regex("""v?(\d+)""").find(tag)?.groupValues?.get(1)?.toIntOrNull() ?: return
             if (latest <= currentVersion) return
 
             val asset = (obj["assets"] as? JsonArray)?.mapNotNull { it as? JsonObject }

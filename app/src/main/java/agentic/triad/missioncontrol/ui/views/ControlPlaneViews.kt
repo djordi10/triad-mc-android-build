@@ -1,11 +1,18 @@
 package agentic.triad.missioncontrol.ui.views
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
-import agentic.triad.missioncontrol.data.MissionRepository
+import agentic.triad.missioncontrol.TriadApp
 import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
@@ -31,6 +38,7 @@ import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.str
 import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.nav.View
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════

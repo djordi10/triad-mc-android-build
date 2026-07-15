@@ -471,14 +471,16 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                // Canned queries hit ALLOWLISTED views only (shadow_trades is not servable):
+                // candidates decisions fills health intents mcp_audit orders outcomes refusals.
                 CannedButton("funnel") {
-                    sql = "SELECT gate_reason, COUNT(*) AS n FROM shadow_trades GROUP BY gate_reason ORDER BY n DESC"
+                    sql = "SELECT verdict, COUNT(*) AS n FROM decisions GROUP BY verdict ORDER BY n DESC"
                 }
-                CannedButton("gate P&L") {
-                    sql = "SELECT shadow_outcome, COUNT(*) AS n, ROUND(AVG(pnl_r), 3) AS avg_pnl_r FROM shadow_trades WHERE pnl_r IS NOT NULL GROUP BY shadow_outcome ORDER BY n DESC"
+                CannedButton("refusals") {
+                    sql = "SELECT check_id, COUNT(*) AS n FROM refusals GROUP BY check_id ORDER BY n DESC"
                 }
-                CannedButton("validity") {
-                    sql = "SELECT conviction_tier, COUNT(*) AS n, SUM(gate_accepted) AS accepted FROM shadow_trades GROUP BY conviction_tier ORDER BY n DESC"
+                CannedButton("outcomes") {
+                    sql = "SELECT label, COUNT(*) AS n, ROUND(AVG(pnl_r), 3) AS avg_pnl_r FROM outcomes GROUP BY label ORDER BY n DESC"
                 }
             }
             OutlinedTextField(
