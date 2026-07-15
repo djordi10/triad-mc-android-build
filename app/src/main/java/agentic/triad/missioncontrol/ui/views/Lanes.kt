@@ -1,7 +1,12 @@
 package agentic.triad.missioncontrol.ui.views
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -19,6 +24,7 @@ import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
+import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
@@ -180,6 +186,45 @@ fun LanesScreen(repo: MissionRepository) {
                 "propose_action (AT-L13).",
             INFO,
         )
+
+        // ── the KPI strip — mirrors CSLVIEW host.strip([...]) ──
+        StatRow(
+            Triple("presets", "1", BAD),
+            Triple("candidate", "NONE", BAD),
+            Triple("lanes", "5", NEUTRAL),
+            Triple("lane schema", "ABSENT", BAD),
+            Triple("ledger", "0", BAD),
+            Triple("applied fp", fpShort, NEUTRAL),
+        )
+
+        // ── the two identities — one of them is missing (pIdentities) ──
+        McCard("The two identities — one of them is missing", "get_config_preset · D1") {
+            Row(androidx.compose.ui.Modifier.fillMaxWidth()) {
+                Column(androidx.compose.ui.Modifier.weight(1f).padding(end = 6.dp)) {
+                    Tag("APPLIED · promoted", INFO)
+                    KvRow("preset", presetName, NEUTRAL)
+                    KvRow("fp", fpShort, NEUTRAL)
+                    KvRow("schema", doc.text("schema"), NEUTRAL)
+                    KvRow("state", dirtyLabel, dirtyTone)
+                    KvRow("created", meta.text("created").take(10), NEUTRAL)
+                    KvRow("domains · symbols", "$domainCount · $symbolCount", NEUTRAL)
+                }
+                Column(androidx.compose.ui.Modifier.weight(1f).padding(start = 6.dp)) {
+                    Tag("CANDIDATE · draft", UNK)
+                    KvRow("preset", "DOES NOT EXIST", UNK)
+                    Note("No second preset. No draft identity. The entire candidate track — both playground lanes — has nothing to run.", UNK)
+                }
+            }
+            Ribbon(
+                "D2 defaults candidate.model_tag = applied.model_tag — a good call",
+                "It means the engine serves ONE model until you deliberately test a new one, and only the " +
+                    "deterministic layer varies — keeping L-5 (fork at most once) cheap. It also means slot B stays " +
+                    "cold, and the learning ladder is already deadlocked on slot B never having run. These two facts " +
+                    "have to be reconciled before promotion is built.",
+                WARN,
+            )
+            Note("L-3 · paper is a pointer, not a copy · L-4 · shadow is a lens, not a profile. Both true by construction — 'paper follows live' stops being discipline and becomes arithmetic.", INFO)
+        }
 
         // ── §1 · P0 finding: D2's premise is false (AT-L6) ──
         McCard("§1 · D2's premise is false — the fingerprint would leave the prompt behind (P0)", "get_config_preset") {

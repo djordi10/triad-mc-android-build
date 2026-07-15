@@ -7,6 +7,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
 import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.ui.ToolsViewModel
+import agentic.triad.missioncontrol.ui.components.Bar
+import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -15,6 +17,7 @@ import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
+import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
@@ -113,6 +116,14 @@ fun ConfigScreen(repo: MissionRepository) {
             INFO,
         )
 
+        StatRow(
+            Triple("preset", if (preset == "—") "—" else preset, NEUTRAL),
+            Triple("state", stateLabel, stateTone),
+            Triple("fingerprint", fpShort, NEUTRAL),
+            Triple("domains", (domains?.size ?: 0).toString(), if (domains == null) UNK else NEUTRAL),
+            Triple("apply path", "triadctl only", INFO),
+        )
+
         McCard("Applied preset — the served baseline", "get_config_active · get_config_preset") {
             KvRow("preset name", preset, NEUTRAL)
             KvRow("state", stateLabel, stateTone)
@@ -130,6 +141,18 @@ fun ConfigScreen(repo: MissionRepository) {
         if (domains == null) {
             Note("— · get_config_preset returned no domains (tool unavailable or empty). Nothing fabricated.", UNK)
         } else {
+            // ── the domains grid — lever counts per domain (mirrors pPreset's domain chips) ──
+            McCard("The thing that would be promoted — ${domains.size} domains", "get_config_preset · domains.*") {
+                val levers = domains.keys.sorted().map { name ->
+                    val dom = domains.obj(name)
+                    val n = (dom?.size ?: 0).toDouble()
+                    val mcpBad = name == "mcp" && (dom.text("http_url").contains("example.com"))
+                    Bar(name, n.coerceAtLeast(1.0), if (mcpBad) SEV else INFO, if (mcpBad) "⚠ example.com placeholder" else "")
+                }
+                HBarChart(levers, unit = "levers", labelWidth = 100)
+                Note("Every domain is a group of read-only levers. The fingerprint attests to all of them at once — one grouped apply = one fingerprint. Editing any lever is the governed path (change-plan → compile → verify → apply), never this viewer.", NEUTRAL)
+            }
+
             // Trading settings — the 45bps fee law + RR floors + TTL bounds.
             DomainCard("Trading settings — risk · execution", "domains.risk.* + domains.execution.*", domains.obj("risk")) {
                 val risk = domains.obj("risk")
@@ -365,17 +388,45 @@ fun GovernanceScreen(repo: MissionRepository) {
         ),
     ) {
         Ribbon(
-            "The read path is never a control path",
+            "UNTOLD · the board that decides whether real money flows returns questions, not answers",
             "Governance can read the board and the proposals inbox, and replay them — but it applies nothing. " +
-                "Every operator action is a proposal (propose_action EXECUTES NOTHING); the executor honors only " +
-                "triadctl after its own confirm.",
+                "get_go_no_go_status ships the §16.6 items each as a question — no status, no evidence, no verdict — " +
+                "and the anchor reads 'the ten gates to real money' while the board can't count to ten. Every " +
+                "operator action is a proposal (propose_action EXECUTES NOTHING); the executor honors only triadctl " +
+                "after its own confirm.",
             SEV,
         )
 
-        McCard("The go/no-go board", "get_go_no_go_status") {
+        // ── the KPI strip — mirrors GOVVIEW's strip ──
+        StatRow(
+            Triple("go / no-go", "NO-GO", SEV),
+            Triple("gates listed", "$gateCount / 10", if (missingTen) BAD else NEUTRAL),
+            Triple("gates passing", "0 / 10", BAD),
+            Triple("proposals", proposals.size.toString(), if (proposals.isEmpty()) UNK else INFO),
+            Triple("rules that should exist", "16", BAD),
+        )
+
+        McCard("The ten gates to real money — the go/no-go board", "get_go_no_go_status × CHECKLIST §16.6") {
             if (items.isEmpty()) {
                 Note("— · get_go_no_go_status returned no items (tool unavailable). Nothing fabricated.", UNK)
             } else {
+                // the census — evidenced vs absent, from the live items (no verdict is fabricated)
+                val evidenced = items.count { raw ->
+                    val e = parseGate(raw).third
+                    e != "—" && e.isNotBlank() && !e.contains("UNKNOWN", true) &&
+                        !e.contains("absent", true) && !e.contains("FAIL", true)
+                }
+                val absent = gateCount - evidenced
+                HBarChart(
+                    listOf(
+                        Bar("evidenced", evidenced.toDouble(), GOOD, "carries an evidence line"),
+                        Bar("no evidence", absent.toDouble(), BAD, "UNKNOWN — not a pass"),
+                        Bar("missing rows", (10 - gateCount).coerceAtLeast(0).toDouble(), SEV, "anchor says ten; board lists $gateCount"),
+                    ),
+                    max = 10.0,
+                    unit = "gate",
+                    labelWidth = 92,
+                )
                 MiniTable(
                     listOf("gate", "verdict", "evidence"),
                     items.map { raw ->
@@ -385,7 +436,8 @@ fun GovernanceScreen(repo: MissionRepository) {
                 )
                 Note(
                     "The tool ships each of the $gateCount gates as a question, not a verdict — evidence-or-absence, " +
-                        "no PASS/FAIL field (get_gate_evidence would add it). " +
+                        "no PASS/FAIL field (get_gate_evidence would add it). Zero gates carry a PASS field, so zero " +
+                        "pass — and nothing in the system has said so. " +
                         if (missingTen) "The anchor reads 'the ten gates to real money' — only $gateCount are listed; the board can't count to ten." else "",
                     if (missingTen) WARN else NEUTRAL,
                 )

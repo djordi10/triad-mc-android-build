@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.ui.ToolsViewModel
+import agentic.triad.missioncontrol.ui.components.Gauge
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -313,6 +314,14 @@ fun PromptStudioScreen(repo: MissionRepository) {
                     fontSize = 13.sp,
                 )
             }
+            // the token budget meter as a gauge — value vs the preset's budget band, cap = budget×1.15
+            Gauge(
+                value = enabledTokens.toDouble(),
+                lo = 0.0,
+                hi = budgetTokens.toDouble(),
+                label = "prompt tokens vs budget",
+                unit = " tok",
+            )
             Note(
                 "$enabledCount of 14 blocks enabled. Budget = the preset's own deadline (p95 ${deadlineP95}s " +
                     "/ cap ${deadlineCap}s); ~1,900 tok is well under 200ms of prompt-eval. Toggle the risk " +

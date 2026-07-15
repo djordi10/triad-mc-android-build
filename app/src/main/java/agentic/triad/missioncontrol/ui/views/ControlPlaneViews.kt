@@ -1,5 +1,6 @@
 package agentic.triad.missioncontrol.ui.views
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -20,6 +21,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.TriadApp
 import agentic.triad.missioncontrol.ui.ToolsViewModel
+import agentic.triad.missioncontrol.ui.components.Bar
+import agentic.triad.missioncontrol.ui.components.Funnel
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -28,6 +31,7 @@ import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
+import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
 import agentic.triad.missioncontrol.ui.components.Tone.GOOD
@@ -39,7 +43,9 @@ import agentic.triad.missioncontrol.ui.components.Tone.WARN
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.arr
 import agentic.triad.missioncontrol.ui.components.field
+import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.list
+import agentic.triad.missioncontrol.ui.components.num
 import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.str
 import agentic.triad.missioncontrol.ui.components.text
@@ -127,6 +133,15 @@ fun ConnectionsScreen(repo: MissionRepository) {
                 "object in this dashboard — the false-green machine wearing the uniform of a control plane. " +
                 "So every control here is honest about which of two tiers it lives in.",
             SEV,
+        )
+
+        // ── the KPI strip — mirrors CXVIEW host.strip ──
+        StatRow(
+            Triple("dashboard", if (TriadApp.LIVE_ENDPOINT.contains("bgzr")) "triad-mc" else "client", NEUTRAL),
+            Triple("go / no-go", if (boardClean) "CLEAN" else "NO-GO", if (boardClean) GOOD else BAD),
+            Triple("gates clean", "$evidenced / ${if (gateCount == 0) 9 else gateCount}", if (boardClean) GOOD else BAD),
+            Triple("live", "INTERLOCKED", BAD),
+            Triple("conn_activate", "ABSENT", BAD),
         )
 
         // C-1 · the CLIENT tier — REAL controls that repoint THIS dashboard (AT-C2).
@@ -274,6 +289,15 @@ fun McpScreen(repo: MissionRepository) {
             INFO,
         )
 
+        // ── the KPI strip — mirrors MCPVIEW host.strip ──
+        StatRow(
+            Triple("server tools", "~77", NEUTRAL),
+            Triple("writes", "1", BAD),
+            Triple("control tools", "0", BAD),
+            Triple("missing", "4", BAD),
+            Triple("tier", "CLIENT", GOOD),
+        )
+
         // The connected MCP window — CLIENT-tier, real.
         McCard("The connected MCP window (CLIENT-tier)", "list_docs · listTools") {
             KvRow("endpoint", TriadApp.LIVE_ENDPOINT.substringBefore("?"), NEUTRAL)
@@ -339,27 +363,242 @@ fun McpScreen(repo: MissionRepository) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-//  TOPOLOGY (view 00) — the estate map. LIVE: get_service_status + get_continuity + get_feed_health.
-//  Every node drawer would gain Detail · Start · Stop · Restart — all PEND (svc_detail/start/stop/
-//  restart). Without svc_detail, a restart is indistinguishable from a crash loop. M-3: every node
-//  opens the view that owns it. The keyholder (triad-venue-ccxt) carries the cancel-on-disconnect
-//  refusal. C-1..C-6.
+//  TOPOLOGY (view 00) — the estate map, mirroring the web TPVIEW module (v5.16). The thesis: twelve
+//  nodes, THREE heartbeats. get_service_status is named for services and returns LEDGER TABLES;
+//  get_bus_status says NATS is unavailable; get_feed_health says Prometheus is unavailable. The only
+//  genuine process liveness is get_bridge_lag — three sync workers. Every green dot on a process is
+//  INFERRED from whether a table has rows. That is not health. That is an autopsy.
+//
+//  Panels mirror paint(): stance strip (word INFERRED + verdict + 3 pills) → the estate node list
+//  (each node a status row w/ live source, tap to expand its drawer — M-3) → the transport panel
+//  (the map draws a bus that does not exist; three ingest lanes carry everything) → the services
+//  panel (services_up = tables) → the keyholder panel (the sole keyholder has no health source).
+//  LIVE: get_service_status + get_bridge_lag + get_bus_status + get_feed_health + get_calibration
+//  + get_system_overview. Honest UNKNOWN on absence; every drawer's svc_* control is absent (PEND).
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
-private val TOPOLOGY_TOOLS = listOf("get_service_status", "get_continuity", "get_feed_health")
-
-/** One estate node: process name · role · the view it owns (M-3) · optional keyholder refusal. */
-private data class Node(val process: String, val role: String, val owns: String, val keyholder: Boolean = false)
-
-private val NODES = listOf(
-    Node("triad-engine", "Signal", "Scan (02) / Signals (03)"),
-    Node("triad-intelligence", "GPU · LLM referee", "Intelligence (09)"),
-    Node("triad-executor", "Execution", "Execution (05)"),
-    Node("triad-learning", "Lake", "Learning (10)"),
-    Node("ollama", "model server", "Intelligence (09)"),
-    Node("nats-server", "bus", "Operations (14)"),
-    Node("triad-venue-ccxt", "keyholder · venue", "Execution (05)", keyholder = true),
+private val TOPOLOGY_TOOLS = listOf(
+    "get_service_status", "get_bridge_lag", "get_bus_status", "get_feed_health",
+    "get_calibration", "get_system_overview", "get_continuity",
 )
+
+/** M-1 status vocabulary — a green dot must name its source. */
+private enum class NodeStatus(val label: String, val meaning: String, val tone: agentic.triad.missioncontrol.ui.components.Tone) {
+    MEASURED("MEASURED", "a real heartbeat from a named process", GOOD),
+    INFERRED("INFERRED", "derived from a table having rows — NOT process health", INFO),
+    IDLE("IDLE", "the process may be up; it has produced nothing", WARN),
+    DOWN("DOWN", "the transport itself reports unavailable", BAD),
+    UNKNOWN("UNKNOWN", "no health source exists at all", UNK),
+}
+
+/**
+ * One estate node — mirroring TPVIEW.NODES. `proc` is the OS process (the svc_* target, null for the
+ * external exchange), `owns` is the M-3 view. `status`/`ev` resolve live off the derived model.
+ */
+private data class EstateNode(
+    val id: String,
+    val label: String,
+    val role: String,
+    val plane: String,
+    val emits: String,
+    val takes: String,
+    val owns: String,
+    val proc: String?,
+    val healthSrc: String,
+    val keyholder: Boolean = false,
+    val findings: List<String>,
+    val status: (TopoModel) -> NodeStatus,
+    val ev: (TopoModel) -> String,
+)
+
+/** The derived model — the live reads reduced to what the nodes read (mirrors TPVIEW.derive()). */
+private data class TopoModel(
+    val svc: Map<String, String>,      // ledger.<table> -> status
+    val lanes: List<Triple<String, String, Double?>>,  // owner, stream, age_s
+    val calStatus: String?,            // get_calibration.status
+    val busErr: Boolean,               // get_bus_status unavailable
+    val feedErr: Boolean,              // get_feed_health unavailable
+    val servicesUp: Int?,
+    val servicesTotal: Int?,
+)
+
+private fun laneStatus(m: TopoModel, table: String, okStatus: NodeStatus): NodeStatus =
+    if (m.svc[table] == "ok") NodeStatus.INFERRED else okStatus
+
+private val ESTATE_NODES = listOf(
+    EstateNode(
+        "sources", "SOURCES", "Market + Aux feeds", "ingest",
+        "raw ticks · klines · aux signals", "—", "Checkup (14)", "triad-feeds", "get_feed_health",
+        findings = listOf(
+            "get_feed_health → transport: unavailable (prometheus) — there is no feed observability at all.",
+            "The venue failover audit trail (D5) cannot be produced.",
+        ),
+        status = { if (it.feedErr) NodeStatus.UNKNOWN else NodeStatus.MEASURED },
+        ev = { if (it.feedErr) "get_feed_health → unavailable" else "live" },
+    ),
+    EstateNode(
+        "seam", "SEAM · UpONLY", "LLM serving · Ollama :11434", "model",
+        "model completions", "rendered prompts", "Intelligence (09)", "ollama", "—",
+        findings = listOf(
+            "The live adjudicator is fingpt-crypto:v5-full-test — the playbook assigns FinGPT to the BIAS role, not adjudication.",
+            "Slot B has never run. get_model_registry has a schema and no entries.",
+            "The gateway loses 1,598 requests to error at 136 ms — a batch failure, not a model failure.",
+        ),
+        status = { NodeStatus.UNKNOWN },
+        ev = { "no health source" },
+    ),
+    EstateNode(
+        "signal", "TRIADENGINE", "Signal · features → candidates", "hot",
+        "context packets · candidates", "market + aux", "Signals (03)", "triad-signal", "ledger.candidates",
+        findings = listOf(
+            "164 duplicate candidates (BTC 86 · ETH 78) — a race under load, because there is no consumer dedupe.",
+            "45,692 context packets exist and have no view. P4 replay is dead at the first hop.",
+        ),
+        status = { laneStatus(it, "ledger.candidates", NodeStatus.IDLE) },
+        ev = { "ledger.candidates: ${it.svc["ledger.candidates"] ?: "—"}  (a TABLE)" },
+    ),
+    EstateNode(
+        "gateway", "TRIADINTELLIGENCE", "Gateway · LLM judges · no keys", "hot",
+        "DecisionV1", "candidates + packets", "Intelligence (09)", "triad-intelligence", "ledger.decisions",
+        findings = listOf(
+            "The model proposes a trade on 18.9% of candidates. The validator destroys 689 of 691 and overwrites conviction with 0.",
+            "invalid_output is NOT malformed JSON — it is a rejected trade.",
+            "get_render → render_context_missing. You cannot reproduce a single prompt.",
+        ),
+        status = { laneStatus(it, "ledger.decisions", NodeStatus.IDLE) },
+        ev = { "ledger.decisions: ${it.svc["ledger.decisions"] ?: "—"}  (a TABLE)" },
+    ),
+    EstateNode(
+        "executor", "TRIADEXECUTOR", "Executor · governor · OMS · PM", "hot",
+        "intents · orders", "DecisionV1", "Execution (05)", "triad-executor", "ledger.intents · ledger.orders",
+        findings = listOf(
+            "STALE, not empty — a writer was there and it stopped. That is a different bug from never starting.",
+            "The governor passed 0 intents and refused 18. orders, fills: 0 rows, ever.",
+            "The one ETH take asked for a 9.1 bps stop against a 45 bps floor.",
+        ),
+        status = { if (it.svc["ledger.intents"] == "stale" || it.svc["ledger.orders"] == "stale") NodeStatus.IDLE else NodeStatus.UNKNOWN },
+        ev = { "intents: ${it.svc["ledger.intents"] ?: "—"} · orders: ${it.svc["ledger.orders"] ?: "—"}" },
+    ),
+    EstateNode(
+        "venue", "EXECUTOR · CCXT", "Venue Gateway · THE SOLE KEYHOLDER", "hot",
+        "venue orders", "intents", "Execution (05)", "triad-venue-ccxt", "—", keyholder = true,
+        findings = listOf(
+            "The only component in the estate that holds exchange credentials — and it has no health check, no heartbeat, and no tool that reports on it.",
+            "Go/no-go gate 2 (key-safety probe) is UNKNOWN for exactly this reason.",
+            "M-5: the sole keyholder must be the most instrumented process in the estate. It is the least.",
+        ),
+        status = { NodeStatus.UNKNOWN },
+        ev = { "no health source" },
+    ),
+    EstateNode(
+        "exchange", "EXTERNAL", "Exchange · Binance USD-M", "external",
+        "fills · positions", "orders", "Execution (05)", null, "—",
+        findings = listOf(
+            "Nothing has ever reached a venue. 0 orders, 0 fills, 0 positions.",
+            "Binance USD-M has no cancel-on-disconnect — go/no-go gate 4 needs a heartbeat-flatten watchdog, and it is unsigned.",
+        ),
+        status = { NodeStatus.UNKNOWN },
+        ev = { "never contacted" },
+    ),
+    EstateNode(
+        "bus", "TRANSPORT", "NATS JetStream — 7 streams", "transport",
+        "—", "—", "Operations (14)", "nats-server", "get_bus_status",
+        findings = listOf(
+            "NOT PROVISIONED. get_bus_status → { error: \"transport: unavailable\", detail: \"nats\" }.",
+            "This is the root cause the whole audit keeps returning to: no NATS → no consumer dedupe → §7.2 idempotency violated → 164 duplicate candidates → 8 duplicate adjudications → 5,277 duplicate bank rows → INFLATION 2.93×.",
+            "The map draws a bus that does not exist — and omits the three ingest lanes that are actually carrying every byte.",
+        ),
+        status = { if (it.busErr) NodeStatus.DOWN else NodeStatus.MEASURED },
+        ev = { if (it.busErr) "get_bus_status → unavailable" else "ok" },
+    ),
+    EstateNode(
+        "ledger", "TRIADLEARNING", "Ledger · PROVENANCE ROOT", "store",
+        "the record of everything", "every message", "Databank (11)", "triad-learning", "ledger.context.packets",
+        findings = listOf(
+            "chain_verified: false — P4 (everything is replayable) is violated, and the spec's own words are: \"the system that produced it is defective.\"",
+            "1,825 decisions carry input_hash = 0×64. refusal_id is 100% null.",
+            "The refusals writer says 115; the view has 18.",
+        ),
+        status = { laneStatus(it, "ledger.context.packets", NodeStatus.IDLE) },
+        ev = { "ledger.context.packets: ${it.svc["ledger.context.packets"] ?: "—"}  (a TABLE)" },
+    ),
+    EstateNode(
+        "labeler", "LEARNING", "Labeler · Outcome · triad-cf/1", "learn",
+        "outcomes · pnl_r", "decisions + the tape", "Shadow (08)", "triad-labeler", "ledger.outcomes",
+        findings = listOf(
+            "ledger.outcomes: EMPTY. Zero labelled outcomes in the ledger, ever.",
+            "Three resolvers are writing, and they disagree — one decision booked loss / win / loss, and all three rows were summed.",
+            "loss average pnl_r is exactly −1.0000: no fee, no spread, no slippage.",
+        ),
+        status = { if (it.svc["ledger.outcomes"] == "empty") NodeStatus.IDLE else NodeStatus.INFERRED },
+        ev = { "ledger.outcomes: ${it.svc["ledger.outcomes"] ?: "—"}" },
+    ),
+    EstateNode(
+        "calib", "LEARNING", "Calibration · Books · B0/B1/M1/K1", "learn",
+        "the threshold", "conviction ⋈ outcome", "Learning (10)", "triad-calibration", "get_calibration",
+        findings = listOf(
+            "get_calibration → { status: \"absent\" }. calibration_pin.pinned: false.",
+            "The join does not exist. Conviction lives in DuckDB; outcome lives in a SQLite file on a Mac.",
+            "3 of 4 books have n=0 — and B1 was spec'd as a GBT and shipped as a reflection of M1.",
+        ),
+        status = { if (it.calStatus == "absent") NodeStatus.IDLE else NodeStatus.INFERRED },
+        ev = { "get_calibration → ${it.calStatus ?: "—"}" },
+    ),
+    EstateNode(
+        "dtbnk", "TRIADDTBNK", "Databank · SYSTEM OF RECORD · triaddtbnk/1.4", "store",
+        "the bank", "3 ingest lanes", "Databank (11)", "triad-dtbnk-bridge", "get_bridge_lag",
+        findings = listOf(
+            "This is the only node in the estate with a real heartbeat. Three named owners, three fresh ingest-registry ages (W-30).",
+            "And what it holds is 2.93× inflated: 8,008 rows over 2,731 distinct decisions.",
+            "shadow_sync reports no_fingerprint — it cannot identify itself.",
+        ),
+        status = { if (it.lanes.isNotEmpty()) NodeStatus.MEASURED else NodeStatus.UNKNOWN },
+        ev = {
+            val newest = it.lanes.mapNotNull { l -> l.third }.minOrNull()
+            "${it.lanes.size} lanes · newest heartbeat ${if (newest != null) fmtAge(newest) else "—"}"
+        },
+    ),
+)
+
+/** M-4 · an edge is a claim. If nothing crossed it, draw it dead. (from → to · label · everCrossed) */
+private val ESTATE_EDGES = listOf(
+    Triple("MARKET", "sources → signal", true),
+    Triple("completions", "seam → gateway", true),
+    Triple("CAND · CTX", "signal → gateway", true),
+    Triple("DEC", "gateway → executor", true),
+    Triple("INTENT", "executor → venue", false),
+    Triple("ORDERS", "venue → exchange", false),
+    Triple("FILLS", "exchange → venue", false),
+)
+
+private fun fmtAge(s: Double): String = when {
+    s < 90 -> "${s.toInt()}s"
+    s < 5400 -> "${(s / 60).toInt()}m"
+    else -> String.format("%.1fh", s / 3600)
+}
+
+private fun deriveTopo(d: Map<String, kotlinx.serialization.json.JsonElement?>): TopoModel {
+    val ss = d["get_service_status"] as? JsonObject
+    val svc = ss.arr("services").mapNotNull { it as? JsonObject }
+        .associate { it.text("service", it.text("name")) to it.text("status") }
+    val bl = d["get_bridge_lag"] as? JsonObject
+    val lanes = bl.arr("lanes").mapNotNull { it as? JsonObject }
+        .map { Triple(it.text("owner"), it.text("stream"), it.num("age_s")) }
+        .sortedBy { it.third ?: Double.MAX_VALUE }
+    val cal = d["get_calibration"] as? JsonObject
+    val so = d["get_system_overview"] as? JsonObject
+    val bus = d["get_bus_status"] as? JsonObject
+    val feed = d["get_feed_health"] as? JsonObject
+    return TopoModel(
+        svc = svc,
+        lanes = lanes,
+        calStatus = if (cal != null) cal.text("status", "absent") else null,
+        busErr = bus == null || bus.text("error", "").isNotEmpty(),
+        feedErr = feed == null || feed.text("error", "").isNotEmpty(),
+        servicesUp = so.int("services_up"),
+        servicesTotal = so.int("services_total"),
+    )
+}
 
 @Composable
 fun TopologyScreen(repo: MissionRepository) {
@@ -367,77 +606,220 @@ fun TopologyScreen(repo: MissionRepository) {
     val s by vm.state.collectAsState()
     val d = s.data
 
-    val svc = d["get_service_status"] as? JsonObject
-    val svcRows = svc.arr("services").mapNotNull { it as? JsonObject }
-    val feedLive = d["get_feed_health"] != null
-    val contLive = d["get_continuity"] != null
+    val m = deriveTopo(d)
+    val nodeStatuses = ESTATE_NODES.map { it to it.status(m) }
+    val measured = nodeStatuses.count { it.second == NodeStatus.MEASURED }
+    val unknown = nodeStatuses.count { it.second == NodeStatus.UNKNOWN }
+    val inferred = nodeStatuses.count { it.second == NodeStatus.INFERRED }
+    val deadEdges = ESTATE_EDGES.count { !it.third }
+    val okTables = m.svc.values.count { it == "ok" }
+    val tableCount = m.svc.size
+
+    var expanded by remember { mutableStateOf(-1) }
 
     ViewScaffold(
         View.TOPOLOGY,
         stance = listOf(
-            Stance("nodes", NODES.size.toString(), NEUTRAL),
-            Stance("supervision", "UNKNOWN", UNK),
-            Stance("svc rows", "${svcRows.size} ledger tables", if (svcRows.isEmpty()) UNK else NEUTRAL),
-            Stance("feed", if (feedLive) "reads" else "—", if (feedLive) INFO else UNK),
-            Stance("node control", "svc_* — absent", WARN),
+            Stance("verdict", "INFERRED", INFO),
+            Stance("nodes", ESTATE_NODES.size.toString(), NEUTRAL),
+            Stance("measured", "$measured", if (measured <= 3) BAD else GOOD),
+            Stance("no health source", "$unknown", BAD),
+            Stance("dead edges", "$deadEdges", BAD),
+            Stance("transport", if (m.busErr) "NATS DOWN" else "ok", if (m.busErr) BAD else GOOD),
+            Stance("real lanes", m.lanes.size.toString(), if (m.lanes.isEmpty()) UNK else NEUTRAL),
         ),
     ) {
+        // ── pStance · the verdict banner (verbatim wording from TPVIEW) ──
         Ribbon(
-            "The estate map — nodes you can read, node control you cannot.",
-            "Every node drawer would gain Detail · Start · Stop · Restart, targeting the real process. All are " +
-                "SYSTEM controls that do not exist (svc_detail / svc_start / svc_stop / svc_restart) — they " +
-                "render PEND and only propose. Without svc_detail, pid · uptime · restarts_24h are UNKNOWN: a " +
-                "restart is indistinguishable from a crash loop.",
-            INFO,
+            "INFERRED · twelve nodes, three heartbeats — that is not health, it is an autopsy",
+            "get_service_status is named for services and returns LEDGER TABLES; get_bus_status says NATS is " +
+                "unavailable; get_feed_health says Prometheus is unavailable. The only genuine process liveness " +
+                "in this estate is get_bridge_lag — three sync workers. Every green dot on a process — Signal, " +
+                "Gateway, Executor, the venue gateway, the LLM server — is inferred from whether a table has rows. " +
+                "And the map draws a NATS bus with seven streams that does not exist, while the three ingest lanes " +
+                "actually carrying the data are not on it at all.",
+            SEV,
+        )
+        StatRow(
+            Triple("measured", "$measured / ${ESTATE_NODES.size}", if (measured <= 3) BAD else GOOD),
+            Triple("inferred", "$inferred", INFO),
+            Triple("no health src", "$unknown", BAD),
+            Triple("dead edges", "$deadEdges", BAD),
+            Triple("real lanes", m.lanes.size.toString(), NEUTRAL),
         )
 
-        // The node cards — each with UNKNOWN process detail (no svc_detail) and M-3 ownership.
-        NODES.forEach { n ->
-            val title = if (n.keyholder) "${n.process} · ${n.role} · KEYHOLDER" else "${n.process} · ${n.role}"
-            McCard(title, "get_service_status") {
-                KvRow("pid · uptime · restarts_24h", "UNKNOWN · UNKNOWN · UNKNOWN", UNK)
-                KvRow("opens (M-3)", n.owns, INFO)
-                Note("Drawer actions: Detail · Start · Stop · Restart → all PEND (svc_detail / svc_start / svc_stop / svc_restart). Without svc_detail a restart is indistinguishable from a crash loop.", NEUTRAL)
-                if (n.keyholder) {
-                    Ribbon(
-                        "svc_stop on triad-venue-ccxt is REFUSED while anything rests.",
-                        "A resting order with no cancel-on-disconnect leaves an order live on a venue nobody is " +
-                            "watching. Binance USD-M has no cancel-on-disconnect. The build spec refuses the stop " +
-                            "while anything rests — the refusal is written to the control ledger (C-6).",
-                        SEV,
-                    )
+        // ── pMap · the estate node list — tap any node to open its drawer (M-3) ──
+        McCard("The estate — tap any node for its evidence and the view it owns", "get_service_status × get_bus_status × get_bridge_lag") {
+            Note(
+                "M-3 · every node opens the view that owns it. A map you cannot click is a poster. Tap a node " +
+                    "for its evidence, its findings, and the view that owns it.",
+                INFO,
+            )
+            nodeStatuses.forEachIndexed { i, (n, st) ->
+                val open = expanded == i
+                Row(
+                    androidx.compose.ui.Modifier.fillMaxWidth().padding(top = 6.dp)
+                        .clickable { expanded = if (open) -1 else i },
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Tag(st.label, st.tone)
+                    Tag(n.role, if (n.keyholder) SEV else NEUTRAL)
+                    if (n.keyholder) Tag("KEYHOLDER", SEV)
+                    Tag(if (open) "▾" else "▸", NEUTRAL)
+                }
+                KvRow(n.label, n.ev(m), st.tone)
+                if (open) {
+                    // the node drawer — status ribbon + plane/emits/consumes + findings + control (M-3)
+                    Ribbon("${st.label} — ${st.meaning}", "health source: ${n.healthSrc}   ·   reads: ${n.ev(m)}", st.tone)
+                    KvRow("plane", n.plane, NEUTRAL)
+                    KvRow("emits", n.emits, INFO)
+                    KvRow("consumes", n.takes, NEUTRAL)
+                    KvRow("opens (M-3)", n.owns, INFO)
+                    Note("WHAT THIS AUDIT FOUND HERE:", WARN)
+                    n.findings.forEach { Note("· $it", NEUTRAL) }
+                    // CONTROL · the process — svc_* are absent (PEND); pid/uptime UNKNOWN without svc_detail.
+                    if (n.proc != null) {
+                        KvRow("process", n.proc, NEUTRAL)
+                        KvRow("pid · uptime", "UNKNOWN", UNK)
+                        KvRow("restarts 24h", "UNKNOWN — a restart is indistinguishable from a crash loop", UNK)
+                        Note(
+                            "There is no control path. svc_start, svc_stop and svc_restart are not on the server — " +
+                                "all 77 tools are reads. Each drawer control probes, finds nothing, and files the build " +
+                                "proposal. It will not pretend to have restarted anything.",
+                            SEV,
+                        )
+                        if (n.keyholder) {
+                            Ribbon(
+                                "This is the sole keyholder — svc_stop is REFUSED while anything rests",
+                                "svc_stop on it, with a resting order and no cancel-on-disconnect, leaves an order live " +
+                                    "on a venue nobody is watching. The build spec refuses it while anything rests — the " +
+                                    "refusal is written to the control ledger (C-6).",
+                                SEV,
+                            )
+                        }
+                    }
                 }
             }
+            Note(
+                "M-1 · a green dot must name its source. Twelve nodes, three heartbeats. Every other green on this " +
+                    "map is inferred from a table having rows. Print the source next to the dot, or do not print the dot.",
+                WARN,
+            )
         }
 
-        // Live service rows — the honest "ledger tables, not processes" caveat.
-        McCard("Live service rows — ledger tables, not processes", "get_service_status") {
-            if (svcRows.isEmpty()) {
-                Note("— · get_service_status returned no rows (tool unavailable or empty). Nothing fabricated.", UNK)
+        // ── pTransport · the map draws a transport that does not exist ──
+        McCard("The map draws a transport that does not exist", "get_bus_status × get_bridge_lag") {
+            KvRow("the diagram says", "NATS JetStream · 7 streams", if (m.busErr) BAD else NEUTRAL)
+            KvRow("  designed", "dedupe by Nats-Msg-Id (120s) · DLQ per stream", UNK)
+            KvRow("  get_bus_status", if (m.busErr) "transport: unavailable (nats)" else "ok", if (m.busErr) BAD else GOOD)
+            KvRow("the system says", "${m.lanes.size} ingest lanes — this is what carries every byte", if (m.lanes.isEmpty()) UNK else INFO)
+            Note("THE ONLY THINGS IN THIS ESTATE WITH A HEARTBEAT:", INFO)
+            if (m.lanes.isEmpty()) {
+                Note("— · get_bridge_lag returned no lanes (tool unavailable). Nothing fabricated.", UNK)
             } else {
                 MiniTable(
-                    listOf("service", "status", "restarts · version"),
-                    svcRows.map { r ->
-                        val st = r.text("status")
-                        val tone = when (st.lowercase()) {
-                            "ok", "healthy", "up" -> GOOD
-                            "degraded", "stale" -> WARN
-                            "down", "error" -> BAD
-                            else -> UNK
-                        }
-                        row(
-                            r.text("service", r.text("name")) to NEUTRAL,
-                            st to tone,
-                            "null · null" to UNK,
-                        )
+                    listOf("owner", "stream", "heartbeat"),
+                    m.lanes.map { (owner, stream, age) ->
+                        val stale = (age ?: 0.0) > 120
+                        row(owner to NEUTRAL, stream to NEUTRAL, (age?.let { fmtAge(it) } ?: "—") to if (stale) WARN else GOOD)
                     },
                 )
             }
-            Note("L-4 / the honest caveat: a service is a process, not a table. These rows are ledger tables — restart_counts and version are null on every row. Supervision is UNKNOWN, never SAFE.", WARN)
-            KvRow("continuity read", if (contLive) "live (get_continuity)" else "—", if (contLive) INFO else UNK)
-            KvRow("feed health read", if (feedLive) "live (get_feed_health)" else "—", if (feedLive) INFO else UNK)
+            Ribbon(
+                "NATS was never provisioned — the root cause the whole audit keeps returning to",
+                "no NATS → no consumer dedupe → §7.2 idempotency violated → 164 duplicate candidates → 8 duplicate " +
+                    "adjudications → 5,277 duplicate bank rows → INFLATION 2.93× → a counterfeit net_pnl_r → a " +
+                    "poisoned training corpus. One unprovisioned message bus is upstream of every number in this dashboard.",
+                SEV,
+            )
+            LawBlock(
+                "M-2",
+                "Draw the transport that is running, not the one that was designed. A map that shows a bus which " +
+                    "does not exist, and omits the lanes which do, will send an engineer to debug the wrong thing at " +
+                    "three in the morning.",
+            )
         }
 
+        // ── the data-flow chain — a Funnel over the money path; the collapse point is the story ──
+        McCard("The data-flow chain — where the money path goes dead", "get_service_status × the edges (M-4)") {
+            Note("An edge is a claim. If nothing crossed it, it is drawn dead. The engine→gateway→executor→venue chain carries context, but INTENT · ORDERS · FILLS have carried zero messages since the system was built.", NEUTRAL)
+            Funnel(
+                listOf(
+                    Bar("candidates", 3818.0, GOOD, "sources → signal → gateway · live"),
+                    Bar("decisions", 691.0, INFO, "gateway → executor · 18.9% take"),
+                    Bar("intents", 18.0, WARN, "governor refused 18, passed 0"),
+                    Bar("orders", 0.0, BAD, "executor → venue · 0 ever"),
+                    Bar("fills", 0.0, BAD, "venue → exchange → back · 0 ever"),
+                ),
+            )
+            MiniTable(
+                listOf("edge", "path", "ever crossed?"),
+                ESTATE_EDGES.map { (lbl, path, ever) ->
+                    row(lbl to NEUTRAL, path to NEUTRAL, (if (ever) "live" else "0 ever — DEAD") to if (ever) GOOD else BAD)
+                },
+            )
+            Note("M-4 · three edges of the money path — INTENT, ORDERS, FILLS — have carried zero messages since the system was built, and a naive diagram draws them solid.", WARN)
+        }
+
+        // ── pServices · services_up = tables ──
+        McCard("\"services_up: $okTables / $tableCount\" — those $tableCount are TABLES", "get_service_status × get_system_overview") {
+            Ribbon(
+                "get_service_status is named for services. It returns ledger writers.",
+                "Not one of the six actual processes on the map — Signal, Gateway, Executor, the venue gateway, " +
+                    "Ollama, NATS — appears in it at all.",
+                SEV,
+            )
+            if (m.svc.isEmpty()) {
+                Note("— · get_service_status returned no rows (tool unavailable or empty). Nothing fabricated.", UNK)
+            } else {
+                MiniTable(
+                    listOf("what it returns", "status", "what it really means"),
+                    m.svc.entries.map { (svc, st) ->
+                        val tone = when (st.lowercase()) {
+                            "ok" -> GOOD; "stale" -> WARN; "empty" -> UNK; "no_fingerprint" -> SEV; else -> UNK
+                        }
+                        val means = when (st.lowercase()) {
+                            "ok" -> "the table got a row recently"
+                            "stale" -> "a writer exists and has gone quiet"
+                            "empty" -> "never wrote"
+                            "no_fingerprint" -> "it cannot identify itself"
+                            else -> "—"
+                        }
+                        row(svc to NEUTRAL, st to tone, means to NEUTRAL)
+                    },
+                )
+            }
+            Note("Read the distinction nobody is reading: intents and orders are STALE, not EMPTY. A writer was there. It stopped. That is a different bug from never starting — and fills and outcomes are EMPTY: they never started.", WARN)
+            KvRow("system overview services_up", (m.servicesUp?.let { "$it / ${m.servicesTotal ?: "?"}" }) ?: "—", if (m.servicesUp == null) UNK else WARN)
+            LawBlock(
+                "M-1",
+                "The front page says services_up: $okTables / $tableCount. The number is not wrong — it is answering " +
+                    "a different question than the one everybody reads it as. Six real processes have no health source " +
+                    "at all, and a five-line heartbeat file per process closes it. It is the cheapest fix on this page.",
+            )
+        }
+
+        // ── pKeyholder · the sole keyholder has no health source ──
+        McCard("The sole keyholder has no health source", "the topology × go/no-go gate 2") {
+            Ribbon(
+                "EXECUTOR · CCXT — the sole keyholder · maker-only · UDS socket",
+                "It is the only component in the estate that holds exchange credentials. Per P2 the model cannot " +
+                    "touch a venue; per the topology, everything funnels through this one process. It has no health " +
+                    "check, no heartbeat, no status row, and no tool that reports on it.",
+                SEV,
+            )
+            KvRow("health source", "NONE — not in any tool", BAD)
+            KvRow("go/no-go gate 2", "UNKNOWN — key-safety probe", UNK)
+            KvRow("orders sent, ever", "0 — never contacted a venue", NEUTRAL)
+            LawBlock(
+                "M-5",
+                "The sole keyholder must be the most instrumented process in the estate. It is the least. Gate 2 " +
+                    "reads: \"a key that could withdraw fails boot (Sev-1 #2).\" It cannot be answered, because nothing " +
+                    "observes the process that holds the key.",
+            )
+        }
+
+        // ── SYSTEM node controls — absent, spec'd, proposed (kept from prior fidelity) ──
         McCard("SYSTEM node controls — absent, spec'd, proposed", "propose_action") {
             Note("Read-only page; the only tool it calls today is propose_action (AT-C7). Every node control below files a proposal — EXECUTES NOTHING.", INFO)
         }
@@ -445,13 +827,15 @@ fun TopologyScreen(repo: MissionRepository) {
         PendBox("svc_start", "HIGH · start a service. ARMED: 10s + CONFIRM (C-4). Absent ⇒ probes tools/list, then proposes.")
         PendBox("svc_stop", "CRIT · stop a service — REFUSES on executor/venue while anything rests (Binance USD-M has no cancel-on-disconnect). ARMED. Absent ⇒ proposes.")
         PendBox("svc_restart", "HIGH · stop(drain) + start. Refuses on executor/venue while anything rests. ARMED. Absent ⇒ proposes.")
+        PendBox("get_process_status", "read · THE MISSING TOOL — a heartbeat per process. 0 of 5 measured today; six real processes have no health source. Absent ⇒ proposes.")
+        PendBox("get_transport_actual", "read · designed (NATS, 7 streams, unavailable) vs running (3 ingest lanes). mismatch:true belongs on the Overview. Absent ⇒ proposes.")
 
         LawBlock(
-            "C-1..C-6 · M-3",
-            "Node control is SYSTEM-tier and absent — the map reads, it does not command · pid/uptime/restarts " +
-                "are UNKNOWN without svc_detail · svc_stop on the keyholder is refused while anything rests · " +
-                "start/stop/restart ARM first · every action, including refusals, is logged · every node opens " +
-                "the view that owns it (M-3).",
+            "M-1..M-5 · C-1..C-6",
+            "A green dot must name its source (M-1) · draw the transport that is running, not the one designed " +
+                "(M-2) · every node opens the view that owns it (M-3) · an edge that never crossed is drawn dead " +
+                "(M-4) · the sole keyholder must be the most instrumented process (M-5) · node control is SYSTEM-tier " +
+                "and absent — the map reads, it does not command · every action, including refusals, is logged.",
         )
     }
 }
