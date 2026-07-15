@@ -41,6 +41,7 @@ import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
+import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
 import agentic.triad.missioncontrol.ui.components.Tone.GOOD
@@ -48,6 +49,7 @@ import agentic.triad.missioncontrol.ui.components.Tone.INFO
 import agentic.triad.missioncontrol.ui.components.Tone.NEUTRAL
 import agentic.triad.missioncontrol.ui.components.Tone.UNK
 import agentic.triad.missioncontrol.ui.components.Tone.WARN
+import agentic.triad.missioncontrol.ui.components.VerdictBanner
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.field
@@ -88,8 +90,14 @@ private val ANALYTICS_TOOLS = listOf(
     "get_calibration", "get_attribution_ledger", "get_continuity",
     "get_governor_refusals", "get_exec_quality",
 )
-private val TRADE_LOGS_TOOLS = listOf("get_trade_logs")
-private val DATABANK_TOOLS = listOf("get_databank", "get_shadow_bank", "get_book_definitions")
+private val TRADE_LOGS_TOOLS = listOf(
+    "get_trade_logs", "get_row_integrity", "get_decision_census", "get_fabrication_audit",
+)
+private val DATABANK_TOOLS = listOf(
+    "get_databank", "get_shadow_bank", "get_book_definitions",
+    "get_bank_rows", "get_table_census", "get_column_census",
+)
+private val QUERY_CONSOLE_TOOLS = listOf("get_view_catalog", "get_query_catalog")
 
 private fun validityTone(pct: Double?): Tone = when {
     pct == null -> UNK
@@ -247,11 +255,29 @@ private fun pnlTone(r: Double?): Tone = when {
     else -> NEUTRAL
 }
 
+/** Census abstain-reason tone — take/model are real answers, error/timeout are gateway kills. */
+private fun reasonTone(r: String): Tone = when (r) {
+    "take" -> GOOD; "model" -> INFO; "timeout" -> WARN; "invalid_output" -> WARN
+    "error" -> BAD; else -> UNK
+}
+
+/** Bank-row / shadow outcome tone (mirrors the shadow-bank funnel vocabulary). */
+private fun outcomeTone(k: String): Tone = when (k) {
+    "win" -> GOOD; "loss" -> BAD; "expired" -> WARN
+    "gap", "no_fill", "gated", "pending", "open" -> UNK; else -> NEUTRAL
+}
+
+/** triad-lint severity tone — red is a hard finding, amber advisory. */
+private fun sevTone(s: String): Tone = when (s.lowercase()) {
+    "red" -> BAD; "amber", "yellow" -> WARN; "none", "clean" -> GOOD; else -> UNK
+}
+
 @Composable
 fun TradeLogsScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, TRADE_LOGS_TOOLS))
     val s by vm.state.collectAsState()
     val d = s.data
+    val scope = rememberCoroutineScope()
 
     // get_trade_logs returns the rows array directly under data (bare array — no summary object;
     // per-symbol/lane summaries are derived here from the actual live fields).
@@ -267,6 +293,47 @@ fun TradeLogsScreen(repo: MissionRepository) {
     val netR = guardDerive(null) { logs.mapNotNull { it.num("pnl_r") }.let { if (it.isEmpty()) null else it.sum() } }
     val consulted = guardDerive(0) { logs.count { it.text("gate") == "model" || (it.int("conviction") ?: 0) > 0 } }
 
+    // Wave-2 integrity envelopes (polled — all zero-required-arg, verified live).
+    val integ = d["get_row_integrity"] as? JsonObject
+    val census = d["get_decision_census"] as? JsonObject
+    val fabAudit = d["get_fabrication_audit"] as? JsonObject
+    val aggTrusted = guardDerive(false) { integ.bool("aggregates_trusted") }
+
+    // Tap-a-row detail: get_trade_row requires the full decision_id ULID; the log row's `id` is its
+    // 10-char PREFIX (verified live: EJQZ31P7ZH → EJQZ31P7ZHPTDB1Y6TFEAJY24B). So the tap chains two
+    // one-shot calls through the same repo seam run_select already uses: prefix-expand via the
+    // allowlisted decisions view, then fetch the full chain.
+    var detailId by remember { mutableStateOf<String?>(null) }
+    var detailRow by remember { mutableStateOf<JsonObject?>(null) }
+    var detailErr by remember { mutableStateOf<String?>(null) }
+    var detailLoading by remember { mutableStateOf(false) }
+
+    fun openDetail(shortId: String) {
+        if (detailLoading) return
+        detailId = shortId
+        detailRow = null
+        detailErr = null
+        detailLoading = true
+        scope.launch {
+            val safe = shortId.filter { it.isLetterOrDigit() }  // ULID alphabet only — no quote survives
+            val lookup = repo.tool(
+                "run_select",
+                buildJsonObject { put("sql", "SELECT decision_id FROM decisions WHERE decision_id LIKE '$safe%' LIMIT 1") },
+            )
+            val full = (lookup.envelope.data as? JsonObject).field("rows").rows().firstOrNull()
+                .text("decision_id", "")
+            if (full.isEmpty()) {
+                detailErr = "prefix $safe not found in decisions — the log row did not resolve to a decision_id"
+            } else {
+                val res = repo.tool("get_trade_row", buildJsonObject { put("decision_id", full) })
+                val data = res.envelope.data as? JsonObject
+                if (res.envelope.ok && data != null) detailRow = data
+                else detailErr = res.envelope.error ?: "get_trade_row returned no row for $full"
+            }
+            detailLoading = false
+        }
+    }
+
     ViewScaffold(
         View.TRADE_LOGS,
         stance = listOf(
@@ -275,6 +342,11 @@ fun TradeLogsScreen(repo: MissionRepository) {
             Stance("rejected", "$rejected", if (rejected > 0) WARN else NEUTRAL),
             Stance("closed", "$closed", if (closed > 0) GOOD else UNK),
             Stance("net R", netR?.let { fmt(it, 2) } ?: "—", pnlTone(netR)),
+            Stance(
+                "aggregates",
+                if (integ == null) "—" else if (aggTrusted) "TRUSTED" else "UNTRUSTED",
+                if (integ == null) UNK else if (aggTrusted) GOOD else BAD,
+            ),
         ),
     ) {
         Ribbon(
@@ -339,6 +411,127 @@ fun TradeLogsScreen(repo: MissionRepository) {
                 ),
             )
         }
+        McCard("Row integrity — duplication by layer", "get_row_integrity") {
+            if (integ == null) {
+                Note("get_row_integrity unavailable — no integrity read this poll.", UNK)
+            } else {
+                val layers = guardDerive(emptyList<JsonObject>()) { integ.field("layers").rows() }
+                val inflation = integ.num("inflation_factor")
+                StatRow(
+                    Triple("worst layer", integ.text("worst_layer"), if (integ.text("worst_layer") == "—") UNK else BAD),
+                    Triple("inflation", inflation?.let { "×${fmt(it, 2)}" } ?: "—", if ((inflation ?: 1.0) > 1.0) BAD else GOOD),
+                )
+                Row(Modifier.padding(top = 2.dp)) {
+                    Tag(if (aggTrusted) "AGGREGATES TRUSTED" else "AGGREGATES UNTRUSTED", if (aggTrusted) GOOD else BAD)
+                }
+                if (layers.isEmpty()) {
+                    Note("No layers reported.", UNK)
+                } else {
+                    MiniTable(
+                        listOf("layer", "rows", "distinct", "excess", "dupe %"),
+                        layers.map { l ->
+                            val worst = l.text("name") == integ.text("worst_layer")
+                            row(
+                                l.text("name") to (if (worst) BAD else NEUTRAL),
+                                "${l.int("rows") ?: "—"}" to NEUTRAL,
+                                "${l.int("distinct") ?: "—"}" to NEUTRAL,
+                                "${l.int("excess") ?: "—"}" to (if ((l.int("excess") ?: 0) > 0) WARN else NEUTRAL),
+                                (l.num("dupe_pct")?.let { "${fmt(it * 100, 2)}%" } ?: "—") to (if (worst) BAD else NEUTRAL),
+                            )
+                        },
+                    )
+                }
+                LawBlock("R-INT", integ.text("rule", "no aggregate may be rendered without its inflation factor; if inflation_factor > 1.0 every bank-derived aggregate is UNTRUSTED"))
+            }
+        }
+        McCard("Decision census — who actually answered (T-3)", "get_decision_census") {
+            if (census == null) {
+                Note("get_decision_census unavailable — no census this poll.", UNK)
+            } else {
+                val byReason = guardDerive(emptyList<JsonObject>()) { census.field("by_reason").rows() }
+                val mac = census.obj("model_actually_consulted")
+                StatRow(
+                    Triple("decisions", "${census.int("total") ?: "—"}", NEUTRAL),
+                    Triple("model consulted", "${mac.int("n") ?: "—"}", if ((mac.int("n") ?: 0) > 0) GOOD else UNK),
+                    Triple("consulted %", mac.num("pct")?.let { "${fmt(it * 100, 1)}%" } ?: "—", if ((mac.num("pct") ?: 0.0) < 0.5) WARN else GOOD),
+                )
+                if (byReason.isEmpty()) {
+                    Note("No reasons in the census window.", UNK)
+                } else {
+                    // abstain-reason census as a horizontal bar chart — error/timeout are gateway
+                    // kills, not model decisions (the wire's own T-3 note).
+                    HBarChart(
+                        byReason.mapNotNull { r ->
+                            val rn = r.num("n") ?: return@mapNotNull null
+                            Bar(r.text("reason"), rn, reasonTone(r.text("reason")))
+                        },
+                        labelWidth = 104,
+                    )
+                    MiniTable(
+                        listOf("reason", "n", "%", "avg conv", "avg ms", "fabr"),
+                        byReason.map { r ->
+                            val fab = r.int("fabrications") ?: 0
+                            row(
+                                r.text("reason") to reasonTone(r.text("reason")),
+                                "${r.int("n") ?: "—"}" to NEUTRAL,
+                                (r.num("pct")?.let { "${fmt(it * 100, 1)}%" } ?: "—") to NEUTRAL,
+                                (r.num("avg_conviction")?.let { fmt(it, 1) } ?: "—") to NEUTRAL,
+                                (r.num("avg_latency_ms")?.let { fmt(it, 0) } ?: "—") to NEUTRAL,
+                                "$fab" to (if (fab > 0) BAD else GOOD),
+                            )
+                        },
+                    )
+                }
+                Note(census.text("note", "model_actually_consulted counts take + a real model answer only — a gateway error/timeout is not a model decision (T-3)."), INFO)
+            }
+        }
+        McCard("Fabrication audit — invented vs honestly absent (T-4)", "get_fabrication_audit") {
+            if (fabAudit == null) {
+                Note("get_fabrication_audit unavailable — no audit this poll.", UNK)
+            } else {
+                val fabs = guardDerive(emptyList<JsonObject>()) { fabAudit.field("fabrications").rows() }
+                val absences = guardDerive(emptyList<JsonObject>()) { fabAudit.field("absences").rows() }
+                val fabTotal = guardDerive(0) { fabs.mapNotNull { it.num("n") }.sum().toInt() }
+                VerdictBanner(
+                    word = if (fabTotal > 0) "FABRICATED" else "CLEAN",
+                    said = if (fabTotal > 0) {
+                        "$fabTotal fabricated field values across ${fabAudit.int("fabrication_kinds") ?: fabs.size} kinds — plus ${absences.size} honest-absence classes, rendered grey, never conflated."
+                    } else {
+                        "No fabricated values detected — ${absences.size} honest-absence classes render grey."
+                    },
+                    pills = listOf(
+                        "kinds ${fabAudit.int("fabrication_kinds") ?: "—"}" to (if (fabTotal > 0) BAD else GOOD),
+                        "fabricated $fabTotal" to (if (fabTotal > 0) BAD else GOOD),
+                        "honest absences ${absences.size}" to UNK,
+                    ),
+                    wordTone = if (fabTotal > 0) BAD else GOOD,
+                )
+                if (fabs.isNotEmpty()) {
+                    MiniTable(
+                        listOf("field", "value", "n", "laws"),
+                        fabs.take(6).map { f ->
+                            val v = f.text("value")
+                            row(
+                                f.text("field") to BAD,
+                                (if (v.length > 14) v.take(14) + "…" else v) to BAD,
+                                "${f.int("n") ?: "—"}" to BAD,
+                                f.field("laws").list().joinToString("+") { it.str() } to NEUTRAL,
+                            )
+                        },
+                    )
+                }
+                if (absences.isNotEmpty()) {
+                    MiniTable(
+                        listOf("absent field", "n", "why (honest)"),
+                        absences.take(8).map { a ->
+                            row(a.text("field") to UNK, "${a.int("n") ?: "—"}" to UNK, a.text("reason") to UNK)
+                        },
+                    )
+                    if (absences.size > 8) Note("Showing 8 of ${absences.size} honest-absence classes.", UNK)
+                }
+                Note(fabAudit.text("note", "fabrications render as defects, absences grey; the two are never conflated (T-4)."), INFO)
+            }
+        }
         McCard("Most recent trades (T-3)", "get_trade_logs") {
             if (logs.isEmpty()) {
                 Note("No rows in the window — the ledger join returned empty.", UNK)
@@ -362,6 +555,78 @@ fun TradeLogsScreen(repo: MissionRepository) {
                     },
                 )
                 Note("Status is toned by lane — win/open ⇒ GOOD/INFO, loss ⇒ BAD, rejected/missed ⇒ WARN; pnl_r toned by sign. A null entry/exit/pnl_r on a rejected row is a real absence (the gate fired before a fill), never a fabricated zero (T-3).")
+                Note("Tap a row id to load its full get_trade_row chain in the detail card below.", INFO)
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    logs.take(16).forEach { r ->
+                        val rid = r.text("id")
+                        if (rid != "—") CannedButton(rid) { openDetail(rid) }
+                    }
+                }
+            }
+        }
+        McCard("Row detail — the full chain (T-5)", "run_select → get_trade_row") {
+            val dr = detailRow
+            val err = detailErr
+            when {
+                detailLoading -> Note("Fetching ${detailId ?: "—"} — expanding the id prefix via decisions, then get_trade_row…", INFO)
+                err != null -> Note("Row detail error: $err — a rejection is surfaced, never swallowed.", BAD)
+                dr == null -> Note("Tap a row id in the trades card above to load the full decision chain — envelope · chain · candidate · market · honest nulls · fabrications.", INFO)
+                else -> {
+                    val envl = dr.obj("envelope")
+                    val chain = dr.obj("chain")
+                    val cand = dr.obj("candidate")
+                    val mkt = dr.obj("market")
+                    val validator = envl.obj("validator")
+                    val checksFailed = guardDerive(emptyList<JsonElement>()) { validator.field("checks_failed").list() }
+                    val nullsL = guardDerive(emptyList<JsonObject>()) { dr.field("nulls").rows() }
+                    val fabL = guardDerive(emptyList<JsonObject>()) { dr.field("fabricated").rows() }
+                    KvRow("decision_id", dr.text("decision_id"), NEUTRAL)
+                    KvRow(
+                        "verdict · slot · conviction",
+                        "${envl.text("verdict")} · ${envl.text("slot")} · ${envl.int("conviction") ?: "—"}",
+                        if (envl.text("verdict") == "take") GOOD else NEUTRAL,
+                    )
+                    KvRow(
+                        "abstain_reason",
+                        envl.text("abstain_reason"),
+                        if (envl.text("abstain_reason") in listOf("model", "take", "—")) NEUTRAL else WARN,
+                    )
+                    KvRow(
+                        "validator",
+                        if (validator.bool("passed")) "passed"
+                        else if (checksFailed.isEmpty()) "failed"
+                        else "failed · " + checksFailed.joinToString(",") { it.str() },
+                        if (validator.bool("passed")) GOOD else BAD,
+                    )
+                    KvRow("detector · setup · side", "${cand.text("detector_id")} · ${cand.text("setup_type")} · ${cand.text("direction")}", NEUTRAL)
+                    KvRow("entry zone", "${cand.obj("entry_zone").text("low")} – ${cand.obj("entry_zone").text("high")}", NEUTRAL)
+                    KvRow("stop · invalidation", "${cand.text("provisional_stop")} · ${cand.text("invalidation_price")}", NEUTRAL)
+                    KvRow("market", "${mkt.text("regime")} regime · spread ${mkt.text("spread_bps")} bps", NEUTRAL)
+                    KvRow(
+                        "input_hash",
+                        chain.text("input_hash").let { if (it.length > 18) it.take(18) + "…" else it },
+                        if (fabL.any { it.text("field") == "input_hash" }) BAD else NEUTRAL,
+                    )
+                    if (fabL.isNotEmpty()) {
+                        MiniTable(
+                            listOf("fabricated field", "value"),
+                            fabL.take(6).map { f ->
+                                val v = f.text("value")
+                                row(f.text("field") to BAD, (if (v.length > 14) v.take(14) + "…" else v) to BAD)
+                            },
+                        )
+                    }
+                    if (nullsL.isNotEmpty()) {
+                        MiniTable(
+                            listOf("absent field", "why (honest)"),
+                            nullsL.take(8).map { a -> row(a.text("field") to UNK, a.text("reason") to UNK) },
+                        )
+                    }
+                    Note("Absences are honest nulls with named reasons (never zeros); fabrications render as defects — the two are never conflated (T-4).")
+                }
             }
         }
         McCard("Detector + gate mix (T-4)", "get_trade_logs") {
@@ -393,6 +658,10 @@ fun DatabankScreen(repo: MissionRepository) {
     val bank = d["get_databank"] as? JsonObject
     val shadow = d["get_shadow_bank"] as? JsonObject
     val bookDefs = d["get_book_definitions"] as? JsonObject
+    // Wave-2 bank endpoints (polled — all zero-required-arg, verified live).
+    val bankRows = d["get_bank_rows"] as? JsonObject
+    val tableCensus = d["get_table_census"] as? JsonObject
+    val colCensus = d["get_column_census"] as? JsonObject
 
     // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): a malformed payload
     // degrades to all-absent readers rather than throwing out of composition and blanking the screen.
@@ -500,6 +769,125 @@ fun DatabankScreen(repo: MissionRepository) {
                 Note("net_pnl_r is per-selection over distinct decisions — never a cross-cohort P&L sum (${shadow.text("note", "triad-cf/1")}). ${total ?: "—"} rows, ${byOutcome.entries.size} outcome classes.")
             }
         }
+        McCard("Bank rows — the dup-indexed ledger (D-4)", "get_bank_rows") {
+            if (bankRows == null) {
+                Note("get_bank_rows unavailable — the paged bank endpoint did not answer.", UNK)
+            } else {
+                val rws = guardDerive(emptyList<JsonObject>()) { bankRows.field("rows").rows() }
+                val bankTotal = bankRows.int("total")
+                val distinctDec = bankRows.int("distinct_decisions")
+                val inflation = guardDerive(null) {
+                    if (bankTotal != null && distinctDec != null && distinctDec > 0) bankTotal.toDouble() / distinctDec else null
+                }
+                StatRow(
+                    Triple("total", "${bankTotal ?: "—"}", NEUTRAL),
+                    Triple("distinct", "${distinctDec ?: "—"}", NEUTRAL),
+                    Triple("inflation", inflation?.let { "×${fmt(it, 2)}" } ?: "—", if ((inflation ?: 1.0) > 1.0) BAD else GOOD),
+                    Triple("page", "${bankRows.int("page") ?: "—"} · ${bankRows.int("page_size") ?: "—"}/pg", NEUTRAL),
+                )
+                if (rws.isEmpty()) {
+                    Note("No bank rows on this page.", UNK)
+                } else {
+                    MiniTable(
+                        listOf("decision", "symbol", "cohort", "outcome", "pnl_r", "gate", "dup"),
+                        rws.take(8).map { r ->
+                            val dupOf = r.field("dup_of").str()
+                            row(
+                                r.text("decision_id").take(10) to NEUTRAL,
+                                r.text("symbol").removeSuffix("-USDT-PERP") to NEUTRAL,
+                                r.text("cohort") to NEUTRAL,
+                                r.text("outcome") to outcomeTone(r.text("outcome")),
+                                (r.num("pnl_r")?.let { fmt(it, 2) } ?: "—") to pnlTone(r.num("pnl_r")),
+                                r.text("gate_reason") to (if (r.text("gate_reason") in listOf("error", "timeout")) WARN else NEUTRAL),
+                                (if (dupOf != "—") "→${dupOf.take(6)}" else "orig") to (if (dupOf != "—") WARN else NEUTRAL),
+                            )
+                        },
+                    )
+                    if (rws.size > 8) Note("Showing 8 of ${rws.size} page rows.", UNK)
+                }
+                Note(bankRows.text("note", "every duplicate row names which row it duplicates (dup_of) — dedup before you count."), INFO)
+            }
+        }
+        McCard("Table census — counter vs table (D-1)", "get_table_census") {
+            if (tableCensus == null) {
+                Note("get_table_census unavailable.", UNK)
+            } else {
+                val tabs = guardDerive(emptyList<JsonObject>()) { tableCensus.field("tables").rows() }
+                if (tabs.isEmpty()) {
+                    Note("No tables reported.", UNK)
+                } else {
+                    // Tables ranked by row count as a horizontal bar chart — a non-OK status is a HOLE.
+                    HBarChart(
+                        tabs.sortedByDescending { it.num("rows") ?: 0.0 }.take(11).mapNotNull { t ->
+                            val tn = t.num("rows") ?: return@mapNotNull null
+                            Bar(t.text("name"), tn, if (t.text("status") == "OK") NEUTRAL else BAD)
+                        },
+                        labelWidth = 110,
+                    )
+                    MiniTable(
+                        listOf("table", "rows", "distinct", "Δ", "status"),
+                        tabs.map { t ->
+                            val st = t.text("status")
+                            row(
+                                t.text("name") to NEUTRAL,
+                                "${t.int("rows") ?: "—"}" to NEUTRAL,
+                                "${t.int("distinct_key") ?: "—"}" to NEUTRAL,
+                                "${t.int("delta") ?: "—"}" to (if ((t.int("delta") ?: 0) != 0) WARN else NEUTRAL),
+                                st to (if (st == "OK") GOOD else BAD),
+                            )
+                        },
+                    )
+                }
+                val holes = guardDerive(emptyList<JsonElement>()) { tableCensus.field("holes").list() }
+                if (holes.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth().padding(top = 6.dp).horizontalScroll(rememberScrollState())) {
+                        holes.forEach { h -> Tag("HOLE · ${h.str()}", BAD) }
+                    }
+                }
+                Note(tableCensus.text("rule", "a table whose health counter exceeds its row count is a HOLE, not a lag."), WARN)
+            }
+        }
+        McCard("Column census — fill vs null, every column", "get_column_census") {
+            if (colCensus == null) {
+                Note("get_column_census unavailable.", UNK)
+            } else {
+                val ctabs = guardDerive(emptyList<JsonObject>()) { colCensus.field("tables").rows() }
+                if (ctabs.isEmpty()) {
+                    Note("No column census reported.", UNK)
+                } else {
+                    // Worst-filled columns across all tables — null share computed from the wire's
+                    // own nulls/rows counts (no reliance on null_pct scaling).
+                    val worst = guardDerive(emptyList<Bar>()) {
+                        ctabs.flatMap { t ->
+                            val tn = t.text("name")
+                            val trows = t.num("rows") ?: 0.0
+                            t.field("columns").rows().mapNotNull { c ->
+                                val nulls = c.num("nulls") ?: return@mapNotNull null
+                                if (trows <= 0.0 || nulls <= 0.0) null
+                                else Bar("$tn.${c.text("name")}", nulls / trows * 100, if (nulls / trows >= 0.5) BAD else WARN)
+                            }
+                        }.sortedByDescending { it.value }.take(8)
+                    }
+                    if (worst.isEmpty()) Note("No null-bearing columns in the census — every counted column is filled.", GOOD)
+                    else HBarChart(worst, unit = "%", labelWidth = 150)
+                    MiniTable(
+                        listOf("table", "cols", "null cols", "non-OK"),
+                        ctabs.map { t ->
+                            val cols = guardDerive(emptyList<JsonObject>()) { t.field("columns").rows() }
+                            val nullCols = cols.count { (it.num("nulls") ?: 0.0) > 0.0 }
+                            val nonOk = cols.count { it.text("verdict") !in listOf("OK", "—") }
+                            row(
+                                t.text("name") to NEUTRAL,
+                                "${cols.size}" to NEUTRAL,
+                                "$nullCols" to (if (nullCols > 0) WARN else GOOD),
+                                "$nonOk" to (if (nonOk > 0) BAD else GOOD),
+                            )
+                        },
+                    )
+                }
+                Note(colCensus.text("note", "every column of every table, always; a named reason for nulls."), INFO)
+            }
+        }
         McCard("Book definitions & independence", "get_book_definitions") {
             val books = bookDefs.obj("books")
             if (books == null) {
@@ -548,17 +936,30 @@ fun DatabankScreen(repo: MissionRepository) {
 @Composable
 fun QueryConsoleScreen(repo: MissionRepository) {
     val scope = rememberCoroutineScope()
+    val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, QUERY_CONSOLE_TOOLS))
+    val s by vm.state.collectAsState()
+    val d = s.data
+    val viewCat = d["get_view_catalog"] as? JsonObject
+    val queryCat = d["get_query_catalog"] as? JsonObject
+    val catViews = guardDerive(emptyList<JsonObject>()) { viewCat.field("views").rows() }
+    val catQueries = guardDerive(emptyList<JsonObject>()) { queryCat.field("queries").rows() }
+
     var sql by remember { mutableStateOf("SELECT detector_id, COUNT(*) AS n FROM candidates GROUP BY detector_id ORDER BY n DESC") }
     var columns by remember { mutableStateOf<List<String>>(emptyList()) }
     var resultRows by remember { mutableStateOf<List<List<Pair<String, Tone>>>>(emptyList()) }
     var status by remember { mutableStateOf<Pair<String, Tone>?>(null) }
     var running by remember { mutableStateOf(false) }
+    // Per-run server lint + plan (get_query_lint / explain_query both REQUIRE sql — never polled;
+    // they run alongside every ▶ RUN over the exact SQL in the editor).
+    var lintData by remember { mutableStateOf<JsonObject?>(null) }
+    var explainData by remember { mutableStateOf<JsonObject?>(null) }
 
     ViewScaffold(
         View.QUERY_CONSOLE,
         stance = listOf(
             Stance("stance", "MINED", WARN),
-            Stance("views", "allowlisted", NEUTRAL),
+            Stance("views", if (catViews.isEmpty()) "allowlisted" else "${catViews.size} servable", NEUTRAL),
+            Stance("catalog", if (catQueries.isEmpty()) "—" else "${queryCat.int("count") ?: catQueries.size}", NEUTRAL),
             Stance("write path", "none", GOOD),
             Stance("last run", status?.first ?: "—", status?.second ?: NEUTRAL),
         ),
@@ -573,16 +974,25 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                // Canned queries hit ALLOWLISTED views only (shadow_trades is not servable):
-                // candidates decisions fills health intents mcp_audit orders outcomes refusals.
-                CannedButton("funnel") {
-                    sql = "SELECT verdict, COUNT(*) AS n FROM decisions GROUP BY verdict ORDER BY n DESC"
-                }
-                CannedButton("refusals") {
-                    sql = "SELECT check_id, COUNT(*) AS n FROM refusals GROUP BY check_id ORDER BY n DESC"
-                }
-                CannedButton("outcomes") {
-                    sql = "SELECT label, COUNT(*) AS n, ROUND(AVG(pnl_r), 3) AS avg_pnl_r FROM outcomes GROUP BY label ORDER BY n DESC"
+                // The canned list IS the server catalog when it answers (get_query_catalog — Q-6:
+                // the saved query is the unit of knowledge); the three built-ins are the fallback.
+                if (catQueries.isEmpty()) {
+                    // Canned queries hit ALLOWLISTED views only (shadow_trades is not servable):
+                    // candidates decisions fills health intents mcp_audit orders outcomes refusals.
+                    CannedButton("funnel") {
+                        sql = "SELECT verdict, COUNT(*) AS n FROM decisions GROUP BY verdict ORDER BY n DESC"
+                    }
+                    CannedButton("refusals") {
+                        sql = "SELECT check_id, COUNT(*) AS n FROM refusals GROUP BY check_id ORDER BY n DESC"
+                    }
+                    CannedButton("outcomes") {
+                        sql = "SELECT label, COUNT(*) AS n, ROUND(AVG(pnl_r), 3) AS avg_pnl_r FROM outcomes GROUP BY label ORDER BY n DESC"
+                    }
+                } else {
+                    catQueries.forEach { q ->
+                        val qs = q.text("sql", "")
+                        if (qs.isNotEmpty()) CannedButton(q.text("id", "Q-?")) { sql = qs }
+                    }
                 }
             }
             OutlinedTextField(
@@ -596,6 +1006,13 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                 running = true
                 status = null
                 scope.launch {
+                    // Q-1 lint before you run + Q-4 the pre-run truncation forecast — both
+                    // server-side, over this exact SQL, shown in the Lint + plan card. Advisory:
+                    // a red rule never blocks the (read-only) run, it names the trap in the result.
+                    lintData = repo.tool("get_query_lint", buildJsonObject { put("sql", sql) })
+                        .envelope.data as? JsonObject
+                    explainData = repo.tool("explain_query", buildJsonObject { put("sql", sql) })
+                        .envelope.data as? JsonObject
                     val res = repo.tool("run_select", buildJsonObject { put("sql", sql) })
                     val data = res.envelope.data as? JsonObject
                     val ok = res.envelope.ok
@@ -616,6 +1033,48 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                 }
             }
         }
+        McCard("Lint + plan (Q-1 / Q-4)", "get_query_lint · explain_query") {
+            val lint = lintData
+            val plan = explainData
+            if (lint == null && plan == null) {
+                Note("Run a query — the server lints it (triad-lint rules) and explains the rewrite/truncation plan here, before you read the result. Both tools take the SQL as an argument, so they fire per run, never on the poll.", INFO)
+            } else {
+                if (lint != null) {
+                    val rules = guardDerive(emptyList<JsonObject>()) { lint.field("rules").rows() }
+                    KvRow(
+                        "max severity",
+                        lint.text("max_severity", "clean") + " · " + lint.text("ruleset_version", "—"),
+                        sevTone(lint.text("max_severity", "clean")),
+                    )
+                    if (rules.isEmpty()) {
+                        Note("No lint rules fired — clean under ${lint.text("ruleset_version", "—")}.", GOOD)
+                    } else {
+                        MiniTable(
+                            listOf("rule", "name", "sev", "fix"),
+                            rules.take(6).map { r ->
+                                row(
+                                    r.text("id") to sevTone(r.text("severity")),
+                                    r.text("name") to NEUTRAL,
+                                    r.text("severity") to sevTone(r.text("severity")),
+                                    r.text("fix") to NEUTRAL,
+                                )
+                            },
+                        )
+                    }
+                }
+                if (plan != null) {
+                    KvRow(
+                        "will truncate",
+                        "${plan.bool("will_truncate")} · est ${plan.int("est_rows") ?: "—"} rows vs limit ${plan.int("effective_limit") ?: "—"}",
+                        if (plan.bool("will_truncate")) WARN else GOOD,
+                    )
+                    val rewrites = guardDerive(emptyList<JsonElement>()) { plan.field("rewrites").list() }
+                    if (rewrites.isNotEmpty()) Note("Rewrites: " + rewrites.joinToString("; ") { it.str() }, INFO)
+                    Note("SQL that will run: ${plan.text("sql_out", "—")}")
+                }
+                Note("Q-4: a silent truncation is a lie — will_truncate is computed BEFORE the query runs; the result card below shows the SQL that actually ran (Q-3).", INFO)
+            }
+        }
         McCard("Result + provenance (Q-3 / Q-4)", "run_select") {
             when {
                 status?.second == BAD -> Note("Query error: ${status?.first} — the guard/binder rejected it. A rejection is surfaced, never swallowed.", BAD)
@@ -626,6 +1085,49 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                     if (resultRows.size > 25) Note("Showing first 25 of ${resultRows.size} returned rows.", UNK)
                     Note("AP/1 — a cohort with n < 30 is an anecdote, not evidence: read any COUNT(*) column against the 30-row floor before you draw a conclusion.", WARN)
                 }
+            }
+        }
+        McCard("Query catalog — the saved units of knowledge (Q-6)", "get_query_catalog") {
+            if (queryCat == null) {
+                Note("get_query_catalog unavailable — the canned pills fall back to the three built-ins.", UNK)
+            } else if (catQueries.isEmpty()) {
+                Note("Catalog empty — no saved queries server-side.", UNK)
+            } else {
+                KvRow("queries", "${queryCat.int("count") ?: catQueries.size}", NEUTRAL)
+                MiniTable(
+                    listOf("id", "title", "lint", "finding"),
+                    catQueries.take(13).map { q ->
+                        val lintIds = guardDerive("") { q.field("lint").list().joinToString("+") { it.str() } }
+                        row(
+                            q.text("id") to NEUTRAL,
+                            q.text("title") to NEUTRAL,
+                            lintIds.ifEmpty { "—" } to (if (lintIds.isEmpty()) NEUTRAL else WARN),
+                            q.text("finding") to NEUTRAL,
+                        )
+                    },
+                )
+                Note(queryCat.text("note", "powers is the provenance edge — a changed finding stales every page that cites it."), INFO)
+            }
+        }
+        McCard("View catalog — what run_select can see (Q-7)", "get_view_catalog") {
+            if (viewCat == null) {
+                Note("get_view_catalog unavailable — the servable-views list did not answer.", UNK)
+            } else if (catViews.isEmpty()) {
+                Note("No servable views listed.", UNK)
+            } else {
+                MiniTable(
+                    listOf("view", "rows", "cols", "defects"),
+                    catViews.map { v ->
+                        val defects = guardDerive(emptyList<JsonElement>()) { v.field("defects").list() }
+                        row(
+                            v.text("name") to NEUTRAL,
+                            "${v.int("rows") ?: "—"}" to (if ((v.int("rows") ?: 0) == 0) UNK else NEUTRAL),
+                            "${v.int("column_count") ?: "—"}" to NEUTRAL,
+                            (if (defects.isEmpty()) "none" else defects.joinToString(" · ") { it.str() }) to (if (defects.isEmpty()) GOOD else BAD),
+                        )
+                    },
+                )
+                Note(viewCat.text("note", "the machine-readable view catalog — a table not here is rejected by run_select (Q-7)."), INFO)
             }
         }
         LawBlock("Q-1..Q-7", "Lint before you run · read-only and say so · show the query that ran · a silent truncation is a lie · an aggregate over a dup table is a lie · the saved query is the unit of knowledge · the schema is in the room.")

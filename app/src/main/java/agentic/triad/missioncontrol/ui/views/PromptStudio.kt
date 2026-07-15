@@ -51,13 +51,17 @@ import agentic.triad.missioncontrol.ui.components.Tone.NEUTRAL
 import agentic.triad.missioncontrol.ui.components.Tone.SEV
 import agentic.triad.missioncontrol.ui.components.Tone.UNK
 import agentic.triad.missioncontrol.ui.components.Tone.WARN
+import agentic.triad.missioncontrol.ui.components.VerdictBanner
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
+import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.fg
 import agentic.triad.missioncontrol.ui.components.guardDerive
 import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.num
 import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.soft
+import agentic.triad.missioncontrol.ui.components.str
+import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.nav.View
 import io.ktor.client.HttpClient
 import io.ktor.client.request.post
@@ -67,6 +71,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -74,12 +79,28 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
 // ── PROMPT STUDIO (view 10) — modular prompt · direct to the LLM · measured · versioned ──────────
-// P-1..P-6 · the studio is the one page in Mission Control that is NOT an MCP client. It reads three
-// MCP tools to draw the thesis (validator kills + limits), composes the prompt client-side from the
+// P-1..P-6 · the studio's RUN path is the one in Mission Control that is NOT an MCP client. It reads
+// four MCP tools to draw the thesis (validator kills + limits + the preset + prompt_get, the applied
+// prompt as server truth — LIVE since the wave-3 drop), composes the prompt client-side from the
 // 14 packet-named blocks, and — only once explicitly armed — POSTs directly to Ollama and reports the
 // MEASURED bench. History is append-only; export files a proposal and applies nothing (R-C1).
 
-private val PROMPT_TOOLS = listOf("get_validator_rejects", "get_limits", "get_config_preset")
+private val PROMPT_TOOLS = listOf("get_validator_rejects", "get_limits", "get_config_preset", "prompt_get")
+
+/** A field that may be served as literal JSON null — em-dash for absent AND null (the honest-nulls
+ *  law). `text()` alone would print "null" for a JsonNull value, which reads as a fabricated word. */
+private fun nn(o: JsonObject?, key: String): String {
+    val v = o?.get(key)
+    return if (v == null || v is JsonNull) "—" else v.str()
+}
+
+/** Shorten a sha256 fingerprint for a KV cell — tolerant of absent/null-literal values. */
+private fun shortFp(raw: String): String {
+    if (raw.isEmpty() || raw == "—" || raw == "null") return "—"
+    var t = raw
+    while (t.startsWith("sha256:")) t = t.removePrefix("sha256:")
+    return "sha256:" + t.take(8)
+}
 
 // The direct-to-LLM target, from the preset (P-3). NOT the MCP.
 private const val OLLAMA_BASE = "http://10.0.0.2:11434"
@@ -152,6 +173,14 @@ fun PromptStudioScreen(repo: MissionRepository) {
     val deadlineP95 = guardDerive(10) { intel.num("deadline_p95_s")?.toInt() ?: 10 }
     val deadlineCap = guardDerive(12) { intel.num("deadline_cap_s")?.toInt() ?: 12 }
     val budgetTokens = 2009 // the export target tokens (§5); the meter grades against it
+
+    // ── prompt_get — the applied prompt, server truth (LIVE since wave-3; was the §7 PEND) ──
+    // Probed shape: {preset, fingerprint, applied_at, prompt_template(null), prompt_draft_system(""),
+    //   prompt_draft_notes(""), prompt_pinned, render_context{status,reason}, writable, note}
+    val pg = d["prompt_get"] as? JsonObject
+    val pgTemplate = nn(pg, "prompt_template")
+    val pgTemplateReal = pgTemplate != "—" && pgTemplate.isNotEmpty()
+    val pgPinned = pg.bool("prompt_pinned")
 
     // ── composer state — the 14 blocks (AT-P1) ──
     val blocks = remember { defaultBlocks().toMutableStateList() }
@@ -351,10 +380,10 @@ fun PromptStudioScreen(repo: MissionRepository) {
             KvRow("params", "temperature 0 · seed 7", NEUTRAL)
             KvRow("state", if (armed) "ARMED" else "OFF · zero fetches to the LLM have been made", if (armed) BAD else UNK)
             Note(
-                "This is the one page in Mission Control that is NOT an MCP client — MCP is read-only and " +
-                    "has no prompt tool. The honest constraint: a direct call needs OLLAMA_ORIGINS set on the " +
-                    "Ollama process and a route to a private address. If it fails, the page shows the network " +
-                    "error — it does not fake a result (AT-P7).",
+                "The RUN path is the one in Mission Control that is NOT an MCP client — MCP is read-only " +
+                    "(prompt_get reads the applied prompt; there is still no prompt_set). The honest constraint: " +
+                    "a direct call needs OLLAMA_ORIGINS set on the Ollama process and a route to a private " +
+                    "address. If it fails, the page shows the network error — it does not fake a result (AT-P7).",
             )
             if (!armed && !confirming) {
                 Button(onClick = { confirming = true }) { Text("Arm studio") }
@@ -516,9 +545,69 @@ fun PromptStudioScreen(repo: MissionRepository) {
             )
         }
 
-        // ── PEND — prompt_get / prompt_set are not on the server (§7 / AT-P16) ──
-        PendBox("prompt_get", "§7 · not on the server — all 77 tools are reads. The studio composes client-side.")
-        PendBox("prompt_set", "§7 · not on the server — the only write is propose_action (AT-P16).")
+        // ── §7 · prompt_get is LIVE (server truth); prompt_set stays absent (AT-P16) ──
+        McCard("The applied prompt — server truth", "prompt_get") {
+            if (pg == null) {
+                Note("no data — prompt_get not served yet. The studio still composes client-side.", UNK)
+            } else {
+                KvRow("preset", pg.text("preset"), NEUTRAL)
+                KvRow("fingerprint", shortFp(pg.text("fingerprint")), NEUTRAL)
+                KvRow("applied_at", pg.text("applied_at"), NEUTRAL)
+                if (pgTemplateReal) {
+                    VerdictBanner(
+                        word = "PROMPT PINNED",
+                        said = "prompt_template is present in the applied preset — the fingerprint covers the " +
+                            "prompt (P-1/L-2 hold).",
+                        pills = listOf(
+                            (if (pgPinned) "PROMPT_PINNED TRUE" else "PROMPT_PINNED FALSE") to
+                                (if (pgPinned) GOOD else WARN),
+                        ),
+                        wordTone = GOOD,
+                    )
+                    KvRow("prompt_template", "\"${pgTemplate.take(60)}\"", GOOD)
+                } else {
+                    VerdictBanner(
+                        word = "NO PROMPT IN THE PRESET",
+                        said = "prompt_template is null — the fingerprint does not cover the prompt (P-1/L-2). " +
+                            "This is the page's whole thesis, now server-attested: the prompt the model runs " +
+                            "under is not part of the config it is fingerprinted by.",
+                        pills = listOf(
+                            "PROMPT_PINNED FALSE" to BAD,
+                            "WRITABLE FALSE" to UNK,
+                            nn(pg.obj("render_context"), "status").uppercase() to BAD,
+                        ),
+                        wordTone = BAD,
+                    )
+                }
+                val ds = pg.text("prompt_draft_system", "")
+                val dn = pg.text("prompt_draft_notes", "")
+                KvRow(
+                    "prompt_draft_system",
+                    if (ds.isEmpty() || ds == "null") "—" else "\"${ds.take(60)}\"",
+                    if (ds.isEmpty() || ds == "null") UNK else NEUTRAL,
+                )
+                KvRow(
+                    "prompt_draft_notes",
+                    if (dn.isEmpty() || dn == "null") "—" else "\"${dn.take(60)}\"",
+                    if (dn.isEmpty() || dn == "null") UNK else NEUTRAL,
+                )
+                KvRow(
+                    "writable",
+                    if (pg.bool("writable")) "true" else "false — writes stay the governed proposal path",
+                    UNK,
+                )
+                pg.obj("render_context")?.let { rc ->
+                    KvRow("render_context", nn(rc, "status"), if (nn(rc, "status") == "ok") GOOD else BAD)
+                    Note(nn(rc, "reason"), NEUTRAL)
+                }
+                Note(nn(pg, "note"), NEUTRAL)
+            }
+        }
+        PendBox(
+            "prompt_set",
+            "§7 · still not on the server — prompt_get is live but writable:false; the only write is " +
+                "propose_action (AT-P16).",
+        )
 
         LawBlock(
             "P-1..P-6",

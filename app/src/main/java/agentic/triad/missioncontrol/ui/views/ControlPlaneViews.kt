@@ -22,6 +22,7 @@ import agentic.triad.missioncontrol.TriadApp
 import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.Funnel
+import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -42,11 +43,14 @@ import agentic.triad.missioncontrol.ui.components.Tone.WARN
 import agentic.triad.missioncontrol.ui.components.VerdictBanner
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.arr
+import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.field
+import agentic.triad.missioncontrol.ui.components.fmt
 import agentic.triad.missioncontrol.ui.components.guardDerive
 import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.list
 import agentic.triad.missioncontrol.ui.components.num
+import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.str
 import agentic.triad.missioncontrol.ui.components.text
@@ -259,7 +263,9 @@ fun ConnectionsScreen(repo: MissionRepository) {
 //  needs mcp_toggle. The page says so in as many words. C-1..C-6.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
-private val MCP_TOOLS = listOf("list_docs")
+// list_docs proves the CLIENT window; get_mcp_audit_summary (wave-3, probed live, zero-arg) is the
+// server's own call ledger — calls/failures/latency per tool + the may_render_green rule.
+private val MCP_TOOLS = listOf("list_docs", "get_mcp_audit_summary")
 
 @Composable
 fun McpScreen(repo: MissionRepository) {
@@ -351,6 +357,62 @@ fun McpScreen(repo: MissionRepository) {
                     "In as many words: this is a CLIENT switch, not a SYSTEM switch.",
                 WARN,
             )
+        }
+
+        McCard("MCP audit — calls, failures, and who may render green", "get_mcp_audit_summary") {
+            val audit = d["get_mcp_audit_summary"] as? JsonObject
+            if (audit == null) {
+                Note("get_mcp_audit_summary not served — the audit is honestly UNKNOWN.", UNK)
+            } else {
+                val totals = audit.obj("totals")
+                val failRate = totals.num("fail_rate")
+                StatRow(
+                    Triple("calls", totals.int("calls")?.toString() ?: "—", NEUTRAL),
+                    Triple("failures", totals.int("failures")?.toString() ?: "—", if ((totals.int("failures") ?: 0) > 0) BAD else GOOD),
+                    Triple("fail rate", failRate?.let { "${fmt(it * 100, 1)}%" } ?: "—", if ((failRate ?: 0.0) > 0.05) BAD else GOOD),
+                )
+                val byTool = guardDerive(emptyList<JsonObject>()) { audit.arr("by_tool").rows() }
+                KvRow("tools audited", if (byTool.isEmpty()) "—" else byTool.size.toString(), NEUTRAL)
+                val barred = guardDerive(0) { byTool.count { !it.bool("may_render_green") } }
+                KvRow(
+                    "barred from rendering green",
+                    if (byTool.isEmpty()) "—" else "$barred of ${byTool.size}",
+                    if (barred > 0) WARN else GOOD,
+                )
+                // The heaviest callers' traffic, by tool. (No by-caller split is served — see the note.)
+                val topBars = guardDerive(emptyList<Bar>()) {
+                    byTool.sortedByDescending { it.num("calls") ?: 0.0 }.take(10).map { t ->
+                        Bar(
+                            t.text("tool", "—"),
+                            t.num("calls") ?: 0.0,
+                            if (t.bool("may_render_green")) NEUTRAL else WARN,
+                            "fail ${t.num("fail_rate")?.let { fmt(it * 100, 1) + "%" } ?: "—"} · p99 ${fmt(t.num("p99_ms"), 1)} ms",
+                        )
+                    }
+                }
+                if (topBars.isNotEmpty()) HBarChart(topBars, labelWidth = 148)
+                // The worst failers over the 5% rule (≥10 calls, fail_rate desc).
+                val worst = guardDerive(emptyList<JsonObject>()) {
+                    byTool.filter { (it.num("calls") ?: 0.0) >= 10 && (it.num("fail_rate") ?: 0.0) > 0.05 }
+                        .sortedByDescending { it.num("fail_rate") ?: 0.0 }
+                        .take(8)
+                }
+                if (worst.isNotEmpty()) {
+                    MiniTable(
+                        listOf("tool", "calls", "fail rate", "green?"),
+                        worst.map { t ->
+                            row(
+                                t.text("tool", "—") to NEUTRAL,
+                                (t.int("calls")?.toString() ?: "—") to NEUTRAL,
+                                (t.num("fail_rate")?.let { "${fmt(it * 100, 1)}%" } ?: "—") to BAD,
+                                (if (t.bool("may_render_green")) "yes" else "BARRED") to (if (t.bool("may_render_green")) GOOD else WARN),
+                            )
+                        },
+                    )
+                }
+                Note(audit.text("rule", "a tool whose fail_rate exceeds 0.05 may not have its output rendered as green"), WARN)
+                Note("No by-caller split and no deny ledger in this envelope — caller attribution renders — until the server ships it.", UNK)
+            }
         }
 
         McCard("SYSTEM controls — the estate's MCP, absent and proposed", "propose_action") {

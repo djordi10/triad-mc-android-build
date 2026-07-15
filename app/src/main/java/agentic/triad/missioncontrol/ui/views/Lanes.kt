@@ -21,7 +21,6 @@ import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
-import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
@@ -34,32 +33,57 @@ import agentic.triad.missioncontrol.ui.components.Tone.NEUTRAL
 import agentic.triad.missioncontrol.ui.components.Tone.SEV
 import agentic.triad.missioncontrol.ui.components.Tone.UNK
 import agentic.triad.missioncontrol.ui.components.Tone.WARN
+import agentic.triad.missioncontrol.ui.components.VerdictBanner
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.field
 import agentic.triad.missioncontrol.ui.components.guardDerive
+import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.list
 import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.str
 import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.nav.View
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 //  LANES (view 14) — CSL-1 Config-Store Lane Overhaul, pointed at the live config store.
 //  Per TRIAD-Lanes-Wiring v1.0. LIVE readers: get_config_active (the ONE preset/fingerprint),
 //  get_config_preset (the applied document — the D2 disproof, the example.com placeholder, the 11
-//  domains), list_contracts (triad-lane/1 · change-plan/1 · triad-preset/1 NOT VENDORED), and
-//  get_go_no_go_status (the live lane's interlock — 0 of 9 evidenced today).
+//  domains), list_contracts (triad-lane/1 · change-plan/1 · triad-preset/1 NOT VENDORED),
+//  get_go_no_go_status (the live lane's interlock — 0 of 9 evidenced today), and — live since the
+//  wave-3 server drop — the four CSL-1 lane tools themselves: get_lanes (the D4 board),
+//  get_promotion_ledger (D5/L-6), get_preset_lineage (§5.3), export_config_bundle (§5.4).
 //
 //  The thesis: CSL-1 asks for five lanes → two preset identities. The store serves ONE preset and
 //  there is no candidate. Five lanes, one fingerprint — because there is only one thing to bind to.
 //  Read-only; the only write is propose_action (AT-L13). The GUI proposes, triadctl applies (L-7).
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
-private val LANES_TOOLS =
-    listOf("get_config_active", "get_config_preset", "list_contracts", "get_go_no_go_status")
+private val LANES_TOOLS = listOf(
+    "get_config_active", "get_config_preset", "list_contracts", "get_go_no_go_status",
+    // wave-3: the four CSL-1 lane tools, all zero-required-arg and [cheap] per tools/list —
+    // export_config_bundle takes only an OPTIONAL `lane` and is a read-only assembler, so it polls.
+    "get_lanes", "get_promotion_ledger", "get_preset_lineage", "export_config_bundle",
+)
+
+/** A field that may be served as literal JSON null — em-dash for absent AND null (the honest-nulls
+ *  law). `text()` alone would print "null" for a JsonNull value, which reads as a fabricated word. */
+private fun nn(o: JsonObject?, key: String): String {
+    val v = o?.get(key)
+    return if (v == null || v is JsonNull) "—" else v.str()
+}
+
+/** Shorten a sha256 fingerprint for a cell — tolerant of absent/null-literal values and of the
+ *  bundle's observed doubled `sha256:sha256:` prefix (shortened here, called out verbatim in §5.4). */
+private fun shortFp(raw: String): String {
+    if (raw.isEmpty() || raw == "—" || raw == "null") return "—"
+    var t = raw
+    while (t.startsWith("sha256:")) t = t.removePrefix("sha256:")
+    return "sha256:" + t.take(8)
+}
 
 /** One lane row of the board — its fixed identity plus a live-resolved binding tail. */
 private data class Lane(
@@ -136,6 +160,39 @@ fun LanesScreen(repo: MissionRepository) {
     val whitelist = guardDerive(emptyList<JsonObject>()) { domains.obj("symbols").field("whitelist").rows() }
     val symbolCount = whitelist.size
 
+    // ── the four CSL-1 lane tools — LIVE since the wave-3 drop; every derive crash-proof ──
+    // get_lanes: {lanes[{lane,binds,env,real_money,venue,overlay_fp,effective_fp,status,binds_ok}], strategy_fp, note}
+    val lanesEnv = d["get_lanes"] as? JsonObject
+    val laneRows = guardDerive(emptyList<JsonObject>()) { lanesEnv.field("lanes").rows() }
+    val strategyFp = lanesEnv.text("strategy_fp")
+
+    // get_promotion_ledger: {entries[], count, chain_verified, note} — 0 entries, chain_verified:false today.
+    val ledgerEnv = d["get_promotion_ledger"] as? JsonObject
+    val ledgerEntries = guardDerive(emptyList<JsonObject>()) { ledgerEnv.field("entries").rows() }
+    val ledgerCount = ledgerEnv.int("count") ?: ledgerEntries.size
+    val chainVerified = ledgerEnv.bool("chain_verified")
+
+    // get_preset_lineage: {preset, versions[{v,fp,ts,author,applied,notes}], candidate: null, note}
+    val lineageEnv = d["get_preset_lineage"] as? JsonObject
+    val versions = guardDerive(emptyList<JsonObject>()) { lineageEnv.field("versions").rows() }
+    val candidateEl = lineageEnv.field("candidate")
+    val candidateIsNull = candidateEl == null || candidateEl is JsonNull
+    val candidateLabel = guardDerive("—") {
+        when {
+            candidateIsNull -> "—"
+            candidateEl is JsonObject -> candidateEl.text("name", candidateEl.text("preset"))
+            else -> candidateEl.str()
+        }
+    }
+
+    // export_config_bundle: {schema, strategy_preset{name,fingerprint,schema,domains[]}, lane_overlay,
+    //   prompt{...}, prompt_pinned, lineage[], ledger[], effective_fp, exported_at, note}
+    val bundle = d["export_config_bundle"] as? JsonObject
+    val bundlePreset = bundle.obj("strategy_preset")
+    val bundleDomains = guardDerive(emptyList<String>()) { bundlePreset.field("domains").list().map { it.str() } }
+    val bundlePromptPinned = bundle.bool("prompt_pinned")
+    val bundleEffFp = bundle.text("effective_fp")
+
     // ── the lane board (AT-L1/L4/L5) — five lanes, resolved live ──
     val lanes = listOf(
         Lane(
@@ -180,7 +237,11 @@ fun LanesScreen(repo: MissionRepository) {
             Stance("fingerprint", fpShort, NEUTRAL),
             Stance("state", dirtyLabel, dirtyTone),
             Stance("lanes", "5", NEUTRAL),
-            Stance("candidate", "null", UNK),
+            Stance(
+                "candidate",
+                if (candidateIsNull) "null" else candidateLabel,
+                if (candidateIsNull) UNK else INFO,
+            ),
         ),
     ) {
         Ribbon(
@@ -198,7 +259,7 @@ fun LanesScreen(repo: MissionRepository) {
             Triple("candidate", "NONE", BAD),
             Triple("lanes", "5", NEUTRAL),
             Triple("lane schema", "ABSENT", BAD),
-            Triple("ledger", "0", BAD),
+            Triple("ledger", "$ledgerCount", if (ledgerCount == 0) BAD else NEUTRAL),
             Triple("applied fp", fpShort, NEUTRAL),
         )
 
@@ -368,41 +429,220 @@ fun LanesScreen(repo: MissionRepository) {
             )
         }
 
-        // ── §7 · the promotion ledger — ZERO ENTRIES, honestly (AT-L8) ──
-        McCard("§7 · promotion ledger — ZERO ENTRIES", "get_promotion_ledger (PEND)") {
-            KvRow("entries", "0", UNK)
-            KvRow("chain_verified", "— · no chain exists", UNK)
+        // ── §7 · the promotion ledger headline — live numbers, honestly (AT-L8) ──
+        McCard("§7 · promotion ledger — $ledgerCount ENTRIES", "get_promotion_ledger") {
+            KvRow("entries", "$ledgerCount", if (ledgerCount == 0) UNK else NEUTRAL)
+            KvRow(
+                "chain_verified",
+                if (chainVerified) "true" else if (ledgerCount == 0) "false · no chain to verify yet" else "false",
+                if (chainVerified) GOOD else if (ledgerCount == 0) UNK else BAD,
+            )
             Note(
                 "The applied preset ($presetName) was created ${meta.text("created")} and NOTHING records how it " +
-                    "got there. There is no promoter and no ledger yet — this is the get_promotion_ledger PEND, " +
-                    "reported honestly rather than back-filled.",
+                    "got there. get_promotion_ledger is LIVE now and reports $ledgerCount entries — the empty " +
+                    "ledger is served honestly rather than back-filled. Full panel in §5.2 below.",
                 WARN,
             )
         }
 
-        // ── §5 · PEND boxes — the tools CSL-1 needs but the server does not have ──
-        Note("The CSL-1 lane tools do not exist on the server yet — they render as PEND, never faked.", UNK)
-        PendBox(
-            "get_lanes",
-            "§5.1 · lane overlays + effective_fp = sha256(strategy_fp ‖ overlay_fp) (D4). triad-lane/1 is NOT " +
-                "vendored. The guard (live/paper may name only `applied`) must be enforced AT VERIFY, not warned " +
-                "about in a GUI.",
+        // ── §5 · the CSL-1 lane tools — LIVE on the server now, wired below ──
+        Note(
+            "The four CSL-1 lane tools are LIVE on the server now (get_lanes · get_promotion_ledger · " +
+                "get_preset_lineage · export_config_bundle) — the panels below read them directly, never faked. " +
+                "triad-lane/1 is still NOT vendored as a contract schema, and the live/paper guard (may bind only " +
+                "`applied`) must still be enforced AT VERIFY, not warned about in a GUI.",
+            INFO,
         )
-        PendBox(
-            "get_promotion_ledger",
-            "§5.2 · the D5 promoter. Append-only, hash-chained, chain_verified LOUD. Today 0 entries. L-6: " +
-                "ledger.decisions already reads chain_verified:false and broke P4 replay — do NOT ship a second " +
-                "unverifiable chain. Verify on write.",
-        )
-        PendBox(
-            "get_preset_lineage",
-            "§5.3 · rollback = promote a prior version, which requires a prior version. There is exactly one, with " +
-                "no recorded provenance. candidate: null.",
-        )
-        PendBox(
-            "export_config_bundle",
-            "§5.4 · must reproduce offline. It MUST include the prompt (L-2) or the bundle reproduces nothing.",
-        )
+
+        // ── §5.1 · get_lanes — the lane board, from the store itself (D4) ──
+        McCard("§5.1 · the lane board — live from the store", "get_lanes") {
+            KvRow("strategy_fp", shortFp(strategyFp), NEUTRAL)
+            if (laneRows.isEmpty()) {
+                Note("no data — get_lanes returned no lanes.", UNK)
+            } else {
+                MiniTable(
+                    listOf("lane", "binds", "env", "overlay_fp", "effective_fp", "status"),
+                    laneRows.map { l ->
+                        val real = l.bool("real_money")
+                        val status = l.text("status")
+                        val effShort = shortFp(nn(l, "effective_fp"))
+                        val statusTone = when {
+                            status.startsWith("INTERLOCKED") -> SEV
+                            status.startsWith("ABSENT") -> UNK
+                            status == "active" -> GOOD
+                            else -> NEUTRAL
+                        }
+                        listOf(
+                            l.text("lane") to (if (real) SEV else NEUTRAL),
+                            l.text("binds") to NEUTRAL,
+                            nn(l, "env") to NEUTRAL,
+                            shortFp(l.text("overlay_fp")) to NEUTRAL,
+                            effShort to (if (effShort == "—") UNK else GOOD),
+                            status to statusTone,
+                        )
+                    },
+                )
+                Note(
+                    "D4 · effective_fp = sha256(strategy_fp ‖ overlay_fp). The three applied-bound lanes " +
+                        "resolve; both playground lanes serve effective_fp null — no candidate to bind.",
+                    INFO,
+                )
+            }
+            Note(nn(lanesEnv, "note"), NEUTRAL)
+        }
+
+        // ── §5.2 · get_promotion_ledger — the D5 promoter ledger, chain verdict LOUD ──
+        McCard("§5.2 · the promotion ledger — append-only, hash-chained (D5/L-6)", "get_promotion_ledger") {
+            if (ledgerEnv == null) {
+                Note("no data — get_promotion_ledger not served.", UNK)
+            } else {
+                when {
+                    chainVerified -> VerdictBanner(
+                        word = "CHAIN VERIFIED",
+                        said = "chain_verified:true over $ledgerCount entries — every prev_hash → hash link holds.",
+                        pills = listOf("CHAIN_VERIFIED TRUE" to GOOD, "$ledgerCount ENTRIES" to NEUTRAL),
+                        wordTone = GOOD,
+                    )
+                    ledgerCount > 0 -> VerdictBanner(
+                        word = "CHAIN BROKEN",
+                        said = "chain_verified:false over $ledgerCount entries — a prev_hash → hash link does not " +
+                            "hold. L-6: do not trust an unverifiable chain; verify on write.",
+                        pills = listOf("CHAIN_VERIFIED FALSE" to BAD, "$ledgerCount ENTRIES" to BAD),
+                        wordTone = BAD,
+                    )
+                    else -> VerdictBanner(
+                        word = "EMPTY · UNVERIFIED",
+                        said = "chain_verified:false and 0 entries — there is no chain to verify yet. The applied " +
+                            "preset has no recorded provenance; served loud (L-6), not back-filled.",
+                        pills = listOf("CHAIN_VERIFIED FALSE" to WARN, "0 ENTRIES" to UNK),
+                        wordTone = WARN,
+                    )
+                }
+                if (ledgerEntries.isEmpty()) {
+                    Note(
+                        "0 entries — no promotions yet. Every promote/rollback lands here as a NEW row " +
+                            "(a rollback is action:rollback, never a rewrite), chained prev_hash → hash.",
+                        UNK,
+                    )
+                } else {
+                    MiniTable(
+                        listOf("ts", "action", "preset", "fp", "hash"),
+                        ledgerEntries.map { e ->
+                            listOf(
+                                nn(e, "ts") to NEUTRAL,
+                                nn(e, "action") to (if (e.text("action") == "rollback") WARN else NEUTRAL),
+                                nn(e, "preset") to NEUTRAL,
+                                shortFp(nn(e, "fp")) to NEUTRAL,
+                                shortFp(nn(e, "hash")) to NEUTRAL,
+                            )
+                        },
+                    )
+                }
+                Note(nn(ledgerEnv, "note"), NEUTRAL)
+            }
+        }
+
+        // ── §5.3 · get_preset_lineage — versions + the candidate callout ──
+        McCard("§5.3 · preset lineage — versions and the candidate", "get_preset_lineage") {
+            KvRow("preset", lineageEnv.text("preset"), NEUTRAL)
+            if (versions.isEmpty()) {
+                Note("no versions served — the lineage is empty.", UNK)
+            } else {
+                MiniTable(
+                    listOf("v", "fp", "ts", "author", "applied"),
+                    versions.map { v ->
+                        val applied = v.bool("applied")
+                        listOf(
+                            nn(v, "v") to NEUTRAL,
+                            shortFp(nn(v, "fp")) to NEUTRAL,
+                            nn(v, "ts") to NEUTRAL,
+                            nn(v, "author") to NEUTRAL,
+                            (if (applied) "APPLIED" else "—") to (if (applied) GOOD else UNK),
+                        )
+                    },
+                )
+                versions.firstOrNull()?.let { first ->
+                    val notes = nn(first, "notes")
+                    if (notes != "—") Note("v${nn(first, "v")} · $notes", NEUTRAL)
+                }
+            }
+            KvRow(
+                "candidate",
+                if (candidateIsNull) "— · null" else candidateLabel,
+                if (candidateIsNull) UNK else INFO,
+            )
+            if (candidateIsNull) {
+                Ribbon(
+                    "candidate: null — rollback has nothing to roll back to",
+                    "A rollback = promote a prior version, which requires a prior version. The lineage holds " +
+                        "exactly ${versions.size} — and the ledger records no provenance for it.",
+                    WARN,
+                )
+            }
+            Note(nn(lineageEnv, "note"), NEUTRAL)
+        }
+
+        // ── §5.4 · export_config_bundle — the offline-reproducibility manifest ──
+        McCard("§5.4 · the offline bundle — reproduce the config away from the box", "export_config_bundle") {
+            if (bundle == null) {
+                Note("no data — export_config_bundle not served.", UNK)
+            } else {
+                KvRow("bundle schema", bundle.text("schema"), NEUTRAL)
+                KvRow(
+                    "strategy preset",
+                    bundlePreset.text("name") + " · " + shortFp(bundlePreset.text("fingerprint")),
+                    NEUTRAL,
+                )
+                KvRow("preset schema", bundlePreset.text("schema"), NEUTRAL)
+                KvRow(
+                    "domains",
+                    "${bundleDomains.size}" +
+                        if (bundleDomains.isEmpty()) "" else " · " + bundleDomains.joinToString(" "),
+                    NEUTRAL,
+                )
+                KvRow(
+                    "lane_overlay",
+                    nn(bundle, "lane_overlay"),
+                    if (bundle.obj("lane_overlay") == null) UNK else NEUTRAL,
+                )
+                KvRow(
+                    "lineage · ledger rows",
+                    "${guardDerive(0) { bundle.field("lineage").rows().size }} · " +
+                        "${guardDerive(0) { bundle.field("ledger").rows().size }}",
+                    NEUTRAL,
+                )
+                KvRow(
+                    "prompt_template",
+                    if (bundlePromptPinned) "PINNED" else "null — NOT pinned",
+                    if (bundlePromptPinned) GOOD else BAD,
+                )
+                KvRow(
+                    "effective_fp",
+                    bundleEffFp.take(24) + if (bundleEffFp.length > 24) "…" else "",
+                    NEUTRAL,
+                )
+                if (bundleEffFp.startsWith("sha256:sha256:")) {
+                    Note(
+                        "Observed quirk: the bundle serves effective_fp with a doubled sha256: prefix — " +
+                            "rendered verbatim above, not repaired here.",
+                        WARN,
+                    )
+                }
+                KvRow("exported_at (µs epoch)", bundle.text("exported_at"), NEUTRAL)
+                if (bundlePromptPinned) {
+                    Note("prompt_pinned:true — the bundle covers the prompt (L-2 holds).", GOOD)
+                } else {
+                    Ribbon(
+                        "L-2 · the bundle must include the prompt — or it reproduces nothing",
+                        "The manifest carries the preset, the lane overlay, the lineage, the ledger, and the " +
+                            "prompt fields — but prompt_template is null, so prompt_pinned:false. A bundle whose " +
+                            "fingerprint does not cover the prompt cannot reproduce the decisions it attests to.",
+                        SEV,
+                    )
+                }
+                Note(nn(bundle, "note"), NEUTRAL)
+            }
+        }
 
         // ── §4 · the laws (L-1..L-7) + the ceremony note (L-7/AT-L10) ──
         LawBlock(
