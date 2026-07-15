@@ -21,7 +21,17 @@ android {
         buildConfigField("String", "DEFAULT_MODE", "\"DEMO\"")
     }
 
+    signingConfigs {
+        create("triad") {
+            storeFile = rootProject.file("triad-debug.keystore")
+            storePassword = "android"
+            keyAlias = "triaddebug"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        getByName("debug") { signingConfig = signingConfigs.getByName("triad") }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
