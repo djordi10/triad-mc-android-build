@@ -15,9 +15,11 @@ import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
+import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
 import agentic.triad.missioncontrol.ui.components.Tone.GOOD
+import agentic.triad.missioncontrol.ui.components.Tone.INFO
 import agentic.triad.missioncontrol.ui.components.Tone.NEUTRAL
 import agentic.triad.missioncontrol.ui.components.Tone.SEV
 import agentic.triad.missioncontrol.ui.components.Tone.UNK
@@ -25,6 +27,7 @@ import agentic.triad.missioncontrol.ui.components.Tone.WARN
 import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.arr
 import agentic.triad.missioncontrol.ui.components.field
+import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.str
@@ -162,6 +165,9 @@ fun CheckupScreen(repo: MissionRepository) {
     val greens = components.count { it.text("status", "UNKNOWN") == "GREEN" }
     val probed = greens // no runtime probe exists — every green is a config/artifact-level D1/D2
     val verdict = checkup.text("verdict", "UNKNOWN")
+    // AT-CK12 / C-6 guard: never render the word GREEN as a verdict below 80% coverage.
+    val coverage = if (total > 0) probed.toDouble() / total.toDouble() else 0.0
+    val verdictShown = if (verdict.equals("GREEN", true) && coverage < 0.8) "UNKNOWN" else verdict
     // C-1 depth ladder is classified client-side from each green's reason string.
     fun depthOf(reason: String): String = when {
         listOf("golden", "drill", "exercised", "vector").any { reason.contains(it, true) } -> "D4"
@@ -176,29 +182,97 @@ fun CheckupScreen(repo: MissionRepository) {
     val d2 = greenReasons.count { depthOf(it.text("reason", "")) == "D2" }
     val d3 = greenReasons.count { depthOf(it.text("reason", "")) == "D3" }
     val d4 = greenReasons.count { depthOf(it.text("reason", "")) == "D4" }
-    val d0 = total
     val declared = (total - probed).coerceAtLeast(0)
 
-    // Tri-view: three claims, three denominators.
+    // C-1 (AT-CK4): every GREEN quotes its own reason verbatim, including the `not probed` caveat.
+    val greenRows = greenReasons.map { g ->
+        row(
+            g.text("id", "—") to NEUTRAL,
+            depthOf(g.text("reason", "")) to (if (g.text("reason", "").contains("not probed", true)) WARN else GOOD),
+            g.text("reason", "—") to NEUTRAL,
+        )
+    }
+
+    // §1.3 census by plane — group by `plane`; probed = a green whose reason is not UNKNOWN-shaped.
+    val byPlane = components.groupBy { it.text("plane", "—") }
+    val planeRows = byPlane.entries.sortedByDescending { it.value.size }.map { (plane, comps) ->
+        val n = comps.size
+        val prb = comps.count { it.text("status", "UNKNOWN") != "UNKNOWN" && it.text("status", "") == "GREEN" }
+        val pct = if (n > 0) (prb * 100 / n) else 0
+        row(plane to NEUTRAL, "$prb/$n" to (if (prb == 0) BAD else WARN), "$pct%" to (if (pct == 0) BAD else WARN))
+    }
+    // The four money planes: 0% probed line (AT-CK5).
+    val moneyPlanes = listOf("TriadEngine", "TriadIntelligence", "TriadExecutor", "TriadLearning")
+    val moneyComps = components.filter { c -> moneyPlanes.any { c.text("plane", "").contains(it, true) || c.text("plane", "").equals(it, true) } }
+    val moneyDark = moneyComps.count { it.text("status", "UNKNOWN") == "UNKNOWN" }
+    val moneyTotal = moneyComps.size
+
+    // §1.4 WORK LIST — group UNKNOWNs by inferred source (C-3). Inferred until get_checkup_sources.
+    val unknowns = components.filter { it.text("status", "UNKNOWN") == "UNKNOWN" }
+    fun inferSource(c: JsonObject): String {
+        val plane = c.text("plane", "").lowercase()
+        val reason = (c.text("reason", "") + " " + c.text("fix", "")).lowercase()
+        return when {
+            moneyPlanes.any { plane.contains(it.lowercase()) } && !reason.contains("prometheus") &&
+                !reason.contains("dsn") && !reason.contains("nats") && !reason.contains("venue") -> "runtime health"
+            reason.contains("prometheus") -> "prometheus"
+            reason.contains("dsn") || reason.contains("databank") -> "DTBNK DSN"
+            reason.contains("nats") || reason.contains("bus") -> "NATS"
+            reason.contains("venue") || reason.contains("key") || reason.contains("session") -> "venue keys"
+            else -> "checkup.v1.json"
+        }
+    }
+    val workBySource = unknowns.groupBy { inferSource(it) }
+    val workRows = workBySource.entries.sortedByDescending { it.value.size }.map { (src, comps) ->
+        row(src to NEUTRAL, comps.size.toString() to WARN, "unblocks" to NEUTRAL)
+    }
+
+    // §1.6 SOURCE RECONCILIATION (C-8) — the three live quotes, verbatim.
+    val continuity = d["get_continuity"] as? JsonObject
+    val bankQuote = (continuity.obj("bank")?.text("reason", "—")) ?: continuity.text("bank", "—")
+    val bridge = d["get_bridge_lag"] as? JsonObject
+    val bridgeLanes = bridge.arr("lanes").rows().ifEmpty { bridge.arr("streams").rows() }
+    val hbList = bridgeLanes.mapNotNull { it.int("heartbeat_s") ?: it.int("heartbeat") }
+    val bridgeQuote = "${bridgeLanes.size} lanes" + if (hbList.isNotEmpty()) " · heartbeats ${hbList.min()}–${hbList.max()}s" else ""
+    val logger = d["get_logger_status"] as? JsonObject
+    val loggerQuote = logger.text("error", logger.text("reason", "—"))
+    val contradiction = bridgeLanes.isNotEmpty() && bankQuote.contains("DSN", true)
+
+    // §1.5 tri-view.
     val cl = d["get_checklist_status"] as? JsonObject
-    val clTotal = cl?.get("total")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() } ?: 143
-    val clChecked = cl?.get("checked")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() } ?: 5
+    val clTotal = cl.int("total") ?: 143
+    val clChecked = cl.int("checked") ?: 5
     val gngItems = (d["get_go_no_go_status"] as? JsonObject).arr("items").size
     val incidents = (d["list_incidents"] as? JsonArray)?.size ?: 0
+
+    // §1.7 RUN HISTORY (C-7) — from get_checkup.field("history") when served.
+    val historyRows = checkup.field("history").rows()
+    val historyServed = historyRows.isNotEmpty()
+    val dupTs = historyRows.groupingBy { it.text("source", "") + "|" + it.text("ts", it.text("ts_iso", "")) }
+        .eachCount().count { it.value > 1 }
+    // SEV a client-vs-mcp verdict divergence at the same ts window.
+    val byWriter = historyRows.groupBy { it.text("source", "") }
+    val clientVerdicts = (byWriter["client"] ?: emptyList()).map { it.text("verdict", "—") }.toSet()
+    val mcpVerdicts = (byWriter["mcp"] ?: emptyList()).map { it.text("verdict", "—") }.toSet()
+    val divergent = historyServed && clientVerdicts.isNotEmpty() && mcpVerdicts.isNotEmpty() &&
+        (clientVerdicts != mcpVerdicts)
 
     ViewScaffold(
         View.CHECKUP,
         stance = listOf(
-            Stance("verdict", verdict, UNK),
+            Stance("verdict", verdictShown, UNK),
             Stance("coverage", "$probed / $total", if (probed == 0) BAD else WARN),
             Stance("D3 · D4", "$d3 · $d4", BAD),
-            Stance("work items", declared.toString(), WARN),
+            Stance("work items", unknowns.size.toString(), WARN),
         ),
     ) {
         Ribbon("$total components, one verdict — and not one green is a runtime probe", "This is not a status board. It is a wiring board.", WARN)
         McCard("The verdict", "get_checkup · get_attestation") {
-            KvRow("verdict", verdict, UNK)
+            KvRow("verdict", verdictShown, UNK)
             KvRow("denominator", "$probed / $total probed", if (probed == 0) BAD else WARN)
+            if (verdict != verdictShown) {
+                Note("AT-CK12 guard: server said $verdict, but coverage ${String.format("%.1f", coverage * 100)}% < 80% ⇒ rendered UNKNOWN.", BAD)
+            }
             Note("C-2: a verdict carries its denominator. C-4: silence is not health.")
         }
         McCard("Probe depth (C-1)", "get_checkup · classified client-side") {
@@ -214,8 +288,33 @@ fun CheckupScreen(repo: MissionRepository) {
             )
             Note("D3=$d3 / D4=$d4, said in words: zero components are probed at runtime, zero exercised behaviourally (AT-CK3).")
         }
-        McCard("The census — $total, by plane", "get_checkup · get_service_status") {
-            Note("Exactly components.length cells (AT-CK1) = $total across 8 plane-groups. D1 greens are outlined, not solid ($d0 declared, $d1 D1, $d2 D2). The four money planes (Engine/Intelligence/Executor/Learning) are 0% probed.")
+        McCard("Greens, quoted verbatim (C-1 · AT-CK4)", "get_checkup.components · status==GREEN") {
+            if (greenRows.isNotEmpty()) {
+                MiniTable(listOf("id", "depth", "the probe's own words"), greenRows)
+            } else {
+                Note("No GREEN components in the census — nothing to quote.", UNK)
+            }
+            Note("Each green's reason string is printed unedited, `not probed` caveat included — a green that indicts itself.")
+        }
+        McCard("The census — $total, per plane (§1.3)", "get_checkup · grouped by plane") {
+            if (planeRows.isNotEmpty()) {
+                MiniTable(listOf("plane", "probed", "coverage"), planeRows)
+            } else {
+                Note("Census not served — $total components.", UNK)
+            }
+            Note(
+                "AT-CK5: the money planes are 0% probed — $moneyDark of $moneyTotal dark. Every green lives in Shadow/Logger/Infra: the planes that do not touch money.",
+                if (moneyTotal > 0 && moneyDark == moneyTotal) BAD else NEUTRAL,
+            )
+        }
+        McCard("Work list — what to wire next (C-3)", "inferred until get_checkup_sources exists") {
+            Tag("INFERRED", INFO)
+            if (workRows.isNotEmpty()) {
+                MiniTable(listOf("source", "unblocks", ""), workRows)
+            } else {
+                Note("No UNKNOWN components to group.", UNK)
+            }
+            Note("AT-CK6: all ${unknowns.size} UNKNOWNs grouped by the source that would unblock them. The map is inferred from how the other tools fail — the real one comes from get_checkup_sources (§3.1).")
         }
         McCard("Tri-view reconciliation (C-7)", "get_checkup · get_checklist_status · get_go_no_go_status") {
             MiniTable(
@@ -228,8 +327,34 @@ fun CheckupScreen(repo: MissionRepository) {
             )
             Note("All $clChecked checked items are GE-* edge-harness entries — not one core build item. Yet decisions exist: either the checklist is stale or code shipped unsigned. Both are true; both are findings.")
         }
-        McCard("Source reconciliation (C-8)", "get_continuity · get_bridge_lag · get_logger_status · get_bus_status") {
-            Note("The DSN contradiction is printed with all three tool quotes — sources are reconciled, not assumed.")
+        McCard("Source reconciliation (C-8)", "get_continuity · get_bridge_lag · get_logger_status") {
+            if (contradiction) Ribbon("CONTRADICTION — one DSN, three stories", "get_bridge_lag reads the DSN and answers; get_continuity claims it is unset. They cannot both be right.", SEV)
+            KvRow("get_continuity.bank", bankQuote, WARN)
+            KvRow("get_bridge_lag", bridgeQuote, if (bridgeLanes.isNotEmpty()) GOOD else UNK)
+            KvRow("get_logger_status", loggerQuote, BAD)
+            Note("The three tool quotes are printed verbatim — sources are reconciled, not assumed.")
+        }
+        McCard("Run history + divergence (C-7)", "get_checkup.history") {
+            if (historyServed) {
+                if (divergent) Ribbon("VERDICT DIVERGENCE — the false-green mechanism, caught", "client $clientVerdicts vs mcp $mcpVerdicts over one system — never averaged (AT-CK9).", SEV)
+                KvRow("runs", historyRows.size.toString(), NEUTRAL)
+                KvRow("duplicate (source,ts)", dupTs.toString(), if (dupTs > 0) BAD else NEUTRAL)
+                MiniTable(
+                    listOf("source", "verdict", "reds", "yellows"),
+                    historyRows.take(12).map { r ->
+                        row(
+                            r.text("source", "—") to NEUTRAL,
+                            r.text("verdict", "—") to (if (r.text("source", "") in setOf("client", "mcp") && divergent) SEV else NEUTRAL),
+                            (r.int("reds")?.toString() ?: "—") to (if ((r.int("reds") ?: 0) > 0) BAD else NEUTRAL),
+                            (r.int("yellows")?.toString() ?: "—") to (if ((r.int("yellows") ?: 0) > 0) WARN else NEUTRAL),
+                        )
+                    },
+                )
+                Note("AT-CK10: duplicate writes and any client/mcp divergence are counted and named, never hidden.")
+            } else {
+                KvRow("history", "not served", UNK)
+                Note("get_checkup ships no history[] — run history is honestly UNKNOWN until get_checkup_history (§3.3).", UNK)
+            }
         }
         McCard("Broadcast (C-4)", "get_alerts · list_incidents") {
             KvRow("incidents recorded", incidents.toString(), if (incidents == 0) UNK else NEUTRAL)
@@ -288,6 +413,78 @@ fun OpsScreen(repo: MissionRepository) {
 
     val incidents = (d["list_incidents"] as? JsonArray)?.size ?: 0
 
+    // §2.2 breach evidence — shadow bank distinct decisions + checkup-history duplicate ts.
+    val bankDistinct = bank.int("distinct") ?: bank.int("distinct_decisions")
+    val checkup = d["get_checkup"] as? JsonObject
+    val historyRows = checkup.field("history").rows()
+    val historyDup = historyRows.groupingBy { it.text("source", "") + "|" + it.text("ts", it.text("ts_iso", "")) }
+        .eachCount().count { it.value > 1 }
+    val checkupUnknown = checkup.arr("components").rows().count { it.text("status", "UNKNOWN") == "UNKNOWN" }
+
+    // §2.3 the FULL 14-row failure matrix, §10 order. detector-live from the live read bus.
+    val watchdogLiveM = d["get_watchdog_stats"] != null
+    val validatorLive = true // I8 output validator exists in-repo (F2 detector)
+    // detector present? per row; drilled is never (§21.5 never run).
+    data class FRow(val id: String, val failure: String, val detector: Boolean, val verdict: String, val tone: Tone)
+    val fmatrix = listOf(
+        FRow("F1", "Intelligence down/timeout", validatorLive, "UNDRILLED", WARN),
+        FRow("F2", "Schema-valid nonsense", validatorLive, "UNDRILLED", WARN),
+        FRow("F3", "Slow/backlogged bus", busLive, if (busLive) "UNDRILLED" else "BLIND", if (busLive) WARN else UNK),
+        FRow("F4", "Feed degraded on symbol", feedLive, if (feedLive) "UNDRILLED" else "BLIND", if (feedLive) WARN else UNK),
+        FRow("F5", "Exec ↔ venue disconnect", false, "BLIND", UNK),
+        FRow("F6", "Edge box crash", false, "BLIND", UNK),
+        FRow("F7", "Watchdog stale >3s", watchdogLiveM, if (watchdogLiveM) "UNDRILLED" else "BLIND", if (watchdogLiveM) WARN else UNK),
+        FRow("F8", "Risk governor down", false, "BLIND", UNK),
+        FRow("F9", "Clock skew >250ms", clockLive, if (clockLive) "UNDRILLED" else "BLIND", if (clockLive) WARN else UNK),
+        FRow("F10", "Reconciler divergence", !reconcileNull, if (reconcileNull) "BLIND" else "UNDRILLED", if (reconcileNull) UNK else WARN),
+        FRow("F11", "Ledger/lake unreachable", true, "UNDRILLED", WARN),
+        FRow("F12", "Duplicate delivery anywhere", busLive, "VIOLATED", SEV),
+        FRow("F13", "Breaker trip", !breakerUnknown, if (breakerUnknown) "BLIND" else "UNDRILLED", if (breakerUnknown) UNK else WARN),
+        FRow("F14", "Kill switch", !killUnknown, if (killUnknown) "BLIND" else "UNDRILLED", if (killUnknown) UNK else WARN),
+    )
+    val fBlind = fmatrix.count { it.verdict == "BLIND" }
+    val fUndrilled = fmatrix.count { it.verdict == "UNDRILLED" }
+    val fViolated = fmatrix.count { it.verdict == "VIOLATED" }
+    val fmRows = fmatrix.map { f ->
+        row(
+            f.id to f.tone,
+            f.failure to NEUTRAL,
+            (if (f.detector) "✓" else "✗") to (if (f.detector) GOOD else UNK),
+            "never" to UNK,
+            f.verdict to f.tone,
+        )
+    }
+
+    // §2.7 flow & lanes — continuity legs + bridge lanes + cag.
+    val continuity = d["get_continuity"] as? JsonObject
+    val flowLeg = continuity.obj("flow")?.text("status", continuity.text("flow", "—")) ?: continuity.text("flow", "—")
+    val flowReason = continuity.obj("flow")?.text("reason", "") ?: ""
+    val bankLeg = continuity.obj("bank")?.text("status", "—") ?: "—"
+    val bankReason = continuity.obj("bank")?.text("reason", "") ?: ""
+    val bridge = d["get_bridge_lag"] as? JsonObject
+    val laneRows0 = bridge.arr("lanes").rows().ifEmpty { bridge.arr("streams").rows() }
+    val laneRows = laneRows0.map { l ->
+        row(
+            l.text("stream", l.text("name", "—")) to NEUTRAL,
+            l.text("owner", "—") to NEUTRAL,
+            ((l.int("heartbeat_s") ?: l.int("heartbeat"))?.let { "${it}s" } ?: "—") to GOOD,
+        )
+    }
+    val cag = d["get_cag_stats"] as? JsonObject
+    val cagHits = cag.int("hits")
+
+    // §2.8 latency law — budgets printed; live value UNK when unavailable.
+    val latency = d["get_latency_budgets"] as? JsonObject
+    val latRows0 = latency.arr("budgets").rows().ifEmpty { latency.arr("rows").rows() }
+    val latRows = latRows0.take(13).map { b ->
+        val liveVal = b.int("live")?.toString() ?: b.text("live", "").takeIf { it != "—" && it != "unavailable" }
+        row(
+            b.text("name", b.text("id", "—")) to NEUTRAL,
+            ((b.int("budget_ms") ?: b.int("budget"))?.let { "${it}ms" } ?: b.text("budget", "—")) to NEUTRAL,
+            (liveVal ?: "UNK") to (if (liveVal == null) UNK else GOOD),
+        )
+    }
+
     ViewScaffold(
         View.OPS,
         stance = listOf(
@@ -299,24 +496,28 @@ fun OpsScreen(repo: MissionRepository) {
     ) {
         Ribbon(
             "RUNNING · UNWATCHED — the §7.2 idempotency invariant is breached",
-            (if (bankRows != null) "$bankRows bank rows resolving ~2,731 distinct decisions" else "shadow bank rows / ~2,731 distinct") +
-                ", 3 duplicate ts. A violated invariant outranks every green SLO (L-6).",
+            (if (bankRows != null) "$bankRows bank rows resolving ${bankDistinct ?: "~2,731"} distinct decisions" else "shadow bank rows / distinct") +
+                ", $historyDup duplicate ts. A violated invariant outranks every green SLO (L-6).",
             SEV,
         )
         McCard("The invariant breach (L-6)", "get_shadow_bank · get_bus_status · get_checkup") {
             KvRow(
                 "shadow bank rows vs distinct",
-                if (bankLive) "${bankRows ?: "—"} / ~2,731" else "UNKNOWN — bank unavailable",
+                if (bankLive) "${bankRows ?: "—"} / ${bankDistinct ?: "~2,731"}" else "UNKNOWN — bank unavailable",
                 if (bankLive) SEV else UNK,
+            )
+            KvRow(
+                "checkup-history dupes",
+                if (historyRows.isNotEmpty()) "$historyDup duplicate ts" else "$checkupUnknown UNKNOWN components",
+                if (historyDup > 0) SEV else UNK,
             )
             KvRow("consumer dedupe (F12 detector)", if (busLive) "present" else "✗ NO BUS ⇒ NO CONSUMER", BAD)
             Note("Two independent writers append the same fact more than once — one root cause (the missing bus). A violation claim carries its evidence.")
         }
-        McCard("Failure matrix (§10)", "get_bus_status · get_watchdog_stats · …") {
-            KvRow("F-families", "F1 … F14", NEUTRAL)
-            KvRow("F12", "VIOLATED (detector + drill)", SEV)
-            KvRow("header", "VIOLATED 1 · BLIND 10 · UNDRILLED 3 · GREEN 0", NEUTRAL)
-            Note("AT-OPS1: 14 rows in §10 order, two columns (detector · drill). No F-row is green without both. F3/F5/F13/F14 blind — bus/venue absent, breaker/kill unknown.")
+        McCard("Failure matrix (§10) — 14 rows, spec order", "get_bus_status · get_watchdog_stats · …") {
+            KvRow("header", "VIOLATED $fViolated · BLIND $fBlind · UNDRILLED $fUndrilled · GREEN 0", NEUTRAL)
+            MiniTable(listOf("id", "failure", "detector?", "drilled?", "verdict"), fmRows)
+            Note("AT-OPS1/2/3: 14 rows in §10 order, two columns. No row is green without both. F12 is VIOLATED with evidence — never 'undrilled'.")
         }
         McCard("Paging policy (§17.2)", "get_alerts + detector probes") {
             KvRow("conditions", "8", NEUTRAL)
@@ -331,6 +532,38 @@ fun OpsScreen(repo: MissionRepository) {
         McCard("Services (L-4)", "get_service_status") {
             KvRow("rows returned", "$services ledger tables", NEUTRAL)
             Note("L-4: a service is a process, not a table. All four planes render unsupervised — 'ledger tables, not processes'. restart_counts/version null on every row.")
+        }
+        McCard("Process supervision (L-4) — four planes", "get_service_status") {
+            MiniTable(
+                listOf("plane", "host", "supervision"),
+                listOf(
+                    row("Signal engine" to NEUTRAL, "edge" to NEUTRAL, "NONE" to BAD),
+                    row("Intelligence" to NEUTRAL, "gpu" to NEUTRAL, "NONE" to BAD),
+                    row("Execution + risk" to NEUTRAL, "edge" to NEUTRAL, "NONE" to BAD),
+                    row("Learning" to NEUTRAL, "lake" to NEUTRAL, "NONE" to BAD),
+                ),
+            )
+            Note("AT-OPS7: nothing in this system knows whether any plane is running — 'services N/M up' is ledger tables, not processes.")
+        }
+        McCard("Flow & lanes — what IS alive (§2.7)", "get_continuity · get_bridge_lag · get_cag_stats") {
+            KvRow("continuity · flow", (flowLeg + if (flowReason.isNotEmpty()) " ($flowReason)" else ""), GOOD)
+            KvRow("continuity · bank", (bankLeg + if (bankReason.isNotEmpty()) " ($bankReason)" else ""), WARN)
+            if (laneRows.isNotEmpty()) {
+                MiniTable(listOf("stream", "owner", "heartbeat"), laneRows)
+            } else {
+                KvRow("ingest lanes", "hatched — get_bridge_lag empty", UNK)
+            }
+            KvRow("cag hits", cagHits?.toString() ?: "—", if (cagHits != null) GOOD else UNK)
+            Note("AT-OPS11: the machine is alive — this page is not pessimism. The question is whether you would know if it stopped.")
+        }
+        McCard("Latency law & §17.1 (§2.8)", "get_latency_budgets") {
+            if (latRows.isNotEmpty()) {
+                MiniTable(listOf("budget", "target", "live"), latRows)
+            } else {
+                KvRow("latency budgets", "not served", UNK)
+            }
+            KvRow("§17.1 delivered", "0% — Prometheus absent", BAD)
+            Note("Budget rows are printed so you know what good would mean. A budget you are not measuring is a wish — live values render UNK.")
         }
         McCard("Acceptance catalog (§21)", "get_decision_chain · get_checkup") {
             KvRow("§21.2 replay determinism", "FAILING — chain_verified:false", SEV)

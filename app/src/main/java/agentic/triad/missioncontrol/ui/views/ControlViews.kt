@@ -58,6 +58,22 @@ private fun DomainCard(title: String, path: String, dom: JsonObject?, body: @Com
     }
 }
 
+/** A feature-module domain (structures/indicators/timeframes): each key is a module with an `on`
+ *  flag. Disabling a module makes its packet field go null-with-reason — never fabricated. */
+@Composable
+private fun featureModuleCard(title: String, path: String, dom: JsonObject?) {
+    DomainCard(title, path, dom) {
+        MiniTable(
+            listOf("module", "enabled"),
+            (dom?.keys ?: emptySet()).sorted().map { k ->
+                val on = dom.obj(k)?.bool("on") ?: false
+                row(k to NEUTRAL, (if (on) "on" else "off") to if (on) GOOD else UNK)
+            },
+        )
+        Note("Feature-module switches feed the packet assembler; disabling a module = its packet field goes null-with-reason, never fabricated. Read-only viewer.")
+    }
+}
+
 @Composable
 fun ConfigScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, CONFIG_TOOLS))
@@ -196,13 +212,90 @@ fun ConfigScreen(repo: MissionRepository) {
                 Note("Read-only viewer. Per-symbol enable/score/exposure_cap are levers — edit them through a change-plan, not here.")
             }
 
-            // Remaining domains — presence-only, honest listing (no fabricated values).
-            val shown = setOf("risk", "execution", "regimes", "intelligence", "cag", "personas", "symbols")
-            val others = (domains.keys - shown).sorted()
-            if (others.isNotEmpty()) {
-                McCard("Other domains (present, viewer only)", "domains.*") {
-                    others.forEach { KvRow(it, "present · edit via change-plan", NEUTRAL) }
-                }
+            // ── the remaining domains, each a dedicated READ-ONLY viewer (no editable forms) ──
+
+            // Detectors — flow triggers; dark ones stay shadow-only until GE-3 (toggle=on ≠ live).
+            DomainCard("Detectors — flow triggers (shadow-walled)", "domains.detectors.{d}.on", domains.obj("detectors")) {
+                val det = domains.obj("detectors")
+                MiniTable(
+                    listOf("detector", "enabled", "note"),
+                    (det?.keys ?: emptySet()).sorted().map { k ->
+                        val on = det.obj(k)?.bool("on") ?: false
+                        val dark = k.contains("choch") || k.contains("bos") || k.contains("dark")
+                        row(
+                            k to NEUTRAL,
+                            (if (on) "on" else "off") to if (on) GOOD else UNK,
+                            (if (dark) "dark · shadow-only until GE-3 (on ≠ live)" else "—") to if (dark) WARN else NEUTRAL,
+                        )
+                    },
+                )
+                Note("Dark detectors stay shadow-only until GE-3 promotion — a detector reading 'on' is not the same as live. Read-only viewer.", WARN)
+            }
+
+            // Structures / Indicators / Timeframes — feature modules; disable = null-with-reason.
+            featureModuleCard("Structures — feature modules", "domains.structures.{m}.on", domains.obj("structures"))
+            featureModuleCard("Indicators — feature modules", "domains.indicators.{m}.on", domains.obj("indicators"))
+            featureModuleCard("Timeframes — feature modules", "domains.timeframes.{tf}.on", domains.obj("timeframes"))
+
+            // Users — operator / second approver / two-person ceremony / paging.
+            DomainCard("Users — operator · approver · ceremony", "domains.users.*", domains.obj("users")) {
+                val u = domains.obj("users")
+                KvRow("operator", u.text("operator"), NEUTRAL)
+                val approver = u.text("second_approver").ifBlank { "—" }
+                KvRow("second approver", approver, if (approver == "—") UNK else NEUTRAL)
+                KvRow("two-person ceremony", (u?.bool("ceremony_two_person") ?: false).yn(), if (u?.bool("ceremony_two_person") == true) GOOD else WARN)
+                KvRow("page alerts", (u?.bool("page_alerts") ?: false).yn(), NEUTRAL)
+                KvRow("journal email", u.text("journal_email").ifBlank { "—" }, UNK)
+                Note("Read-only. A second_approver + two-person ceremony are the money-touching guards — edit via change-plan, never here.")
+            }
+
+            // Aux — kronos / news / s7b individual switches + staleness bounds.
+            DomainCard("Aux — kronos · news · s7b + staleness", "domains.aux.*", domains.obj("aux")) {
+                val a = domains.obj("aux")
+                KvRow("kronos", (a.obj("kronos")?.bool("on") ?: a?.bool("kronos") ?: false).yn(), NEUTRAL)
+                KvRow("fingpt news", (a.obj("fingpt_news")?.bool("on") ?: a?.bool("fingpt_news") ?: false).yn(), NEUTRAL)
+                KvRow("s7b render", (a.obj("s7b_render")?.bool("on") ?: a?.bool("s7b_render") ?: false).yn(), NEUTRAL)
+                KvRow("kronos staleness (s)", num(a, "kronos_staleness_s"), NEUTRAL)
+                KvRow("news staleness (min)", num(a, "news_staleness_min"), NEUTRAL)
+                Note("Individual aux switches; staleness bounds are laws the compiler clamps. Read-only viewer.")
+            }
+
+            // Tuning / finetune — reward weights, T1 gate, sweep + promotion gates.
+            DomainCard("Fine-tuning — reward weights · T1 gate · sweep gates", "domains.tuning.* / domains.finetune.*", domains.obj("tuning") ?: domains.obj("finetune")) {
+                val t = domains.obj("tuning") ?: domains.obj("finetune")
+                KvRow("reward w (pnl·cal·fmt·tr)", num(t, "w_pnl") + " · " + num(t, "w_cal") + " · " + num(t, "w_fmt") + " · " + num(t, "w_tr"), NEUTRAL)
+                KvRow("skip reward · miss penalty", num(t, "skip_good_reward") + " · " + num(t, "skip_miss_penalty"), NEUTRAL)
+                KvRow("payoff clip lo / hi", num(t, "payoff_clip_lo") + " / " + num(t, "payoff_clip_hi"), NEUTRAL)
+                KvRow("T1 min labeled", num(t, "t1_min_labeled"), WARN)
+                KvRow("T1 lora r · alpha · epochs", num(t, "t1_lora_r") + " · " + num(t, "t1_lora_alpha") + " · " + num(t, "t1_epochs"), NEUTRAL)
+                KvRow("T1 validator-reject max %", num(t, "t1_validator_reject_max_pct"), NEUTRAL)
+                KvRow("sweep pbo max · dsr min", num(t, "sweep_pbo_max") + " · " + num(t, "sweep_dsr_prob_min"), NEUTRAL)
+                KvRow("edge min weeks · candidates", num(t, "edge_min_weeks") + " · " + num(t, "edge_min_candidates"), NEUTRAL)
+                Note("LRN-1/LRN-4 annotations: the T1 gate + sweep/promotion gates live here. Read-only — sweeps run through the governed path, not this viewer.")
+            }
+
+            // Edge — the W-33 levers; wired/unwired/conflict is the apply-map's business.
+            DomainCard("Edge — the W-33 levers", "domains.edge.*", domains.obj("edge")) {
+                val e = domains.obj("edge")
+                KvRow("side weight short", num(e, "side_weight_short"), NEUTRAL)
+                KvRow("session weight 12-14Z", num(e, "session_weight_12_14Z"), NEUTRAL)
+                KvRow("zone offset repair", num(e, "zone_offset_repair"), NEUTRAL)
+                KvRow("entry confirm", (e.obj("entry_confirm")?.bool("on") ?: e?.bool("entry_confirm") ?: false).yn(), NEUTRAL)
+                KvRow("aux agree gate", (e.obj("aux_agree_gate")?.bool("on") ?: e?.bool("aux_agree_gate") ?: false).yn(), NEUTRAL)
+                KvRow("ladder tp1 · tp2 (R)", num(e, "ladder_tp1_r") + " · " + num(e, "ladder_tp2_r"), NEUTRAL)
+                KvRow("ladder split tp1", num(e, "ladder_split_tp1"), NEUTRAL)
+                KvRow("trail activate R · atr mult", num(e, "trail_activate_r") + " · " + num(e, "trail_atr_mult"), NEUTRAL)
+                KvRow("trail floor (bps)", num(e, "trail_floor_bps"), NEUTRAL)
+                Note("W-33 edge levers. Wired / unwired / conflict is the apply-map's business (edge.v1.json), not this read-only viewer.")
+            }
+
+            // Logger — cadence / windows / tier-2 walled.
+            DomainCard("Logger — cadence · windows (tier-2 walled)", "domains.logger.*", domains.obj("logger")) {
+                val l = domains.obj("logger")
+                KvRow("during cadence (min)", num(l, "during_cadence_min"), NEUTRAL)
+                KvRow("pre / post window (min)", num(l, "pre_window_min") + " / " + num(l, "post_window_min"), NEUTRAL)
+                KvRow("tier-2 enrichment", (l.obj("tier2_enrichment")?.bool("on") ?: l?.bool("tier2_enrichment") ?: false).yn(), WARN)
+                Note("Tier-2 enrichment stays walled. Read-only viewer.", WARN)
             }
         }
 

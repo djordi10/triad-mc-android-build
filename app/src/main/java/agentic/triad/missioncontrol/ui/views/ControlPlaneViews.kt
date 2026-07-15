@@ -1,6 +1,8 @@
 package agentic.triad.missioncontrol.ui.views
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -11,6 +13,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.TriadApp
@@ -77,16 +82,18 @@ private fun parseGoNoGoGate(item: String): Triple<String, String, String> {
 
 private val CONNECTIONS_TOOLS = listOf("get_go_no_go_status", "get_service_status")
 
-/**
- * SUPERSEDED by [agentic.triad.missioncontrol.ui.views.ConnectionsScreen] (`app: TriadApp`) in
- * ConnMcp.kt — that one adds the REAL CLIENT-tier controls (goLive/goDemo + a live listTools()
- * handshake) on top of this read-only go/no-go interlock. Kept for reference; not wired.
- */
 @Composable
 fun ConnectionsScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, CONNECTIONS_TOOLS))
     val s by vm.state.collectAsState()
     val d = s.data
+
+    // ── CLIENT tier — the dashboard's OWN connection, real and instant (AT-C2) ──
+    val app = LocalContext.current.applicationContext as TriadApp
+    val scope = rememberCoroutineScope()
+    var endpoint by remember { mutableStateOf(TriadApp.LIVE_ENDPOINT) }
+    var toolCount by remember { mutableStateOf<Int?>(null) }
+    var testing by remember { mutableStateOf(false) }
 
     // ── C-5 · the LIVE interlock — read the go/no-go board live and count evidenced gates ──
     val gng = d["get_go_no_go_status"] as? JsonObject
@@ -122,16 +129,55 @@ fun ConnectionsScreen(repo: MissionRepository) {
             SEV,
         )
 
-        // C-1 · the two tiers, never confused.
-        McCard("The two tiers (C-1) — the dashboard never lies about which", "tools/list probe") {
-            Note("CLIENT — the dashboard's own connections. Real. Works today. Zero server work:", GOOD)
+        // C-1 · the CLIENT tier — REAL controls that repoint THIS dashboard (AT-C2).
+        McCard("CLIENT tier (C-1) — this dashboard's own connection · real, instant", "goLive · goDemo · listTools") {
+            Note("CLIENT — the dashboard's own connection. Real. Works today. Zero server work:", GOOD)
+            OutlinedTextField(
+                value = endpoint,
+                onValueChange = { endpoint = it },
+                label = { Text("MCP endpoint (bearer in ?token=)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp),
+            )
             Row {
-                Tag("add / remove a server", GOOD); Tag("enable / disable", GOOD); Tag("set token", GOOD)
+                Button(onClick = { app.goLive(endpoint) }, modifier = Modifier.padding(end = 8.dp)) {
+                    Text("Use for this dashboard (LIVE)")
+                }
+                Button(onClick = { app.goDemo() }) { Text("Use DEMO") }
             }
-            Row { Tag("test connection — real initialize + tools/list", GOOD); Tag("switch profile", GOOD) }
+            Row(Modifier.padding(top = 4.dp)) {
+                Button(
+                    onClick = {
+                        testing = true
+                        scope.launch {
+                            toolCount = try {
+                                app.client?.listTools()?.size ?: 0
+                            } catch (e: Throwable) {
+                                0
+                            }
+                            testing = false
+                        }
+                    },
+                    modifier = Modifier.padding(end = 10.dp),
+                ) { Text("Test connection") }
+            }
+            val tcLabel = when {
+                testing -> "testing…"
+                toolCount == null -> "not tested"
+                else -> "$toolCount tools (0 = failed handshake)"
+            }
+            KvRow(
+                "handshake — real initialize + tools/list", tcLabel,
+                when {
+                    testing || toolCount == null -> UNK
+                    (toolCount ?: 0) > 0 -> GOOD
+                    else -> BAD
+                },
+            )
             Note(
-                "\"Use for this dashboard\" repoints THIS dashboard's adapter (demo / shadow / paper / live), " +
-                    "stops calling a disabled server, stores the bearer locally. All instant, all real.",
+                "\"Use for this dashboard\" repoints THIS dashboard's adapter (goLive/goDemo), stores the bearer " +
+                    "locally. Test connection is a genuine initialize + tools/list handshake — it prints the tool " +
+                    "count it got back (0 = failed handshake). All instant, all real (AT-C2).",
                 NEUTRAL,
             )
             Note("SYSTEM — the running estate. Does NOT exist. Every button probes, then proposes:", WARN)
@@ -194,11 +240,6 @@ fun ConnectionsScreen(repo: MissionRepository) {
 
 private val MCP_TOOLS = listOf("list_docs")
 
-/**
- * SUPERSEDED by [agentic.triad.missioncontrol.ui.views.McpScreen] (`app: TriadApp`) in ConnMcp.kt —
- * that one adds the REAL CLIENT-tier controls (enable/disable + a live listTools() handshake). Kept
- * for reference; not wired.
- */
 @Composable
 fun McpScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, MCP_TOOLS))
@@ -208,6 +249,12 @@ fun McpScreen(repo: MissionRepository) {
     // list_docs proves the CLIENT connection is live — a real tools call over the connected window.
     val docs = d["list_docs"].rows()
     val docCount = if (docs.isNotEmpty()) docs.size else (d["list_docs"].list().size)
+
+    // ── CLIENT tier — a live tool-count over the connected window (AT-C2) ──
+    val app = LocalContext.current.applicationContext as TriadApp
+    val scope = rememberCoroutineScope()
+    var toolCount by remember { mutableStateOf<Int?>(null) }
+    var testing by remember { mutableStateOf(false) }
 
     ViewScaffold(
         View.MCP,
@@ -228,10 +275,38 @@ fun McpScreen(repo: MissionRepository) {
         )
 
         // The connected MCP window — CLIENT-tier, real.
-        McCard("The connected MCP window (CLIENT-tier)", "list_docs") {
-            KvRow("endpoint", "triad-mc.bgzr.io", NEUTRAL)
+        McCard("The connected MCP window (CLIENT-tier)", "list_docs · listTools") {
+            KvRow("endpoint", TriadApp.LIVE_ENDPOINT.substringBefore("?"), NEUTRAL)
             KvRow("tools exposed", "~77 (74 reads · run_select SELECT-only · 2 writes)", NEUTRAL)
             KvRow("handshake", if (docCount > 0) "LIVE — list_docs returned $docCount docs" else "list_docs returned no rows", if (docCount > 0) GOOD else UNK)
+            Row(Modifier.padding(top = 4.dp, bottom = 2.dp)) {
+                Button(
+                    onClick = {
+                        testing = true
+                        scope.launch {
+                            toolCount = try {
+                                app.client?.listTools()?.size ?: 0
+                            } catch (e: Throwable) {
+                                0
+                            }
+                            testing = false
+                        }
+                    },
+                ) { Text("Count tools (live tools/list)") }
+            }
+            val tcLabel = when {
+                testing -> "testing…"
+                toolCount == null -> "not counted"
+                else -> "$toolCount tools (0 = failed handshake)"
+            }
+            KvRow(
+                "live tool-count", tcLabel,
+                when {
+                    testing || toolCount == null -> UNK
+                    (toolCount ?: 0) > 0 -> GOOD
+                    else -> BAD
+                },
+            )
             KvRow("auth", "Authorization: Bearer — stored locally by the dashboard", NEUTRAL)
             Note(
                 "CLIENT controls that are REAL here: add / remove a server, enable / disable (the dashboard " +
