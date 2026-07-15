@@ -33,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -223,8 +225,8 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
 }
 
 /** The web `header.top` hairline: a 1px --line rule along the bottom edge. */
-private fun Modifier.drawBottomHairline(color: Color): Modifier = androidx.compose.ui.draw.drawBehind {
-    drawLine(color, androidx.compose.ui.geometry.Offset(0f, size.height), androidx.compose.ui.geometry.Offset(size.width, size.height), strokeWidth = 1f)
+private fun Modifier.drawBottomHairline(color: Color): Modifier = drawBehind {
+    drawLine(color, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1f)
 }
 
 /** One compact top-bar action button on the pine bar (the web `#appbar .abact button`). */
