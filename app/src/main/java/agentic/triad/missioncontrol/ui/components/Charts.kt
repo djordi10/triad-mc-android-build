@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agentic.triad.missioncontrol.ui.theme.ChartBlue
 import agentic.triad.missioncontrol.ui.theme.Emerald
 import agentic.triad.missioncontrol.ui.theme.Ink
 import agentic.triad.missioncontrol.ui.theme.Ink2
@@ -37,6 +38,16 @@ import agentic.triad.missioncontrol.ui.theme.Unk
  */
 
 private val Mono = FontFamily.Monospace
+
+/**
+ * The web's chart-bar fill for a tone. Status tones keep their foreground hue (em/am/red), but the
+ * neutral "just a series" bars use the web charts' muted slate-blue (#5b7fb5) rather than near-black
+ * ink — matching the SVG bar palette in the HTML.
+ */
+private fun Tone.barFill(): Color = when (this) {
+    Tone.INFO, Tone.NEUTRAL -> ChartBlue
+    else -> fg()
+}
 
 /** One labelled bar. */
 data class Bar(val label: String, val value: Double, val tone: Tone = Tone.INFO, val note: String = "")
@@ -56,13 +67,15 @@ fun HBarChart(rows: List<Bar>, max: Double? = null, unit: String = "", labelWidt
                     b.label, color = Ink2, fontFamily = Mono, fontSize = 10.sp,
                     modifier = Modifier.width(labelWidth.dp).padding(end = 6.dp),
                 )
-                Box(Modifier.weight(1f).height(13.dp).clip(RoundedCornerShape(3.dp)).background(Line.copy(alpha = 0.35f))) {
+                // The web `.bar .tr`/`.fl`: a 12px track (#efede6-ish) with a rounded fill in the
+                // tone's chart hue.
+                Box(Modifier.weight(1f).height(12.dp).clip(RoundedCornerShape(6.dp)).background(Line.copy(alpha = 0.45f))) {
                     val frac = (b.value / hi).coerceIn(0.0, 1.0).toFloat()
-                    if (frac > 0f) Box(Modifier.fillMaxWidth(frac).height(13.dp).clip(RoundedCornerShape(3.dp)).background(b.tone.fg()))
+                    if (frac > 0f) Box(Modifier.fillMaxWidth(frac).height(12.dp).clip(RoundedCornerShape(6.dp)).background(b.tone.barFill()))
                 }
                 Text(
                     "${fmtNum(b.value)}${if (unit.isNotEmpty()) " $unit" else ""}",
-                    color = Ink, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.Medium,
+                    color = Ink, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.width(56.dp).padding(start = 6.dp),
                 )
             }
@@ -101,7 +114,7 @@ fun Histogram(
                             when {
                                 thresholdIndex == i -> Red
                                 inVoid -> Unk.copy(alpha = 0.4f)
-                                else -> b.tone.fg()
+                                else -> b.tone.barFill()
                             },
                         ),
                 )

@@ -21,18 +21,33 @@ val PineLine = Color(0xFF2C4A3E)      // ghost-button border on the dark strip
 val PineInk = Color(0xFFCFE0D8)       // ghost-button text on the dark strip
 val PineVer = Color(0xFF7FA393)       // the mono "MISSION CONTROL ·" label
 
-val Emerald = Color(0xFF0F8A5F)
-val EmeraldBright = Color(0xFF59C99A)
-val EmeraldSoft = Color(0xFFE7F4EE)
-val Amber = Color(0xFFB45309)
-val AmberSoft = Color(0xFFFDF3E5)
-val Red = Color(0xFFB0403A)
-val RedSoft = Color(0xFFF9EBEA)
-val Blue = Color(0xFF1F5F8B)
-val BlueSoft = Color(0xFFE8F0F6)
-val Unk = Color(0xFF9AA5A0)
-val UnkSoft = Color(0xFFECEAE4)
-val Sev = Color(0xFF7D1D1A)
+val Emerald = Color(0xFF0F8A5F)       // --em
+val EmeraldBright = Color(0xFF59C99A) // the rail brand "AD" accent / .brand em
+val EmeraldSoft = Color(0xFFE7F4EE)   // --em-soft
+val Amber = Color(0xFFB45309)         // --am
+val AmberSoft = Color(0xFFFDF3E5)     // --am-soft
+val Red = Color(0xFFB0403A)           // --red
+val RedSoft = Color(0xFFF9EBEA)       // --red-soft
+val Blue = Color(0xFF1F5F8B)          // --blue
+val BlueSoft = Color(0xFFE8F0F6)      // --blue-soft
+val Unk = Color(0xFF9AA5A0)           // --unk
+val UnkSoft = Color(0xFFECEAE4)       // --unk-soft
+val Sev = Color(0xFF7D1D1A)           // --sev
+
+// The web charts' plotting hues (the SVG bars): emerald / amber / red for status, plus a muted
+// slate-blue for the "neutral series" bars (the web's #5b7fb5). Mono 10px labels sit under them.
+val ChartBlue = Color(0xFF5B7FB5)
+
+// The dark pine band's own palette (the `.stance` verdict banner + `.pill`s + `#rail`). On pine,
+// text is off-white and accents are the brighter tints the web uses so they read on a dark field.
+val PineText = Color(0xFFDFE9E4)      // .stance said default text (#dfe9e4)
+val PineTextDim = Color(0xFFCFE0D8)   // .stance .said body (#cfe0d8)
+val PineDivider = Color(0xFF2C4A3E)   // the .word right border / pill borders (#2c4a3e)
+val PinePillBg = Color(0xFF12291F)    // .pill default background (#12291f)
+val VerdictShadow = Color(0xFF8FD3B4) // .word.shadow / pill.ok value (#8fd3b4)
+val VerdictArmed = Color(0xFFFFD08A)  // .word.armed / pill.am value (#ffd08a)
+val VerdictHalted = Color(0xFFF0A19B) // .word.halted / pill.bad value (#f0a19b)
+val VerdictUnknown = Color(0xFF9FB3AB)// .word.unknown / pill.unk value (#9fb3ab)
 
 // Back-compat alias — earlier code referred to a single "Muted"; it maps to the web's --ink2.
 val Muted = Ink2
