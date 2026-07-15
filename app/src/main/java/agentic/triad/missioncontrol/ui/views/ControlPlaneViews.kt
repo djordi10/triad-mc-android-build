@@ -577,6 +577,20 @@ private fun fmtAge(s: Double): String = when {
     else -> String.format("%.1fh", s / 3600)
 }
 
+/** The empty model — what the estate reads before any tool answers (or if derivation ever fails). */
+private val EMPTY_TOPO = TopoModel(
+    svc = emptyMap(), lanes = emptyList(), calStatus = null,
+    busErr = true, feedErr = true, servicesUp = null, servicesTotal = null,
+)
+
+/** Per-node status, but never allowed to throw — a bad node lambda falls back to UNKNOWN, not a blank screen. */
+private fun EstateNode.safeStatus(m: TopoModel): NodeStatus =
+    try { status(m) } catch (_: Throwable) { NodeStatus.UNKNOWN }
+
+/** Per-node evidence line, likewise crash-proof — the roster renders even if a reader trips. */
+private fun EstateNode.safeEv(m: TopoModel): String =
+    try { ev(m) } catch (_: Throwable) { "—" }
+
 private fun deriveTopo(d: Map<String, kotlinx.serialization.json.JsonElement?>): TopoModel {
     val ss = d["get_service_status"] as? JsonObject
     val svc = ss.arr("services").mapNotNull { it as? JsonObject }
@@ -606,8 +620,11 @@ fun TopologyScreen(repo: MissionRepository) {
     val s by vm.state.collectAsState()
     val d = s.data
 
-    val m = deriveTopo(d)
-    val nodeStatuses = ESTATE_NODES.map { it to it.status(m) }
+    // The estate roster is a STATIC list of 12 nodes — it is NEVER built from live rows, so the cards
+    // always render (with UNKNOWN status when no tool has answered). Derivation is crash-proofed: a bad
+    // live payload degrades to EMPTY_TOPO rather than blanking the whole screen. (M-1 · always-render fix)
+    val m = try { deriveTopo(d) } catch (_: Throwable) { EMPTY_TOPO }
+    val nodeStatuses = ESTATE_NODES.map { it to it.safeStatus(m) }
     val measured = nodeStatuses.count { it.second == NodeStatus.MEASURED }
     val unknown = nodeStatuses.count { it.second == NodeStatus.UNKNOWN }
     val inferred = nodeStatuses.count { it.second == NodeStatus.INFERRED }
@@ -668,8 +685,8 @@ fun TopologyScreen(repo: MissionRepository) {
                     onClick = { expanded = if (open) -1 else i },
                 ) {
                     // the node drawer — evidence line, status ribbon, plane/emits/consumes, findings + control (M-3)
-                    KvRow(n.healthSrc, n.ev(m), st.tone)
-                    Ribbon("${st.label} — ${st.meaning}", "health source: ${n.healthSrc}   ·   reads: ${n.ev(m)}", st.tone)
+                    KvRow(n.healthSrc, n.safeEv(m), st.tone)
+                    Ribbon("${st.label} — ${st.meaning}", "health source: ${n.healthSrc}   ·   reads: ${n.safeEv(m)}", st.tone)
                     KvRow("plane", n.plane, NEUTRAL)
                     KvRow("emits", n.emits, INFO)
                     KvRow("consumes", n.takes, NEUTRAL)
