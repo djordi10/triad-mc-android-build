@@ -1,24 +1,32 @@
 package agentic.triad.missioncontrol.ui.overview
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -26,6 +34,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -35,14 +45,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
+import agentic.triad.missioncontrol.data.Mode
 import agentic.triad.missioncontrol.ui.theme.Blue
 import agentic.triad.missioncontrol.ui.theme.Card
 import agentic.triad.missioncontrol.ui.theme.Emerald
+import agentic.triad.missioncontrol.ui.theme.EmeraldBright
 import agentic.triad.missioncontrol.ui.theme.Ink
 import agentic.triad.missioncontrol.ui.theme.Ink2
 import agentic.triad.missioncontrol.ui.theme.Line
+import agentic.triad.missioncontrol.ui.theme.Paper
+import agentic.triad.missioncontrol.ui.theme.Pine
+import agentic.triad.missioncontrol.ui.theme.PineLine
+import agentic.triad.missioncontrol.ui.theme.PineTextDim
+import agentic.triad.missioncontrol.ui.theme.PineVer
+import agentic.triad.missioncontrol.ui.theme.Red
 import agentic.triad.missioncontrol.ui.theme.Sev
 import agentic.triad.missioncontrol.ui.theme.Unk
+import agentic.triad.missioncontrol.ui.theme.VerdictArmed
+import agentic.triad.missioncontrol.ui.theme.VerdictHalted
+import agentic.triad.missioncontrol.ui.theme.VerdictShadow
+import agentic.triad.missioncontrol.ui.theme.VerdictUnknown
 import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.Funnel
@@ -53,12 +75,9 @@ import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.Ribbon
-import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone
-import agentic.triad.missioncontrol.ui.components.VerdictBanner
-import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.arr
 import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.field
@@ -70,7 +89,9 @@ import agentic.triad.missioncontrol.ui.components.num
 import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.text
-import agentic.triad.missioncontrol.ui.nav.View
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -79,8 +100,10 @@ import kotlinx.serialization.json.JsonPrimitive
 /**
  * Overview view 01 — the five-second page, a 1:1 native mirror of the web dashboard's phone Overview
  * (OVVIEW, wiring TRIAD-Overview-Wiring-v1.0.md). It reads the module's declared tools through the
- * shared [ToolsViewModel], folds them into one derived model (`derive`), then renders the phone's
- * card order: THE ESTATE (the node-pill census + map CTA, TPVIEW's first panel condensed) → STANCE →
+ * shared [ToolsViewModel], folds them into one derived model (`derive`), then renders the web SHELL's
+ * top chrome (the pine header band with the ghost Refresh/Connection buttons, then the mono
+ * `renderStrip` card) over the phone's card order: THE ESTATE (the node-pill census + map CTA,
+ * TPVIEW's first panel condensed) → STANCE (the dark `.stance` band: word + narrative + tiles) →
  * MONEY PATH (spine + chokepoint) → RISK → TRUTH → EDGE → FLOW → NEXT → LATENCY. Every law lives in
  * [Model] once; the panels are dumb renderers.
  *
@@ -106,6 +129,15 @@ private val OVERVIEW_TOOLS = listOf(
 
 // ── local honesty helpers (⇔ OVVIEW module scalars) ────────────────────────────────────────────────
 private const val COVERAGE_FLOOR = 0.80
+
+// The PEND trio (wiring §3): they 404 until built, so the strip's reads-ok census must not count
+// them as errors — exactly the web renderStrip's `!PENDING[k]` filter.
+private val OVERVIEW_PEND = setOf("get_money_path", "get_risk_envelope", "get_truth_coverage")
+
+// ── the top chrome hexes (web `.ovwrap .strip` + `#appbar .live` mode dot) ─────────────────────────
+private val OvStripBg = Color(0xFFFBFAF7)     // .strip background (#fbfaf7)
+private val ModeLiveDot = Color(0xFF3ECF8E)   // the LIVE pulse dot (#3ecf8e)
+private val ModeDemoDot = Color(0xFFE8A03D)   // the DEMO dot (#e8a03d)
 
 // ── the estate card (phone first card — TPVIEW's node census condensed into a pill grid) ──────────
 // Exact hexes from the web `.tpwrap .nc` CSS: pill bg #fcfbf8, the NATS down pill #f9f0ef on a
@@ -387,34 +419,32 @@ fun OverviewScreen(repo: MissionRepository) {
     // degrades to EMPTY_MODEL (all fields UNKNOWN) so the estate card + stance + all 8 panels paint.
     val M = guardDerive(EMPTY_MODEL) { Model(s.data) }
 
-    // ── the stance strip (web renderStrip): phase · services · lane · coverage · take-rate · bank ──
-    val servicesUp = M.so.int("services_up")
-    val servicesTotal = M.so.int("services_total")
-    ViewScaffold(
-        View.OVERVIEW,
-        stance = listOf(
-            Stance("phase", M.phase, verdictTone(M.stance)),
-            Stance(
-                "services",
-                if (servicesUp != null && servicesTotal != null) "$servicesUp/$servicesTotal" else "—",
-                if (servicesUp == null) Tone.UNK else Tone.NEUTRAL,
-            ),
-            Stance(
-                "lane",
-                if (M.realFills == null) "—" else if (M.realFills == 0) "SHADOW" else "LIVE",
-                if (M.realFills == null) Tone.UNK else if (M.realFills == 0) Tone.WARN else Tone.GOOD,
-            ),
-            Stance(
-                "coverage", pct(M.coverage, 0),
-                if (M.total == 0) Tone.UNK else if ((M.coverage ?: 0.0) >= COVERAGE_FLOOR) Tone.GOOD else Tone.BAD,
-            ),
-            Stance(
-                "take-rate", pct(M.takeRate, 2),
-                if (M.tr == null) Tone.UNK else if (M.inBand) Tone.GOOD else Tone.BAD,
-            ),
-            Stance("bank", "${n0(M.bankShadow)} shadow · ${n0(M.bankLive)} live", if (M.db == null) Tone.UNK else Tone.NEUTRAL),
-        ),
+    // ── the strip's own honesty bookkeeping (web renderStrip's `nErr` + clock): a read that came
+    //    back dark counts as a tool error unless it is the PEND trio; both print an em-dash until
+    //    the first poll answers (never a fabricated "reads ok"). ──
+    val ctx = LocalContext.current
+    val toolErrors: Int? = if (s.loading) null else guardDerive(null) {
+        OVERVIEW_TOOLS.count { it !in OVERVIEW_PEND && s.data[it] == null }
+    }
+    val clock: String? = remember(s) {
+        if (s.loading) null else guardDerive(null) { SimpleDateFormat("h:mm:ss a", Locale.US).format(Date()) }
+    }
+
+    Column(
+        Modifier.fillMaxSize().background(Paper).verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
+        // ── the top chrome (web SHELL `.top` + `.strip`): pine header band, then the mono strip ──
+        OverviewHeader(
+            onRefresh = { vm.refresh() },
+            // No NavController reaches this screen (OverviewScreen(repo) is the whole call in
+            // MissionNav.graph), so the Connection button cannot navigate — it points honestly at
+            // the app bar's connection affordance instead of pretending to open a drawer.
+            onConnection = {
+                Toast.makeText(ctx, "Connection lives in the app bar — tap the pulse dot, top right.", Toast.LENGTH_SHORT).show()
+            },
+        )
+        OverviewStrip(M, live = repo.mode == Mode.LIVE, toolErrors = toolErrors, clock = clock)
         s.stale?.let { Ribbon("⚠ $it", tone = Tone.WARN) }
 
         // ── 1.0 THE ESTATE — the phone's first card: the node census as a pill grid + the map CTA.
@@ -423,18 +453,9 @@ fun OverviewScreen(repo: MissionRepository) {
         //    view (00) is one chip away in the same OPERATE segment.) ──
         EstateCard(M)
 
-        // ── 1.1 STANCE — the verdict as LIGHT flowing content on cream paper (the screenshots) ──
-        VerdictBanner(
-            title = "Overview",
-            word = M.stance,
-            said = M.said,
-            pills = listOf(
-                "RISK·${M.risk}" to verdictTone(M.risk),
-                "LOOP·${M.loop}" to verdictTone(M.loop),
-                "TRUTH·${M.truth}" to verdictTone(M.truth),
-            ),
-            wordTone = verdictTone(M.stance),
-        )
+        // ── 1.1 STANCE — the dark `.stance` band (web pStance): the giant display word + cursor
+        //    bar, the live narrative with bold runs, then the three RISK/LOOP/TRUTH tiles ──
+        OverviewStancePanel(M)
         // the evidence rows behind each pill (kept as a detail card under the band)
         McCard("Stance — the evidence", "derived · O-1..O-8") {
             KvRow(
@@ -814,6 +835,218 @@ fun OverviewScreen(repo: MissionRepository) {
                 "O-6 net R is never summed across cohorts · O-7 conviction is uncalibrated until a pin · " +
                 "O-8 the chokepoint is computed, not chosen.",
         )
+    }
+}
+
+// ── the top chrome (web SHELL: `.top` header band + `.strip` mono strip) ──────────────────────────
+
+/**
+ * The header band — the web `.top`: pine rounded band with the split TRIAD wordmark (TRI white /
+ * AD emerald, the `.brand em` convention BrandStrip uses), the mono `.ver` eyebrow, then the two
+ * ghost buttons (`.btn.ghost.sm`): Refresh (re-polls the view's tools) and Connection.
+ */
+@Composable
+private fun OverviewHeader(onRefresh: () -> Unit, onConnection: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 10.dp)
+            .background(Pine, RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text("TRI", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, letterSpacing = 0.5.sp)
+            Text("AD", color = EmeraldBright, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, letterSpacing = 0.5.sp)
+        }
+        Text(
+            "MISSION CONTROL · OVERVIEW v1.0",
+            color = PineVer, fontFamily = EstateMono, fontSize = 9.sp, letterSpacing = 1.1.sp,
+            fontWeight = FontWeight.Medium, lineHeight = 13.sp,
+            modifier = Modifier.padding(start = 12.dp).weight(1f),
+        )
+        GhostButton("Refresh", onRefresh)
+        Spacer(Modifier.width(8.dp))
+        GhostButton("Connection", onConnection)
+    }
+}
+
+/** A ghost-outline button on pine — the web `.btn.ghost.sm` (transparent, #2c4a3e border, dim text). */
+@Composable
+private fun GhostButton(label: String, onClick: () -> Unit) {
+    Text(
+        label,
+        color = PineTextDim, fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .border(1.dp, PineLine, RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 9.dp, vertical = 6.dp),
+    )
+}
+
+/** One strip cell — mono `key value`, value bold (the web `.strip .s b`). */
+@Composable
+private fun StripCell(k: String, v: String, vc: Color = Ink) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("$k ", color = Ink2, fontFamily = EstateMono, fontSize = 11.sp)
+        Text(v, color = vc, fontFamily = EstateMono, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+    }
+}
+
+/** A 7dp strip status dot + its mono caption (the web `.strip .dot[.ok/.am/.bad]`). */
+@Composable
+private fun StripDotCell(dot: Color, caption: String, cc: Color = Ink2) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        Box(Modifier.size(7.dp).background(dot, CircleShape))
+        Text(caption, color = cc, fontFamily = EstateMono, fontSize = 11.sp)
+    }
+}
+
+/**
+ * The mono strip — the web `renderStrip`, as a cream card of wrapped rows: mode dot · phase ·
+ * services n/n · lane · coverage · take-rate · bank · reads-ok dot · clock. Every value is a live
+ * derive off [Model]; an absent read prints an em-dash (O-3), never a fabricated number.
+ */
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun OverviewStrip(M: Model, live: Boolean, toolErrors: Int?, clock: String?) {
+    val servicesUp = M.so.int("services_up")
+    val servicesTotal = M.so.int("services_total")
+    FlowRow(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            .background(OvStripBg, RoundedCornerShape(10.dp))
+            .border(1.dp, Line, RoundedCornerShape(10.dp))
+            .padding(horizontal = 13.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        // mode — the one strip fact that names the adapter, not a read
+        StripDotCell(if (live) ModeLiveDot else ModeDemoDot, if (live) "LIVE" else "DEMO")
+        StripCell("phase", M.phase)
+        StripCell(
+            "services",
+            if (servicesUp != null && servicesTotal != null) "$servicesUp/$servicesTotal" else "—",
+            if (servicesUp == null) Unk else Ink,
+        )
+        StripCell(
+            "lane",
+            if (M.realFills == null) "—" else if (M.realFills == 0) "SHADOW" else "LIVE",
+            if (M.realFills == null) Unk else Ink,
+        )
+        StripCell(
+            "coverage", pct(M.coverage, 0),
+            if (M.total == 0) Unk else if ((M.coverage ?: 0.0) >= COVERAGE_FLOOR) Emerald else Unk,
+        )
+        StripCell(
+            "take-rate", pct(M.takeRate, 2),
+            if (M.tr == null) Unk else if (M.inBand) Emerald else Red,
+        )
+        StripCell("bank", if (M.db == null) "—" else "${n0(M.bankShadow)} shadow · ${n0(M.bankLive)} live")
+        StripDotCell(
+            when { toolErrors == null -> Unk; toolErrors == 0 -> Emerald; else -> Red },
+            when { toolErrors == null -> "—"; toolErrors == 0 -> "reads ok"; else -> "$toolErrors tool errors" },
+            when { toolErrors == null -> Unk; toolErrors == 0 -> Ink2; else -> Red },
+        )
+        Text(clock ?: "—", color = Ink2, fontFamily = EstateMono, fontSize = 11.sp)
+    }
+}
+
+// ── the stance panel (web pStance — the dark `.stance` band) ──────────────────────────────────────
+
+/** The stance word's colour — the web `.word.shadow/.armed/.halted/.unknown`. Anything unmapped
+ *  falls to the unknown grey, never a healthy tint (O-1). */
+private fun stanceWordColor(stance: String): Color = when (stance) {
+    "SHADOW" -> VerdictShadow
+    "ARMED" -> VerdictArmed
+    "HALTED" -> VerdictHalted
+    else -> VerdictUnknown
+}
+
+/** The narrative with bold runs — the web `said` markup (`<b>` → bold white; the unprotected count's
+ *  `<b class=bad>` → bold salmon), rebuilt clause-for-clause from the same fields as [Model.said]. */
+private fun stanceSaid(M: Model): AnnotatedString = buildAnnotatedString {
+    val b = SpanStyle(color = Color.White, fontWeight = FontWeight.Bold)
+    val bad = SpanStyle(color = VerdictHalted, fontWeight = FontWeight.Bold)
+    val unp = M.unprotected
+    when {
+        unp == 0 -> withStyle(b) { append("0 at risk") }
+        unp != null && unp > 0 -> withStyle(bad) { append("$unp unprotected fill(s)") }
+        else -> withStyle(b) { append("risk unknown") }
+    }
+    append(" · ")
+    val fr = M.flowRate
+    if (fr != null) {
+        append("loop alive at ")
+        withStyle(b) { append("${fr.toInt()} cand/h") }
+    } else append("flow unknown")
+    append(" · ")
+    if (M.decisions > 0) {
+        append("gate taking ")
+        withStyle(b) { append(pct(M.takeRate, 2)) }
+        append(" of ${n0(M.decisions)} decisions (band 10–60%)")
+    } else append("no decisions")
+    append(" · ")
+    if (M.total > 0) {
+        withStyle(b) { append("${M.byUnknown} of ${M.total}") }
+        append(" components unprobed")
+    } else append("no checkup")
+    append(".")
+}
+
+/** One RISK/LOOP/TRUTH tile — the web `.pill.ok/.am/.bad/.unk` (the Executor screen's tile
+ *  treatment): mono label, bold verdict word coloured, tiny mono subline. UNKNOWN (and anything
+ *  unmapped) gets the neutral dark tile — never a green tint (O-1). */
+@Composable
+private fun StanceTile(modifier: Modifier, k: String, verdict: String, note: String) {
+    val (bg, ln, fg) = when (verdict) {
+        "GREEN" -> Triple(Color(0xFF123A2A), Color(0xFF1D6B4C), VerdictShadow)
+        "YELLOW" -> Triple(Color(0xFF382A12), Color(0xFF6B4C17), VerdictArmed)
+        "RED" -> Triple(Color(0xFF3A1A18), Color(0xFF6B2B26), VerdictHalted)
+        else -> Triple(Color(0xFF1C2B26), Color(0xFF3A4A44), VerdictUnknown)
+    }
+    Column(
+        modifier.background(bg, RoundedCornerShape(10.dp))
+            .border(1.dp, ln, RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Text(k, color = PineVer, fontFamily = EstateMono, fontSize = 9.sp, letterSpacing = 1.sp, fontWeight = FontWeight.SemiBold)
+        Text(verdict, color = fg, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp))
+        Text(note, color = PineVer, fontFamily = EstateMono, fontSize = 8.5.sp, lineHeight = 11.sp, modifier = Modifier.padding(top = 3.dp))
+    }
+}
+
+/**
+ * The stance panel — the web `.stance` band on pine: the giant display word (colour per the JS
+ * stance rule: HALTED → salmon, SHADOW → soft emerald, ARMED → amber, else unknown grey), the
+ * `.word` border-right rendered as a 2×34dp cursor bar, the live narrative, then the three tiles.
+ */
+@Composable
+private fun OverviewStancePanel(M: Model) {
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            .background(Pine, RoundedCornerShape(16.dp))
+            .padding(horizontal = 18.dp, vertical = 18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                M.stance, color = stanceWordColor(M.stance),
+                fontWeight = FontWeight.ExtraBold, fontSize = 40.sp, letterSpacing = (-1).sp,
+            )
+            Spacer(Modifier.width(18.dp))
+            Box(Modifier.width(2.dp).height(34.dp).background(PineLine))
+        }
+        Text(stanceSaid(M), color = PineTextDim, fontSize = 13.5.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 12.dp))
+        Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StanceTile(
+                Modifier.weight(1f), "RISK", M.risk,
+                if (M.unprotected == 0) "0 unprotected"
+                else if (M.unprotected == null) "not derivable"
+                else "${M.unprotected} unprotected",
+            )
+            StanceTile(Modifier.weight(1f), "LOOP", M.loop, M.chokeStage?.let { "choke @ ${it.k}" } ?: "no choke")
+            StanceTile(
+                Modifier.weight(1f), "TRUTH", M.truth,
+                if (M.total > 0) "${M.probed}/${M.total} probed · ${pct(M.coverage, 0)}" else "no checkup",
+            )
+        }
     }
 }
 
