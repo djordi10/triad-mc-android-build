@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -57,7 +58,6 @@ import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.Ribbon
-import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone
@@ -68,7 +68,6 @@ import agentic.triad.missioncontrol.ui.components.Tone.NEUTRAL
 import agentic.triad.missioncontrol.ui.components.Tone.SEV
 import agentic.triad.missioncontrol.ui.components.Tone.UNK
 import agentic.triad.missioncontrol.ui.components.Tone.WARN
-import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.arr
 import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.field
@@ -82,7 +81,6 @@ import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.str
 import agentic.triad.missioncontrol.ui.components.text
-import agentic.triad.missioncontrol.ui.nav.View
 import agentic.triad.missioncontrol.ui.theme.Amber
 import agentic.triad.missioncontrol.ui.theme.AmberSoft
 import agentic.triad.missioncontrol.ui.theme.Card as CardBg
@@ -116,6 +114,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 private fun row(vararg cells: Pair<String, Tone>) = cells.toList()
 
@@ -1769,6 +1768,88 @@ private fun ExecFooter(m: ExModel) {
     }
 }
 
+// ══ Checkup / Ops·Loops re-skin chrome — the exec design language, parameterized ═════════════════
+// The re-skin reuses the ExecutorScreen palette + composables (Pine/PineVer/PineTextDim/Verdict*,
+// ExecStripItem, ExecPill, ExecRibbonBox); the two tokens below are the only CSS hexes it adds.
+private val CkLadderTrack = Color(0xFFEEECE5)   // .ckwrap .drow .dt track
+private val OpsChainPipe = Color(0xFF3D6B58)    // .opswrap .chain .pipe
+
+/** The exec dark header band with a parameterized version label + ghost buttons (⇔ `.top`). */
+@Composable
+private fun CkOpsHeader(ver: String, buttons: List<Pair<String, () -> Unit>>) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 10.dp)
+            .background(Pine, RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("TRIAD", color = Color.White, fontFamily = ExDisp, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, letterSpacing = (-0.2).sp)
+        Text(
+            ver,
+            color = PineVer, fontFamily = ExMono, fontSize = 9.sp, letterSpacing = 1.1.sp,
+            fontWeight = FontWeight.Medium, lineHeight = 13.sp,
+            modifier = Modifier.padding(start = 12.dp).weight(1f),
+        )
+        buttons.forEach { (label, onClick) ->
+            Text(
+                label,
+                color = PineTextDim, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center, lineHeight = 13.sp,
+                modifier = Modifier.padding(start = 8.dp)
+                    .border(1.dp, PineLine, RoundedCornerShape(8.dp))
+                    .clickable { onClick() }
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+            )
+        }
+    }
+}
+
+/** One CKVIEW `.drow` — colored mono label, grey explainer, thin emerald-fraction bar. Zero rows
+ *  read red (`.drow.zero`), exactly the CSS rule — D4/D3 at zero are the page's indictment. */
+@Composable
+private fun CkDepthRow(label: String, explainer: String, n: Int, total: Int) {
+    val zero = n == 0
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                Text(label, color = if (zero) Red else Ink, fontFamily = ExMono, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 0.4.sp)
+                Text(
+                    explainer, color = Ink2, fontSize = 10.sp, lineHeight = 13.sp,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Text(
+                if (total > 0) "$n · ${String.format("%.1f%%", n * 100.0 / total)}" else "—",
+                color = if (zero) Red else Ink, fontFamily = ExDisp, fontWeight = FontWeight.Bold,
+                fontSize = 12.sp, modifier = Modifier.padding(start = 10.dp),
+            )
+        }
+        Box(
+            Modifier.fillMaxWidth().padding(top = 5.dp).height(12.dp)
+                .background(CkLadderTrack, RoundedCornerShape(6.dp)),
+        ) {
+            if (n > 0 && total > 0) {
+                Box(
+                    Modifier.fillMaxWidth((n.toFloat() / total).coerceIn(0.015f, 1f))
+                        .height(12.dp).background(Emerald, RoundedCornerShape(6.dp)),
+                )
+            }
+        }
+    }
+}
+
+/** One OPSVIEW `.chain .cl` terminal line: a PineVer tag gutter + a mono styled payload. */
+@Composable
+private fun OpsChainLine(tag: String, text: AnnotatedString) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), verticalAlignment = Alignment.Top) {
+        Text(
+            tag, color = PineVer, fontFamily = ExMono, fontWeight = FontWeight.SemiBold,
+            fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.width(62.dp),
+        )
+        Text(text, color = PineText, fontFamily = ExMono, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.weight(1f))
+    }
+}
+
 // ── Checkup — sixty-one components, one verdict ────────────────────────────────────────────────────
 private val CHECKUP_TOOLS = listOf(
     "get_checkup", "get_checklist_status", "get_go_no_go_status", "get_bridge_lag",
@@ -1887,15 +1968,144 @@ fun CheckupScreen(repo: MissionRepository) {
     val divergent = historyServed && clientVerdicts.isNotEmpty() && mcpVerdicts.isNotEmpty() &&
         (clientVerdicts != mcpVerdicts)
 
-    ViewScaffold(
-        View.CHECKUP,
-        stance = listOf(
-            Stance("verdict", verdictShown, UNK),
-            Stance("coverage", "$probed / $total", if (probed == 0) BAD else WARN),
-            Stance("D3 · D4", "$d3 · $d4", BAD),
-            Stance("work items", unknowns.size.toString(), WARN),
-        ),
+    // ── re-skin derives — presentation-only recombinations of the values computed above ──────────
+    val redsN = guardDerive(0) { components.count { it.text("status", "") == "RED" } }
+    val yellowsN = guardDerive(0) { components.count { it.text("status", "") == "YELLOW" } }
+    val runtimeProbes = d3 + d4
+    val deepest = when { d4 > 0 -> "D4"; d3 > 0 -> "D3"; d2 > 0 -> "D2"; d1 > 0 -> "D1"; else -> "D0" }
+    val moneyProbed = (moneyTotal - moneyDark).coerceAtLeast(0)
+    val covPct = if (total > 0) String.format("%.1f%%", coverage * 100) else "—"
+    // The divergence COUNT the CKVIEW way: a client run and an mcp run ≤120s apart with different
+    // verdicts. The embedded history's ts is two-typed (client epoch-µs int, mcp ISO string) — it is
+    // normalised on read, which is a patch over a defect, not a fix.
+    fun histMs(r: JsonObject): Long? {
+        val p = (r["ts"] as? JsonPrimitive)?.content ?: return null
+        val num = p.toDoubleOrNull()
+        if (num != null) return if (num > 1e15) (num / 1000.0).toLong() else num.toLong()
+        return guardDerive<Long?>(null) {
+            val f = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+            f.timeZone = TimeZone.getTimeZone("UTC")
+            f.parse(p)?.time
+        }
+    }
+    val divergenceN: Int? = if (!historyServed) null else guardDerive(0) {
+        val stamped = historyRows.mapNotNull { r ->
+            histMs(r)?.let { Triple(r.text("source", ""), r.text("verdict", "—"), it) }
+        }
+        val mcpRuns = stamped.filter { it.first == "mcp" }
+        stamped.filter { it.first == "client" }.count { c ->
+            mcpRuns.any { m -> abs(m.third - c.third) <= 120_000L && m.second != c.second }
+        }
+    }
+    // The stance narrative — CKVIEW `said`, live numbers, never claiming a depth it did not find.
+    val ckSaid = if (total == 0) AnnotatedString("no checkup returned.") else buildAnnotatedString {
+        val b = SpanStyle(color = Color.White, fontWeight = FontWeight.SemiBold)
+        append("$redsN reds — but ")
+        withStyle(b) { append("${unknowns.size} of $total") }
+        append(" probes have no source, and ")
+        if (runtimeProbes == 0) withStyle(b) { append("not one green is a runtime probe") }
+        else withStyle(b) { append("$runtimeProbes greens are runtime probes") }
+        append(". The deepest probe in this system reads $deepest.")
+    }
+    val clock = remember(s.data) { SimpleDateFormat("h:mm:ss a", Locale.US).format(Date()) }
+    val ctx = LocalContext.current
+
+    Column(
+        Modifier.fillMaxSize().background(Paper).verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
+        // (a) the dark header band — ⇔ CKVIEW `.top`. "Run checkup" in CKVIEW is get_checkup{force}
+        // + a record_checkup APPEND (C-5): both are argumented/write calls this read-only client
+        // does not have, so the button says so honestly instead of pretending.
+        CkOpsHeader(
+            "MISSION CONTROL · CHECKUP v1.0",
+            listOf<Pair<String, () -> Unit>>(
+                "Run checkup" to {
+                    Toast.makeText(
+                        ctx,
+                        "Run checkup = get_checkup{force} + a record_checkup append (C-5) — writes are not wired in this read-only client. Refresh re-polls the same reads.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                },
+                "Refresh" to { vm.refresh() },
+            ),
+        )
+        // (b) the cream mono stat strip — ⇔ CKVIEW renderStrip, em-dashes when unserved.
+        Column(
+            Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                .background(ExStripBg, RoundedCornerShape(10.dp))
+                .border(1.dp, Line, RoundedCornerShape(10.dp))
+                .padding(horizontal = 13.dp, vertical = 9.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(7.dp).background(if (repo.mode == Mode.LIVE) Emerald else Amber, CircleShape))
+                    Text(if (repo.mode == Mode.LIVE) " LIVE" else " DEMO", color = Ink, fontFamily = ExMono, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                }
+                ExecStripItem("verdict", verdictShown, if (verdictShown == "GREEN") Emerald else if (verdictShown == "RED") Red else Unk)
+                ExecStripItem("coverage", if (total > 0) "$probed/$total · $covPct" else "—", if (total > 0 && coverage >= 0.8) Emerald else Unk)
+                ExecStripItem("deepest", if (total > 0) deepest else "—", if (runtimeProbes > 0) Emerald else Red)
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 6.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ExecStripItem("runtime probes", runtimeProbes.toString(), if (runtimeProbes > 0) Emerald else Red)
+                ExecStripItem("money planes", if (moneyTotal > 0) "$moneyProbed/$moneyTotal" else "—", Red)
+                ExecStripItem("divergences", divergenceN?.toString() ?: "—", if ((divergenceN ?: 0) > 0) Red else if (divergenceN == null) Unk else Emerald)
+                ExecStripItem("reds", redsN.toString(), if (redsN > 0) Red else Emerald)
+            }
+            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(clock, color = Ink2, fontFamily = ExMono, fontSize = 11.sp)
+                if (s.stale != null) Text("  ·  ${s.stale}", color = Amber, fontFamily = ExMono, fontSize = 10.sp, maxLines = 1)
+            }
+        }
+        // (c) the STANCE BLOCK — ⇔ CKVIEW pVerdict: giant word + narrative + rule line + 3 tiles.
+        Column(
+            Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                .background(Pine, RoundedCornerShape(16.dp))
+                .padding(horizontal = 18.dp, vertical = 18.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    verdictShown,
+                    color = when (verdictShown) {
+                        "GREEN" -> VerdictShadow; "RED" -> VerdictHalted; "YELLOW" -> VerdictArmed; else -> VerdictUnknown
+                    },
+                    fontFamily = ExDisp, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp, letterSpacing = (-1).sp,
+                )
+                Spacer(Modifier.width(18.dp))
+                Box(Modifier.width(2.dp).height(34.dp).background(PineLine))
+            }
+            Text(ckSaid, color = PineTextDim, fontSize = 13.5.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 12.dp))
+            Text(
+                "GREEN requires coverage ≥ 80% and reds = 0. Below that the verdict is UNKNOWN — regardless of how few reds there are.",
+                color = PineVer, fontFamily = ExMono, fontSize = 11.sp, lineHeight = 17.sp,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ExecPill(
+                    Modifier.weight(1f), "COVERAGE",
+                    if (total == 0) "UNKNOWN" else if (coverage >= 0.8) "GREEN" else "UNKNOWN",
+                    if (total > 0) "$probed/$total · $covPct" else "—",
+                )
+                ExecPill(
+                    Modifier.weight(1f), "REDS",
+                    if (total == 0) "UNKNOWN" else if (redsN > 0) "RED" else "GREEN",
+                    if (total > 0) "$redsN red · $yellowsN yellow" else "—",
+                )
+                ExecPill(
+                    Modifier.weight(1f), "DEPTH",
+                    if (total == 0) "UNKNOWN" else if (runtimeProbes > 0) "GREEN" else "UNKNOWN",
+                    if (total > 0) "deepest $deepest · $runtimeProbes runtime" else "—",
+                )
+            }
+        }
         Ribbon("$total components, one verdict — and not one green is a runtime probe", "This is not a status board. It is a wiring board.", WARN)
         McCard("The verdict", "get_checkup · get_attestation") {
             KvRow("verdict", verdictShown, UNK)
@@ -1906,26 +2116,22 @@ fun CheckupScreen(repo: MissionRepository) {
             Note("C-2: a verdict carries its denominator. C-4: silence is not health.")
         }
         McCard("Probe depth (C-1)", "get_checkup · classified client-side") {
-            // The depth ladder D0..D4 as bars (client-side classification of each green's reason).
-            // Shallow depths (D0 declared) are UNK; the runtime/behavioural depths (D3/D4) are what matters.
-            val ladder = listOf(
-                Bar("D0 declared", declared.toDouble(), UNK, "exists in census"),
-                Bar("D1 loads", d1.toDouble(), WARN, "imports, ≠ works"),
-                Bar("D2 artifact", d2.toDouble(), WARN, "hash recomputes"),
-                Bar("D3 probed", d3.toDouble(), BAD, "runtime tested"),
-                Bar("D4 exercised", d4.toDouble(), BAD, "behaviourally"),
-            )
-            HBarChart(ladder, labelWidth = 96)
-            MiniTable(
-                listOf("depth", "n", "meaning"),
-                listOf(
-                    row("D0 declared" to NEUTRAL, declared.toString() to UNK, "exists in census" to NEUTRAL),
-                    row("D1 loads" to NEUTRAL, d1.toString() to WARN, "imports, ≠ works" to NEUTRAL),
-                    row("D2 artifact" to NEUTRAL, d2.toString() to WARN, "hash recomputes" to NEUTRAL),
-                    row("D3 probed" to NEUTRAL, d3.toString() to BAD, "runtime tested" to NEUTRAL),
-                    row("D4 exercised" to NEUTRAL, d4.toString() to BAD, "behaviourally" to NEUTRAL),
-                ),
-            )
+            // The CKVIEW `.drow` ladder, D4→D0 (same derived counts as before, HTML presentation):
+            // colored mono label · grey explainer · thin emerald-fraction bar. Zero rows read red.
+            CkDepthRow("D4 · behavioural", "exercised against a golden / drill", d4, total)
+            CkDepthRow("D3 · runtime", "the process answers with its own state", d3, total)
+            CkDepthRow("D2 · artifact", "a hash / manifest recomputes clean", d2, total)
+            CkDepthRow("D1 · config", "the config or registry file loads", d1, total)
+            CkDepthRow("D0 · declared", "the component exists in the census. Says nothing.", declared, total)
+            if (runtimeProbes == 0) {
+                // The law note, verbatim from CKVIEW — shown only while it is true (no D3/D4 green).
+                ExecRibbonBox(
+                    "Every green in this system is D1 or D2.",
+                    "Zero components are probed at runtime, and zero are exercised behaviourally. A checkup " +
+                        "that never runs the thing it is checking is a spellcheck of the config. This is not a " +
+                        "criticism of the probes — it is the number that tells you what the verdict is worth.",
+                )
+            }
             Note("D3=$d3 / D4=$d4, said in words: zero components are probed at runtime, zero exercised behaviourally (AT-CK3).")
         }
         McCard("Probe depth — the ladder, server-side (C-1)", "get_probe_depth") {
@@ -2283,15 +2489,130 @@ fun OpsScreen(repo: MissionRepository) {
         )
     }
 
-    ViewScaffold(
-        View.OPS,
-        stance = listOf(
-            Stance("loop", "RUNNING", GOOD),
-            Stance("watch", "UNWATCHED", SEV),
-            Stance("pager", "$blind/8 BLIND", BAD),
-            Stance("invariants", "F12 VIOLATED", SEV),
-        ),
+    // ── re-skin derives — presentation-only recombinations of the values computed above ──────────
+    val fGreen = (fmatrix.size - fViolated - fBlind - fUndrilled).coerceAtLeast(0)
+    val dupBank: Int? = if (bankRows != null && bankDistinct != null) bankRows - bankDistinct else null
+    // The §7.2 breach condition, the OPSVIEW way: duplicate rows observed in either writer.
+    val f12Violated = (dupBank ?: 0) > 0 || historyDup > 0
+    val flowRate = guardDerive<Double?>(null) { continuity.obj("flow").obj("metrics").num("rate_per_h") }
+    val flowFloor = guardDerive<Double?>(null) { continuity.obj("flow").obj("metrics").num("floor_per_h") }
+    val loopOk = flowLeg == "GREEN" && laneRows0.isNotEmpty()
+    val opsStance = if (f12Violated) "UNWATCHED" else if (loopOk) "RUNNING" else "UNKNOWN"
+    val decisionsN = guardDerive<String?>(null) {
+        (d["get_loop_status"] as? JsonObject).arr("loops").rows().firstOrNull()
+            ?.text("detail", "")?.let { Regex("\\d[\\d,]*").find(it)?.value }
+    }
+    val hbRange = guardDerive<String?>(null) {
+        val ages = laneRows0.mapNotNull { l ->
+            l.num("age_s")?.roundToInt() ?: l.int("heartbeat_s") ?: l.int("heartbeat")
+        }
+        if (ages.isEmpty()) null else "${ages.min()}–${ages.max()}s"
+    }
+    val supervised = psup.bool("supervised")
+    // The stance narrative — OPSVIEW `said`, live numbers, the violated clause only when it holds.
+    val opsSaid = buildAnnotatedString {
+        val b = SpanStyle(color = Color.White, fontWeight = FontWeight.SemiBold)
+        append("The loop is ")
+        withStyle(b) { append("alive") }
+        append(
+            " — ${decisionsN ?: "—"} decisions, ${exN0(flowRate)}/h, ${laneRows0.size} ingest lanes " +
+                "with ${hbRange ?: "—"} heartbeats. But ",
+        )
+        withStyle(b) { append("$blind of the 8 page conditions have no detector") }
+        append(", ")
+        withStyle(b) { append("${fBlind + fUndrilled} of the 14 failure modes have never been drilled") }
+        if (f12Violated) {
+            append(", and ")
+            withStyle(b) { append("one system invariant (§7.2 idempotency) is measurably violated") }
+        }
+        append(".")
+    }
+    val clock = remember(s.data) { SimpleDateFormat("h:mm:ss a", Locale.US).format(Date()) }
+
+    Column(
+        Modifier.fillMaxSize().background(Paper).verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
+        // (a) the dark header band — ⇔ OPSVIEW `.top` (Refresh is its only wireable ghost button).
+        CkOpsHeader(
+            "MISSION CONTROL · OPS & LOOPS v1.0",
+            listOf<Pair<String, () -> Unit>>("Refresh" to { vm.refresh() }),
+        )
+        // (b) the cream mono stat strip — ⇔ OPSVIEW renderStrip, em-dashes when unserved.
+        Column(
+            Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                .background(ExStripBg, RoundedCornerShape(10.dp))
+                .border(1.dp, Line, RoundedCornerShape(10.dp))
+                .padding(horizontal = 13.dp, vertical = 9.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(7.dp).background(if (repo.mode == Mode.LIVE) Emerald else Amber, CircleShape))
+                    Text(if (repo.mode == Mode.LIVE) " LIVE" else " DEMO", color = Ink, fontFamily = ExMono, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                }
+                ExecStripItem("loop", "${exN0(flowRate)}/h", if (loopOk) Emerald else Red)
+                ExecStripItem("lanes", laneRows0.size.toString(), if (laneRows0.isNotEmpty()) Emerald else Unk)
+                ExecStripItem("F-matrix", "$fViolated violated · $fBlind blind · $fGreen green", Red)
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 6.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ExecStripItem("pager", "$blind/8 blind", if (blind > 0) Red else Emerald)
+                ExecStripItem("supervision", if (supervised) "yes" else "NONE", if (supervised) Emerald else Red)
+                ExecStripItem(
+                    "loops",
+                    "$loops probes · " + if (sloopRows.isEmpty()) "?/12 standing" else "${sloopRows.size - sloopNever}/${sloopRows.size} standing",
+                    if (sloopRows.isEmpty()) Unk else if (sloopNever > 0) Red else Emerald,
+                )
+                ExecStripItem("incidents", incidents.toString(), Unk)
+            }
+            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(clock, color = Ink2, fontFamily = ExMono, fontSize = 11.sp)
+                if (s.stale != null) Text("  ·  ${s.stale}", color = Amber, fontFamily = ExMono, fontSize = 10.sp, maxLines = 1)
+            }
+        }
+        // (c) the STANCE BLOCK — ⇔ OPSVIEW pStance: giant word + live narrative + 3 tiles.
+        Column(
+            Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                .background(Pine, RoundedCornerShape(16.dp))
+                .padding(horizontal = 18.dp, vertical = 18.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    opsStance,
+                    color = when (opsStance) {
+                        "UNWATCHED" -> VerdictHalted; "RUNNING" -> VerdictShadow; else -> VerdictUnknown
+                    },
+                    fontFamily = ExDisp, fontWeight = FontWeight.ExtraBold, fontSize = 40.sp, letterSpacing = (-1).sp,
+                )
+                Spacer(Modifier.width(18.dp))
+                Box(Modifier.width(2.dp).height(34.dp).background(PineLine))
+            }
+            Text(opsSaid, color = PineTextDim, fontSize = 13.5.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 12.dp))
+            Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ExecPill(
+                    Modifier.weight(1f), "LOOP",
+                    if (loopOk) "GREEN" else "UNKNOWN",
+                    "${exN0(flowRate)}/h ≥ ${flowFloor?.let { exN0(it) } ?: "100"}/h",
+                )
+                ExecPill(
+                    Modifier.weight(1f), "PAGER",
+                    if (blind == 0) "GREEN" else "RED",
+                    "$blind of 8 blind",
+                )
+                ExecPill(
+                    Modifier.weight(1f), "INVARIANTS",
+                    if (f12Violated) "RED" else "UNKNOWN",
+                    if (f12Violated) "§7.2 violated" else "unverified",
+                )
+            }
+        }
         Ribbon(
             "RUNNING · UNWATCHED — the §7.2 idempotency invariant is breached",
             (if (bankRows != null) "$bankRows bank rows resolving ${bankDistinct ?: "~2,731"} distinct decisions" else "shadow bank rows / distinct") +
@@ -2299,17 +2620,87 @@ fun OpsScreen(repo: MissionRepository) {
             SEV,
         )
         McCard("The invariant breach (L-6)", "get_shadow_bank · get_bus_status · get_checkup") {
-            KvRow(
-                "shadow bank rows vs distinct",
-                if (bankLive) "${bankRows ?: "—"} / ${bankDistinct ?: "~2,731"}" else "UNKNOWN — bank unavailable",
-                if (bankLive) SEV else UNK,
-            )
-            KvRow(
-                "checkup-history dupes",
-                if (historyRows.isNotEmpty()) "$historyDup duplicate ts" else "$checkupUnknown UNKNOWN components",
-                if (historyDup > 0) SEV else UNK,
-            )
-            KvRow("consumer dedupe (F12 detector)", if (busLive) "present" else "✗ NO BUS ⇒ NO CONSUMER", BAD)
+            // The OPSVIEW `.chain` — the derivation drawn as a dark terminal block, not a bullet
+            // list. Same derives as before (bankRows/bankDistinct/historyDup/busLive/checkupUnknown),
+            // interpolated into the exact HTML lines and colors.
+            val q = SpanStyle(color = PineTextDim)                                      // .chain .q
+            val hi = SpanStyle(color = VerdictArmed, fontWeight = FontWeight.SemiBold)  // .chain .hi
+            val bd = SpanStyle(color = VerdictHalted, fontWeight = FontWeight.SemiBold) // .chain .bad
+            val pp = SpanStyle(color = OpsChainPipe)                                    // .chain .pipe
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(Pine, RoundedCornerShape(13.dp))
+                    .padding(horizontal = 14.dp, vertical = 13.dp),
+            ) {
+                OpsChainLine("§7.2", buildAnnotatedString { withStyle(q) { append("\"Delivery is at-least-once everywhere; every consumer is idempotent by message ID —") } })
+                OpsChainLine("", buildAnnotatedString { withStyle(q) { append(" THIS PAIR OF PROPERTIES IS A SYSTEM INVARIANT.\"") } })
+                OpsChainLine("", buildAnnotatedString { withStyle(pp) { append("│") } })
+                OpsChainLine("§2", buildAnnotatedString { withStyle(q) { append("The event bus is the spine of all four planes. Eleven topics.") } })
+                OpsChainLine("", buildAnnotatedString { withStyle(pp) { append("│") } })
+                if (!busLive) {
+                    OpsChainLine("LIVE", buildAnnotatedString { withStyle(bd) { append("get_bus_status → transport: unavailable — the error IS the evidence") } })
+                    OpsChainLine("", buildAnnotatedString {
+                        withStyle(pp) { append("⇒ ") }
+                        withStyle(hi) { append("There are no topics. There are no consumers. There is no dedupe layer.") }
+                    })
+                } else {
+                    OpsChainLine("LIVE", buildAnnotatedString { withStyle(SpanStyle(color = VerdictShadow, fontWeight = FontWeight.SemiBold)) { append("get_bus_status → served") } })
+                    OpsChainLine("", buildAnnotatedString {
+                        withStyle(pp) { append("⇒ ") }
+                        withStyle(hi) { append("a bus answers — its consumer dedupe layer is still unverified from here.") }
+                    })
+                }
+                OpsChainLine("", buildAnnotatedString { withStyle(pp) { append("│") } })
+                OpsChainLine("§10 F12", buildAnnotatedString {
+                    withStyle(q) { append("\"Duplicate delivery anywhere │ Detection: ") }
+                    withStyle(hi) { append("CONSUMER DEDUPE") }
+                    withStyle(q) { append(" │ No-op by message ID\"") }
+                })
+                OpsChainLine("", buildAnnotatedString {
+                    withStyle(pp) { append("⇒ ") }
+                    withStyle(bd) { append("F12's detection mechanism does not exist, because the thing it lives in does not exist.") }
+                })
+                OpsChainLine("", buildAnnotatedString { withStyle(pp) { append("│") } })
+                OpsChainLine("OBSERVED", buildAnnotatedString {
+                    if (bankLive) {
+                        withStyle(bd) { append("shadow bank") }
+                        withStyle(q) { append(" · expected 1 row per decision · observed ") }
+                        withStyle(bd) { append("${bankRows?.let { exN0(it) } ?: "—"} rows / ${bankDistinct?.let { exN0(it) } ?: "—"} distinct") }
+                    } else {
+                        withStyle(q) { append("shadow bank · ") }
+                        append("UNKNOWN — bank unavailable")
+                    }
+                })
+                OpsChainLine("OBSERVED", buildAnnotatedString {
+                    if (historyRows.isNotEmpty()) {
+                        withStyle(bd) { append("checkup history") }
+                        withStyle(q) { append(" · expected 1 row per run · observed ") }
+                        withStyle(bd) { append("$historyDup timestamps written twice") }
+                    } else {
+                        withStyle(q) { append("checkup history · ") }
+                        append("not served — $checkupUnknown UNKNOWN components")
+                    }
+                })
+                if (f12Violated) {
+                    // the closing `.rule` — maroon full-width band between two ExMaroonLine hairlines
+                    Column(Modifier.fillMaxWidth().padding(top = 9.dp)) {
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(ExMaroonLine))
+                        Text(
+                            buildAnnotatedString {
+                                append("F12 IS NOT MERELY UNDRILLED. IT IS VIOLATED — and the violation is the ")
+                                withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) { append("predicted consequence") }
+                                append(" of the missing bus. Two independent writers, one root cause.")
+                            },
+                            color = VerdictHalted, fontFamily = ExMono, fontWeight = FontWeight.SemiBold,
+                            fontSize = 10.sp, lineHeight = 16.sp,
+                            modifier = Modifier.fillMaxWidth().background(ExMaroon).padding(horizontal = 12.dp, vertical = 10.dp),
+                        )
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(ExMaroonLine))
+                    }
+                } else {
+                    OpsChainLine("", buildAnnotatedString { withStyle(q) { append("no duplicate evidence in this poll — §7.2 is unverified, not proven.") } })
+                }
+            }
             Note("Two independent writers append the same fact more than once — one root cause (the missing bus). A violation claim carries its evidence.")
         }
         McCard("Failure matrix (§10) — 14 rows, spec order", "get_bus_status · get_watchdog_stats · …") {
