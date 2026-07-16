@@ -1,10 +1,48 @@
 package agentic.triad.missioncontrol.ui.overview
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
+import agentic.triad.missioncontrol.ui.theme.Blue
+import agentic.triad.missioncontrol.ui.theme.Card
+import agentic.triad.missioncontrol.ui.theme.Emerald
+import agentic.triad.missioncontrol.ui.theme.Ink
+import agentic.triad.missioncontrol.ui.theme.Ink2
+import agentic.triad.missioncontrol.ui.theme.Line
+import agentic.triad.missioncontrol.ui.theme.Sev
+import agentic.triad.missioncontrol.ui.theme.Unk
 import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.Funnel
@@ -25,6 +63,7 @@ import agentic.triad.missioncontrol.ui.components.arr
 import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.field
 import agentic.triad.missioncontrol.ui.components.fmt
+import agentic.triad.missioncontrol.ui.components.guardDerive
 import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.list
 import agentic.triad.missioncontrol.ui.components.num
@@ -38,27 +77,58 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
- * Overview view 01 — the five-second page, a 1:1 native mirror of the web dashboard's v5.16 Overview
- * module (OVVIEW, wiring TRIAD-Overview-Wiring-v1.0.md). It reads the module's declared tools through
- * the shared [ToolsViewModel], folds them into one derived model (`derive`), then renders the same
- * panels in the same order: STANCE → MONEY PATH (spine + chokepoint) → RISK → TRUTH → EDGE → FLOW →
- * NEXT → LATENCY. Every law lives in [derive] once; the panels are dumb renderers.
+ * Overview view 01 — the five-second page, a 1:1 native mirror of the web dashboard's phone Overview
+ * (OVVIEW, wiring TRIAD-Overview-Wiring-v1.0.md). It reads the module's declared tools through the
+ * shared [ToolsViewModel], folds them into one derived model (`derive`), then renders the phone's
+ * card order: THE ESTATE (the node-pill census + map CTA, TPVIEW's first panel condensed) → STANCE →
+ * MONEY PATH (spine + chokepoint) → RISK → TRUTH → EDGE → FLOW → NEXT → LATENCY. Every law lives in
+ * [Model] once; the panels are dumb renderers.
  *
  * Honesty carries (O-1..O-8): an absent tool degrades to `UNKNOWN`/UNK — never a fabricated value
  * (O-1/O-3). The three server-side reads the doc reserves (get_money_path / get_risk_envelope /
- * get_truth_coverage) are not wired here; the panels stitch their spine/risk/coverage client-side
- * exactly as the HTML does when those reads 404.
+ * get_truth_coverage) ARE polled but 404 until built; the panels stitch their spine/risk/coverage
+ * client-side exactly as the HTML does when those reads 404, and pick the server value up the day
+ * each tool ships (the Sev-1 counter + the P3 fast-exit lane read get_risk_envelope first).
  */
 private val OVERVIEW_TOOLS = listOf(
+    // OVVIEW.TOOLS verbatim (all zero-arg reads) …
     "get_system_overview", "get_sim_gap", "get_breaker_state", "get_kill_state", "get_positions",
     "get_exposure", "get_limits", "get_take_rate", "get_databank", "get_checkup", "get_attestation",
     "get_config_active", "get_continuity", "get_books_scoreboard", "get_shadow_bank", "get_calibration",
     "get_detector_registry", "get_latency_budgets", "get_loop_status", "get_go_no_go_status",
-    "get_alerts", "get_proposals", "get_cag_stats",
+    "get_alerts", "get_proposals", "get_cag_stats", "get_bus_status",
+    // … including the PEND trio (wiring §3): they 404 until built; an ok=false read lands as null and
+    // the panels keep stitching client-side. When get_risk_envelope ships, the Sev-1 counter goes live.
+    "get_money_path", "get_risk_envelope", "get_truth_coverage",
+    // the estate card's live sources — TPVIEW's reads, condensed into the phone's first card
+    "get_service_status", "get_bridge_lag", "get_feed_health",
 )
 
 // ── local honesty helpers (⇔ OVVIEW module scalars) ────────────────────────────────────────────────
 private const val COVERAGE_FLOOR = 0.80
+
+// ── the estate card (phone first card — TPVIEW's node census condensed into a pill grid) ──────────
+// Exact hexes from the web `.tpwrap .nc` CSS: pill bg #fcfbf8, the NATS down pill #f9f0ef on a
+// #e2bfbc border, and the hairline rule #f0eee7.
+private val EstateMono = FontFamily.Monospace
+private val PillBg = Color(0xFFFCFBF8)
+private val PillDownBg = Color(0xFFF9F0EF)
+private val PillDownBorder = Color(0xFFE2BFBC)
+private val Hairline = Color(0xFFF0EEE7)
+
+/** TPVIEW's ST vocabulary — M-1: a green dot must name its source. UNK draws a dashed ring, never a fill. */
+private enum class PillSt { MEAS, INFER, IDLE, DOWN, UNK }
+
+private fun PillSt.dotColor(): Color = when (this) {
+    PillSt.MEAS -> Emerald   // .ni.meas → var(--em)
+    PillSt.INFER -> Blue     // .ni.infer → var(--blue)
+    PillSt.IDLE -> Unk       // .ni.idle → var(--unk)
+    PillSt.DOWN -> Sev       // .ni.down → var(--sev)
+    PillSt.UNK -> Unk        // .ni.unk → dashed var(--unk) ring
+}
+
+/** One estate node pill — label + resolved status; `key` prints the dark-red ·KEY suffix. */
+private data class NodePill(val label: String, val st: PillSt, val key: Boolean = false, val bus: Boolean = false)
 
 /** web `pct(v,d)` — a 0..1 fraction to a percent string, em-dash when null. */
 private fun pct(v: Double?, d: Int = 1): String = v?.let { String.format("%.${d}f%%", it * 100) } ?: "—"
@@ -117,6 +187,11 @@ private class Model(d: Map<String, JsonElement?>) {
     val lb = d["get_latency_budgets"] as? JsonObject
     val gng = d["get_go_no_go_status"] as? JsonObject
     val proposalsWrap = d["get_proposals"] as? JsonObject
+    val re = d["get_risk_envelope"] as? JsonObject          // PEND §3.2 — null until built
+    val ss = d["get_service_status"] as? JsonObject
+    val bl = d["get_bridge_lag"] as? JsonObject
+    val bus = d["get_bus_status"] as? JsonObject
+    val feed = d["get_feed_health"] as? JsonObject
 
     // ---- TRUTH: coverage before verdict (O-2) ----
     val comps: List<JsonObject> = (ck?.get("components") as? JsonArray)?.rows() ?: emptyList()
@@ -142,15 +217,21 @@ private class Model(d: Map<String, JsonElement?>) {
     // ---- RISK ----
     val positions = (posWrap?.get("positions") as? JsonArray)?.rows() ?: emptyList()
     val openN: Int = so.int("open_positions_count") ?: positions.size
-    // The Sev-1 counter — derivable only from get_risk_envelope (absent) or a fills join. The ledger's
-    // ledger.fills status carries the measured zero (O-4); otherwise it is not derivable (never null-as-0).
+    // The Sev-1 counter — from get_risk_envelope when built (§3.2), else the ledger.fills join. The
+    // ledger's ledger.fills status carries the measured zero (O-4); otherwise not derivable (never null-as-0).
     val services: List<JsonObject> = (so?.get("services") as? JsonArray)?.rows() ?: emptyList()
     val noFills = services.any { it.text("service") == "ledger.fills" && it.text("status") == "empty" }
-    val unprotected: Int? = if (noFills) 0 else null
-    val unprotectedWhy: String = if (noFills)
-        "measured: ledger.fills is empty — 0 fills, therefore 0 unprotected"
-    else
-        "not derivable without get_risk_envelope (§3.2) — RISK cannot be called green"
+    val unprotected: Int? = when {
+        re != null -> re.int("fills_without_armed_stop")
+        noFills -> 0
+        else -> null
+    }
+    val unprotectedWhy: String = when {
+        re != null -> "Sev-1 counter — computed from the ledger, never null."
+        noFills -> "measured: ledger.fills is empty — 0 fills, therefore 0 unprotected"
+        else -> "not derivable without get_risk_envelope (§3.2) — RISK cannot be called green"
+    }
+    val fastExit: JsonObject? = re.obj("fast_exit")         // P3 lane — null while the tool is PEND
     val g = ex.obj("global")
     val capsOK = ex.bool("caps_present")
     val grossUtil = g.num("utilization") ?: 0.0
@@ -247,6 +328,49 @@ private class Model(d: Map<String, JsonElement?>) {
         if (decisions > 0) "gate taking ${pct(takeRate, 2)} of ${n0(decisions)} decisions (band 10–60%)" else "no decisions",
         if (total > 0) "$byUnknown of $total components unprobed" else "no checkup",
     ).joinToString(" · ") + "."
+
+    // ---- THE ESTATE (phone first card — TPVIEW.derive() condensed: 12 nodes, statuses from the
+    //      same four sources; a node with no health source is UNKNOWN, never green · M-1/O-1) ----
+    val svcMap: Map<String, String> =
+        ss.arr("services").rows().associate { it.text("service", it.text("name")) to it.text("status") }
+    val laneCount: Int? = if (bl == null) null else bl.arr("lanes").rows().size
+    // The bus is DOWN when the tool errored/is absent OR it answers provisioned:false — a bus that
+    // is not provisioned does not exist, whatever the read's transport said (spec §2).
+    val busDown: Boolean =
+        bus == null || bus.text("error", "").isNotEmpty() ||
+            (bus.field("provisioned") != null && !bus.bool("provisioned"))
+    val feedDark: Boolean = feed == null || feed.text("error", "").isNotEmpty()
+
+    private fun tableSt(table: String, elseSt: PillSt): PillSt = when {
+        svcMap.isEmpty() -> PillSt.UNK                       // no read yet — honest, not idle
+        svcMap[table] == "ok" -> PillSt.INFER                // a table with rows is NOT process health
+        else -> elseSt
+    }
+
+    val pills: List<NodePill> = listOf(
+        NodePill("Market + Aux feeds", if (feedDark) PillSt.UNK else PillSt.MEAS),
+        NodePill("LLM serving", PillSt.UNK),                 // no health source at all
+        NodePill("Signal", tableSt("ledger.candidates", PillSt.IDLE)),
+        NodePill("Gateway", tableSt("ledger.decisions", PillSt.IDLE)),
+        NodePill(
+            "Executor",
+            if (svcMap["ledger.intents"] == "stale" || svcMap["ledger.orders"] == "stale") PillSt.IDLE else PillSt.UNK,
+        ),
+        NodePill("Venue Gateway", PillSt.UNK, key = true),   // the sole keyholder — least instrumented
+        NodePill("Exchange", PillSt.UNK),
+        NodePill("NATS JetStream — 7 streams", if (busDown) PillSt.DOWN else PillSt.MEAS, bus = true),
+        NodePill("Ledger", tableSt("ledger.context.packets", PillSt.IDLE)),
+        NodePill(
+            "Labeler · Outcome",
+            if (svcMap.isEmpty()) PillSt.UNK else if (svcMap["ledger.outcomes"] == "empty") PillSt.IDLE else PillSt.INFER,
+        ),
+        NodePill(
+            "Calibration · Books",
+            if (cal == null) PillSt.UNK else if (cal.text("status") == "absent") PillSt.IDLE else PillSt.INFER,
+        ),
+        NodePill("Databank", if ((laneCount ?: 0) > 0) PillSt.MEAS else PillSt.UNK),
+    )
+    val measuredNodes: Int = pills.count { it.st == PillSt.MEAS }
 }
 
 /** The empty model — every panel reads honest UNKNOWN/em-dash from this before any tool answers,
@@ -260,8 +384,8 @@ fun OverviewScreen(repo: MissionRepository) {
     val s by vm.state.collectAsState()
     // The v22 rewrite folds ~20 tools of laws inline at construction; a single bad/oddly-shaped
     // payload used to throw here and blank the whole Overview. Crash-proof it: a failed derive
-    // degrades to EMPTY_MODEL (all fields UNKNOWN) so the stance strip + all 8 panels still paint.
-    val M = runCatching { Model(s.data) }.getOrDefault(EMPTY_MODEL)
+    // degrades to EMPTY_MODEL (all fields UNKNOWN) so the estate card + stance + all 8 panels paint.
+    val M = guardDerive(EMPTY_MODEL) { Model(s.data) }
 
     // ── the stance strip (web renderStrip): phase · services · lane · coverage · take-rate · bank ──
     val servicesUp = M.so.int("services_up")
@@ -293,6 +417,12 @@ fun OverviewScreen(repo: MissionRepository) {
     ) {
         s.stale?.let { Ribbon("⚠ $it", tone = Tone.WARN) }
 
+        // ── 1.0 THE ESTATE — the phone's first card: the node census as a pill grid + the map CTA.
+        //    (No nav handle reaches this screen — OverviewScreen(repo) is the whole call in
+        //    MissionNav.graph — so the pills and the map button render non-navigating; the Topology
+        //    view (00) is one chip away in the same OPERATE segment.) ──
+        EstateCard(M)
+
         // ── 1.1 STANCE — the verdict as LIGHT flowing content on cream paper (the screenshots) ──
         VerdictBanner(
             title = "Overview",
@@ -306,7 +436,7 @@ fun OverviewScreen(repo: MissionRepository) {
             wordTone = verdictTone(M.stance),
         )
         // the evidence rows behind each pill (kept as a detail card under the band)
-        McCard("STANCE — the evidence", "derived · O-1..O-8") {
+        McCard("Stance — the evidence", "derived · O-1..O-8") {
             KvRow(
                 "RISK — ${if (M.unprotected == 0) "0 unprotected" else if (M.unprotected == null) "not derivable" else "${M.unprotected} unprotected"}",
                 M.risk, verdictTone(M.risk),
@@ -320,8 +450,8 @@ fun OverviewScreen(repo: MissionRepository) {
 
         // ── 1.2 MONEY PATH — the deterministic spine, chokepoint computed at the collapse (O-8) ──────
         McCard(
-            "MONEY PATH — the signature spine",
-            "get_databank · get_take_rate · get_positions · get_detector_registry",
+            "The money path — the spine",
+            "get_databank · get_take_rate · get_positions · get_loop_status",
         ) {
             Note("THE MONEY PATH · DETERMINISTIC CODE PROPOSES AND ENFORCES · THE MODEL ONLY JUDGES ENTRY (P1)")
             val spine = M.stages.mapIndexed { i, st ->
@@ -348,8 +478,13 @@ fun OverviewScreen(repo: MissionRepository) {
             )
             // SKIPS branch — P6 abstain is first-class.
             KvRow("SKIPS (abstain · P6, first-class)", n0(M.skips), Tone.NEUTRAL)
-            // FAST-EXIT lane — P3; p99 unavailable while Prometheus is absent.
-            KvRow("FAST-EXIT LANE (P3 · nothing may suppress an exit)", "p99 unavailable — Prometheus absent", Tone.UNK)
+            // FAST-EXIT lane — P3; INDEPENDENT once get_risk_envelope ships its fast_exit block,
+            // p99 unavailable while Prometheus is absent (the JS `fe` read, verbatim).
+            KvRow(
+                "FAST-EXIT LANE (P3 · nothing may suppress an exit)",
+                if (M.fastExit != null) "INDEPENDENT" else "p99 unavailable — Prometheus absent",
+                if (M.fastExit != null) Tone.GOOD else Tone.UNK,
+            )
             KvRow(
                 "lanes (live / shadow)",
                 if (M.db == null) "UNKNOWN" else "${M.bankLive} / ${M.bankShadow}",
@@ -376,8 +511,8 @@ fun OverviewScreen(repo: MissionRepository) {
 
         // ── 1.3 RISK — is money exposed, and is it protected? (always present · O-4) ──────────────────
         McCard(
-            "RISK — is money exposed, and is it protected?",
-            "get_positions · get_exposure · get_limits · get_breaker_state · get_kill_state",
+            "Risk — is money exposed, and is it protected?",
+            "get_positions · get_exposure · get_limits · get_breaker_state",
         ) {
             StatRow(
                 Triple("open positions", M.openN.toString(), if (M.openN == 0) Tone.GOOD else Tone.NEUTRAL),
@@ -441,7 +576,7 @@ fun OverviewScreen(repo: MissionRepository) {
         }
 
         // ── 1.4 TRUTH — how much of this is actually known? (coverage before verdict · O-2) ───────────
-        McCard("TRUTH — how much of this is actually known?", "get_checkup · get_attestation · get_config_active") {
+        McCard("Truth — how much of this is actually known?", "get_checkup · get_attestation · get_config_active") {
             StatRow(
                 Triple("probed / total", if (M.total > 0) "${M.probed} / ${M.total}" else "—", if (M.total == 0) Tone.UNK else Tone.NEUTRAL),
                 Triple("coverage", pct(M.coverage, 0), if (M.total == 0) Tone.UNK else if ((M.coverage ?: 0.0) >= COVERAGE_FLOOR) Tone.GOOD else Tone.BAD),
@@ -498,7 +633,7 @@ fun OverviewScreen(repo: MissionRepository) {
         }
 
         // ── 1.5 EDGE — is there anything worth trading? (four books · O-6 no cross-cohort sums) ────────
-        McCard("EDGE — is there anything worth trading?", "get_books_scoreboard · get_shadow_bank · get_calibration") {
+        McCard("Edge — is there anything worth trading?", "get_books_scoreboard · get_shadow_bank · get_calibration") {
             // Bank integrity ribbon (AT-OV5): count(*) vs distinct(decision_id).
             when {
                 M.dup == null -> Ribbon(
@@ -574,7 +709,7 @@ fun OverviewScreen(repo: MissionRepository) {
         }
 
         // ── 1.6 FLOW — is the front of the loop alive? ────────────────────────────────────────────────
-        McCard("FLOW — is the front of the loop alive?", "get_continuity · get_take_rate · get_databank · get_detector_registry") {
+        McCard("Flow — is the front of the loop alive?", "get_continuity · get_take_rate · get_databank · get_detector_registry") {
             val legs = listOf("FLOW" to M.co.obj("flow"), "CAG" to M.co.obj("cag"), "BANK" to M.co.obj("bank"))
             MiniTable(
                 listOf("SLO", "state", "reason"),
@@ -609,7 +744,7 @@ fun OverviewScreen(repo: MissionRepository) {
         }
 
         // ── 1.7 NEXT — the one thing to do (read-only · propose only · O-5) ───────────────────────────
-        McCard("NEXT — the one thing to do", "get_go_no_go_status · get_proposals") {
+        McCard("Next — the one thing to do", "get_go_no_go_status · get_proposals") {
             val blocking = if (M.chokeStage?.k == "takes")
                 "Nothing can be proven forward while the take rate is ${pct(M.takeRate, 2)}. Gate 7 (E-0) cannot accumulate " +
                     "evidence, and gate 6 (calibration in band) is failing by definition — so gates 1–5 are not the binding " +
@@ -622,7 +757,9 @@ fun OverviewScreen(repo: MissionRepository) {
                 val raw = (it as? JsonPrimitive)?.content ?: return@forEachIndexed
                 val t = raw.replace(Regex("^\\d+\\.\\s*"), "").replace("**", "")
                 val head = t.substringBefore("—").trim()
+                val rest = t.substringAfter("—", "").trim()
                 KvRow("GATE ${i + 1} · $head", "ABSENT", Tone.UNK)
+                if (rest.isNotEmpty()) Note(rest.take(90) + if (rest.length > 90) "…" else "")
             }
             KvRow("gates evidenced", "0 / ${items.size}", if (M.gng == null) Tone.UNK else Tone.NEUTRAL)
             val props = M.proposalsWrap.arr("proposals").rows()
@@ -641,7 +778,7 @@ fun OverviewScreen(repo: MissionRepository) {
         }
 
         // ── 1.8 LATENCY — declared vs measured (O-1: every live cell is hatched, not green) ───────────
-        McCard("LATENCY LAW — declared vs measured", "get_latency_budgets") {
+        McCard("Latency law — declared vs measured", "get_latency_budgets") {
             KvRow("config version", M.lb.text("config_version"), if (M.lb == null) Tone.UNK else Tone.NEUTRAL)
             val latRows = M.lb.arr("rows").rows()
             if (latRows.isNotEmpty()) {
@@ -677,6 +814,135 @@ fun OverviewScreen(repo: MissionRepository) {
                 "O-6 net R is never summed across cohorts · O-7 conviction is uncalibrated until a pin · " +
                 "O-8 the chokepoint is computed, not chosen.",
         )
+    }
+}
+
+// ── the estate card (the phone's first card — TPVIEW's census, cream-card language) ───────────────
+
+/** A dashed rounded-rect border — the web `.nc.unk{border-style:dashed}` (Compose border() can't dash). */
+private fun Modifier.dashedBorder(color: Color, radius: androidx.compose.ui.unit.Dp): Modifier = drawBehind {
+    drawRoundRect(
+        color = color,
+        cornerRadius = CornerRadius(radius.toPx()),
+        style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))),
+    )
+}
+
+/** One node pill — rounded 12dp chip: 8dp status dot (dashed ring for UNKNOWN), ~10sp SemiBold label,
+ *  the NATS pill red-tinted (`.nc.down`), the keyholder's dark-red ·KEY suffix. Non-navigating (no nav
+ *  handle reaches this screen); the Topology view owns the tap-through map. */
+@Composable
+private fun NodePillChip(p: NodePill) {
+    val shape = RoundedCornerShape(12.dp)
+    val down = p.st == PillSt.DOWN
+    val unk = p.st == PillSt.UNK
+    Row(
+        Modifier
+            .background(if (down) PillDownBg else PillBg, shape)
+            .then(
+                if (unk) Modifier.dashedBorder(Unk, 12.dp)
+                else Modifier.border(1.dp, if (down) PillDownBorder else Line, shape),
+            )
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (unk) {
+            // no health source → a dashed ring, never a filled dot (O-1: UNKNOWN must not look green)
+            Box(
+                Modifier.size(8.dp).drawBehind {
+                    drawCircle(
+                        Unk, radius = size.minDimension / 2f - 1f,
+                        style = Stroke(width = size.minDimension / 5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 3f))),
+                    )
+                },
+            )
+        } else {
+            Box(Modifier.size(8.dp).background(p.st.dotColor(), CircleShape))
+        }
+        Text(
+            p.label,
+            color = if (down) Sev else Ink,
+            fontSize = 10.sp, fontWeight = FontWeight.SemiBold, lineHeight = 12.sp,
+        )
+        if (p.key) {
+            Text("·KEY", color = Sev, fontFamily = EstateMono, fontSize = 8.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp)
+        }
+    }
+}
+
+/**
+ * The estate — the phone's first card (the web Topology's `The estate` panel condensed into Overview):
+ * a live-numbered 19sp title, the mono tool line, the autopsy paragraph with bold runs, a wrap-flow
+ * grid of the 12 node pills, a hairline, the mono NATS warning, then the full-width emerald map CTA.
+ */
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun EstateCard(M: Model) {
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            .background(Card, RoundedCornerShape(16.dp))
+            .border(1.dp, Line, RoundedCornerShape(16.dp))
+            .padding(horizontal = 16.dp, vertical = 15.dp),
+    ) {
+        // bold ~19sp title, numbers live: "The estate — 1 of 12 nodes have a heartbeat"
+        Text(
+            "The estate — ${M.measuredNodes} of ${M.pills.size} nodes have a heartbeat",
+            color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp,
+            letterSpacing = (-0.3).sp, lineHeight = 24.sp,
+        )
+        // the mono tool line (provenance eyebrow)
+        Text(
+            "get_service_status × get_bus_status × get_bridge_lag",
+            color = Unk, fontFamily = EstateMono, fontSize = 9.sp, letterSpacing = 0.5.sp,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        // the autopsy paragraph — bold runs on the live numbers and the verdict clause
+        Text(
+            buildAnnotatedString {
+                val b = SpanStyle(color = Ink, fontWeight = FontWeight.Bold)
+                append("The map shows ")
+                withStyle(b) { append("${M.pills.size} nodes") }
+                append(". The system can measure ")
+                withStyle(b) { append("${M.measuredNodes}") }
+                append(". Everything else is inferred from whether a table has rows — ")
+                withStyle(b) { append("that is not health, that is an autopsy.") }
+                append(" Tap any node to open the view that owns it.")
+            },
+            color = Ink2, fontSize = 12.5.sp, lineHeight = 19.sp,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        // the node pill grid — wrap-flow, statuses live (emerald measured · blue inferred · grey idle ·
+        // red NATS down · dashed ring = no health source at all)
+        FlowRow(
+            Modifier.fillMaxWidth().padding(top = 11.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            M.pills.forEach { NodePillChip(it) }
+        }
+        // hairline, then the mono transport warning
+        Box(Modifier.fillMaxWidth().padding(top = 13.dp).height(1.dp).background(Hairline))
+        Text(
+            if (M.busDown)
+                "NATS: transport unavailable — the bus on the diagram does not exist. " +
+                    "${M.laneCount?.toString() ?: "—"} ingest lanes are carrying everything."
+            else
+                "NATS: bus reachable · ${M.laneCount?.toString() ?: "—"} ingest lanes also carrying data.",
+            color = if (M.busDown) Sev else Ink2,
+            fontFamily = EstateMono, fontSize = 11.sp, lineHeight = 16.sp,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        // the full-width emerald CTA — the web `.btn.primary`. Non-navigating here: no nav handle
+        // reaches OverviewScreen(repo); Topology (00) sits one chip away in the OPERATE segment.
+        Box(
+            Modifier.fillMaxWidth().padding(top = 12.dp)
+                .background(Emerald, RoundedCornerShape(9.dp))
+                .heightIn(min = 44.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Open the full map →", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
     }
 }
 

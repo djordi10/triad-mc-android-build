@@ -11,9 +11,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -25,6 +30,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,13 +58,17 @@ import agentic.triad.missioncontrol.TriadApp
 import agentic.triad.missioncontrol.ui.connection.ConnectionScreen
 import agentic.triad.missioncontrol.ui.overview.OverviewScreen
 import agentic.triad.missioncontrol.ui.propose.ProposeDrawer
+import agentic.triad.missioncontrol.ui.theme.Amber
 import agentic.triad.missioncontrol.ui.theme.Card
+import agentic.triad.missioncontrol.ui.theme.Emerald
 import agentic.triad.missioncontrol.ui.theme.EmeraldBright
 import agentic.triad.missioncontrol.ui.theme.Ink
+import agentic.triad.missioncontrol.ui.theme.Ink2
 import agentic.triad.missioncontrol.ui.theme.Line
 import agentic.triad.missioncontrol.ui.theme.Paper
 import agentic.triad.missioncontrol.ui.theme.Pine
 import agentic.triad.missioncontrol.ui.theme.Pine2
+import agentic.triad.missioncontrol.ui.theme.Red
 import agentic.triad.missioncontrol.ui.theme.Unk
 import agentic.triad.missioncontrol.ui.views.AnalyticsScreen
 import agentic.triad.missioncontrol.ui.views.BooksScreen
@@ -79,14 +89,44 @@ import agentic.triad.missioncontrol.ui.views.ShadowScreen
 import agentic.triad.missioncontrol.ui.views.TopologyScreen
 import agentic.triad.missioncontrol.ui.views.TradeLogsScreen
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
 
 private const val ROUTE_CONNECTION = "connection"
 private const val ROUTE_PROPOSE = "propose"
 private val Mono = FontFamily.Monospace
 
-// The web `#appbar .live` — a live pulse dot: emerald when connected, amber when idle.
+// The web `#appbar .live` — a live pulse dot: `#3ecf8e` when connected, `#e8a03d` when idle.
 private val LiveOn = Color(0xFF3ECF8E)
 private val LiveOff = Color(0xFFE8A03D)
+// `#appbar .ham i` bars (`#e9efec`) and `#appbar .abact button` glyph ink (`#c8d6cf`).
+private val HamInk = Color(0xFFE9EFEC)
+private val AbactInk = Color(0xFFC8D6CF)
+
+// The web `#tabbar` GLYPH + SHORT maps — one segment per tab, exactly the HTML's four.
+private val Segment.glyph: String
+    get() = when (this) {
+        Segment.OPERATE -> "◉"
+        Segment.ANALYSE -> "▦"
+        Segment.MODEL_LEARN -> "◈"
+        Segment.CONTROL -> "⚿"
+    }
+private val Segment.shortLabel: String
+    get() = when (this) {
+        Segment.OPERATE -> "OPERATE"
+        Segment.ANALYSE -> "ANALYSE"
+        Segment.MODEL_LEARN -> "MODEL"
+        Segment.CONTROL -> "CONTROL"
+    }
+
+// `get_system_overview` field reads for the stance strip — honest nulls, never fabricated zeros.
+private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
+private fun JsonObject.dbl(key: String): Double? = (this[key] as? JsonPrimitive)?.doubleOrNull
 
 /** The split-colour "TRIAD" wordmark — white "TRI" + emerald "AD" — matching the web `.brand em`. */
 @Composable
@@ -98,12 +138,19 @@ private fun BrandMark(fontSize: androidx.compose.ui.unit.TextUnit, modifier: Mod
 }
 
 /**
- * The adaptive shell (native facelift, per the HTML `#appbar` + `#chiprow`): a dark pine TOP BAR with
- * a ☰ hamburger on the LEFT that opens the all-views pine drawer, a green mono `NN · SEGMENT` eyebrow
- * over the bold-white view title, and compact LIVE + Connect/Propose actions. Under it a horizontally
- * scrolling VIEW-CHIPS row (active = pine-filled/white+emerald number, inactive = white with a 1px
- * line border). Content is on paper below. NO bottom navigation bar (deleted, all widths). On a wide
- * window the segmented rail is shown alongside. Connection and Propose are real routes.
+ * The adaptive shell — 1:1 with the reference HTML's phone chrome:
+ *  · `#appbar` — 56dp dark pine: ☰ hamburger (three drawn bars), green mono `NN · SEGMENT` eyebrow
+ *    over the bold-white view title, then ↻ refresh and the live status dot (→ Connection).
+ *  · `#chiprow` — horizontally scrolling pills of the CURRENT SEGMENT's views only (the web
+ *    `sync()`), active = pine fill / white text / emerald number.
+ *  · `header.top` (the stance strip) — a scrollable band of `.statuschip`s fed by
+ *    `get_system_overview` (PHASE · ENTRIES · MODE · PNL TODAY · …) plus `updated`, Refresh and the
+ *    primary "Propose action" button, exactly the web `renderStatus()`.
+ *  · `#tabbar` — the RESTORED fixed bottom bar (compact widths only): four segments, glyph over a
+ *    tiny mono label, a 4dp emerald dot under the active one; tapping goes to the segment's first
+ *    view (which also swaps the chip row).
+ * The ☰ still opens the full 19-view pine sheet; on a wide window the segmented rail is shown
+ * alongside and the tab bar is dropped (the web hides `#tabbar` above phone width).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,56 +160,75 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
     val route = current?.destination?.route ?: View.start.route
     val wide = widthClass != WindowWidthSizeClass.Compact
     val here = View.entries.firstOrNull { it.route == route }
-    // The ☰ opens the full 19-view index (the pine drawer). Replaces the deleted bottom bar entirely.
+    val seg = here?.segment ?: Segment.OPERATE
+    // The ☰ opens the full 19-view index (the pine drawer).
     var showMenu by remember { mutableStateOf(false) }
     val live = app.repository.mode.name == "LIVE"
+
+    // The stance strip's data — the web's global `renderStatus()` read of get_system_overview.
+    // `stanceTick` is bumped by ↻ and the strip's Refresh button to re-pull.
+    var stanceTick by remember { mutableStateOf(0) }
+    var overview by remember { mutableStateOf<JsonObject?>(null) }
+    var updatedAt by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(stanceTick) {
+        overview = runCatching {
+            app.repository.tool("get_system_overview").envelope.data as? JsonObject
+        }.getOrNull()
+        updatedAt = DateFormat.getTimeInstance().format(Date())
+    }
 
     Scaffold(
         containerColor = Paper,
         topBar = {
             Column {
-                // ── #appbar — dark pine, ☰ left · eyebrow+title · LIVE + Connect/Propose ──
+                // ── #appbar — pine, 56dp + status inset: ☰ · eyebrow+title · ↻ + live dot ──
                 Row(
-                    Modifier.fillMaxWidth().background(Pine).padding(start = 4.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                    Modifier.fillMaxWidth().background(Pine).statusBarsPadding().height(56.dp)
+                        .padding(start = 3.dp, end = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(9.dp),
                 ) {
-                    // the hamburger — opens the all-views pine drawer
+                    // `.ham` — three 19×2 bars, 6dp between centres, opens the all-views sheet
                     Box(
-                        Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
+                        Modifier.size(46.dp).clip(RoundedCornerShape(12.dp))
                             .clickable { showMenu = true },
                         contentAlignment = Alignment.Center,
-                    ) { Text("☰", color = Color(0xFFE9EFEC), fontSize = 20.sp) }
-                    // the eyebrow (green mono NN · SEGMENT) over the bold-white view title
-                    Column(Modifier.weight(1f).padding(start = 4.dp)) {
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            repeat(3) {
+                                Box(Modifier.width(19.dp).height(2.dp).background(HamInk, RoundedCornerShape(1.dp)))
+                            }
+                        }
+                    }
+                    // `.abt` — the green mono `NN · SEGMENT` eyebrow over the bold-white view name
+                    Column(Modifier.weight(1f)) {
                         Text(
                             "${here?.num ?: "··"} · ${here?.segment?.label ?: "MISSION CONTROL"}",
-                            color = EmeraldBright, fontFamily = Mono, fontSize = 8.5.sp, letterSpacing = 1.3.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            color = EmeraldBright, fontFamily = Mono, fontSize = 8.5.sp,
+                            letterSpacing = 1.1.sp, fontWeight = FontWeight.SemiBold,
                         )
                         Text(
                             here?.label ?: "Mission Control",
                             color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp,
-                            letterSpacing = (-0.2).sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 2.dp),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 3.dp),
                         )
                     }
-                    // LIVE badge — a pulse dot + the mode
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 4.dp),
-                    ) {
-                        Box(Modifier.size(9.dp).background(if (live) LiveOn else LiveOff, CircleShape))
-                        Text(
-                            app.repository.mode.name, color = Color(0xFFC8D6CF), fontFamily = Mono,
-                            fontWeight = FontWeight.Bold, fontSize = 10.sp, letterSpacing = 0.6.sp,
-                            modifier = Modifier.padding(start = 5.dp),
-                        )
+                    // `.abact` — ↻ refresh, then the connection button holding the live dot
+                    Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Box(
+                            Modifier.size(46.dp).clip(RoundedCornerShape(12.dp))
+                                .clickable { stanceTick++ },
+                            contentAlignment = Alignment.Center,
+                        ) { Text("↻", color = AbactInk, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+                        Box(
+                            Modifier.size(46.dp).clip(RoundedCornerShape(12.dp))
+                                .clickable { nav.go(ROUTE_CONNECTION) },
+                            contentAlignment = Alignment.Center,
+                        ) { Box(Modifier.size(10.dp).background(if (live) LiveOn else LiveOff, CircleShape)) }
                     }
-                    // compact Connect / Propose (icon-tight, on the pine bar)
-                    AppbarAction("⚲", "Connect") { nav.go(ROUTE_CONNECTION) }
-                    AppbarAction("✎", "Propose") { nav.go(ROUTE_PROPOSE) }
                 }
-                // ── #chiprow — the horizontally scrolling view chips (all widths on a phone) ──
+                // ── #chiprow — only the current segment's views (the web sync()) ──
                 Row(
                     Modifier.fillMaxWidth().background(Paper).drawBottomHairline(Line)
                         .horizontalScroll(rememberScrollState())
@@ -170,10 +236,17 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    View.entries.forEach { v -> ViewChip(v, active = route == v.route) { nav.go(v.route) } }
+                    View.bySegment(seg).forEach { v -> ViewChip(v, active = route == v.route) { nav.go(v.route) } }
                 }
+                // ── header.top — the stance strip: PHASE · ENTRIES · MODE · PNL TODAY · … ──
+                StanceStrip(
+                    overview, updatedAt,
+                    onRefresh = { stanceTick++ },
+                    onPropose = { nav.go(ROUTE_PROPOSE) },
+                )
             }
         },
+        bottomBar = { if (!wide) TabBar(seg) { s -> nav.go(View.bySegment(s).first().route) } },
     ) { pad ->
         Row(Modifier.fillMaxSize().padding(pad)) {
             if (wide) SegmentedRail(route) { nav.go(it) }
@@ -199,13 +272,13 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
                         letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 8.dp),
                     )
                 }
-                Segment.entries.forEach { seg ->
+                Segment.entries.forEach { s ->
                     Text(
-                        seg.label, color = EmeraldBright, fontFamily = Mono, fontSize = 9.sp,
+                        s.label, color = EmeraldBright, fontFamily = Mono, fontSize = 9.sp,
                         letterSpacing = 1.6.sp, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
                     )
-                    View.bySegment(seg).forEach { v ->
+                    View.bySegment(s).forEach { v ->
                         val on = route == v.route
                         Row(
                             Modifier.fillMaxWidth()
@@ -229,22 +302,14 @@ private fun Modifier.drawBottomHairline(color: Color): Modifier = drawBehind {
     drawLine(color, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1f)
 }
 
-/** One compact top-bar action button on the pine bar (the web `#appbar .abact button`). */
-@Composable
-private fun AppbarAction(glyph: String, label: String, onClick: () -> Unit) {
-    Column(
-        Modifier.width(46.dp).clip(RoundedCornerShape(12.dp)).clickable { onClick() }
-            .padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(glyph, color = Color(0xFFC8D6CF), fontSize = 15.sp)
-        Text(label, color = Color(0xFF8FA89D), fontFamily = Mono, fontSize = 7.5.sp, letterSpacing = 0.4.sp)
-    }
+/** The web `#tabbar` hairline: a 1px --line rule along the top edge. */
+private fun Modifier.drawTopHairline(color: Color): Modifier = drawBehind {
+    drawLine(color, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1f)
 }
 
 /**
  * One `#chiprow` pill — active = pine-filled with white text + an emerald mono number; inactive = a
- * white card with a 1px line border and ink2 text (the web `#chiprow button` / `button.on`).
+ * white pill with a 1px line border, ink2 label, and the number at half strength (`.cc`).
  */
 @Composable
 private fun ViewChip(v: View, active: Boolean, onClick: () -> Unit) {
@@ -253,17 +318,139 @@ private fun ViewChip(v: View, active: Boolean, onClick: () -> Unit) {
             .background(if (active) Pine else Card)
             .then(if (active) Modifier else Modifier.border(1.dp, Line, RoundedCornerShape(20.dp)))
             .clickable { onClick() }
+            .heightIn(min = 34.dp)
             .padding(horizontal = 13.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            v.num, color = if (active) EmeraldBright else Unk, fontFamily = Mono, fontSize = 9.sp,
-            fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(end = 6.dp),
+            v.num,
+            color = if (active) EmeraldBright else Ink2.copy(alpha = 0.5f),
+            fontFamily = Mono, fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(end = 6.dp),
         )
         Text(
-            v.label.substringBefore(" ·"),
-            color = if (active) Color.White else Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp,
+            v.label,
+            color = if (active) Color.White else Ink2,
+            fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp, maxLines = 1,
         )
+    }
+}
+
+/**
+ * The stance strip — the web's global `#statusStrip` (`header.top`), phone form: a light band under
+ * the chips that scrolls sideways instead of wrapping. Chips + tones are `renderStatus()` verbatim:
+ * PHASE (ink) · ENTRIES (emerald when ENABLED, else amber) · MODE (amber when live, else emerald) ·
+ * PNL TODAY (emerald ≥ 0, red < 0) · POSITIONS · ALERTS · SERVICES, then `updated …`, Refresh, and
+ * the primary "Propose action". Absent fields render as an honest "—".
+ */
+@Composable
+private fun StanceStrip(
+    overview: JsonObject?,
+    updatedAt: String?,
+    onRefresh: () -> Unit,
+    onPropose: () -> Unit,
+) {
+    val phase = overview?.str("phase")
+    val entries = overview?.str("entries")
+    val mode = overview?.str("exec_mode")
+    val pnl = overview?.dbl("pnl_r_today")
+    val positions = overview?.str("open_positions")
+    val alerts = overview?.str("alerts_firing")
+    val alertsN = overview?.dbl("alerts_firing")
+    val services = overview?.str("services_up")
+
+    Row(
+        Modifier.fillMaxWidth().background(Paper).drawBottomHairline(Line)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StanceChip("PHASE", phase ?: "—", Ink)
+        StanceChip("ENTRIES", entries ?: "—", if (entries == "ENABLED") Emerald else Amber)
+        StanceChip("MODE", mode ?: "—", if (mode == "live") Amber else Emerald)
+        StanceChip(
+            "PNL TODAY",
+            "${pnl?.let { String.format(Locale.US, "%.1f", it) } ?: "—"} R",
+            if ((pnl ?: 0.0) >= 0) Emerald else Red,
+        )
+        StanceChip("POSITIONS", positions ?: "—", Ink)
+        StanceChip("ALERTS", alerts ?: "—", if ((alertsN ?: 0.0) > 0) Red else Emerald)
+        StanceChip("SERVICES", services ?: "—", Ink)
+        Text(
+            "updated ${updatedAt ?: "—"}",
+            color = Ink2, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+        StripButton("Refresh", primary = false, onClick = onRefresh)
+        StripButton("Propose action", primary = true, onClick = onPropose)
+    }
+}
+
+/** One `.statuschip` — tiny mono letterspaced key over a bold display value. */
+@Composable
+private fun StanceChip(key: String, value: String, tone: Color) {
+    Column(Modifier.widthIn(min = 76.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(
+            key, color = Ink2, fontFamily = Mono, fontSize = 8.5.sp,
+            letterSpacing = 0.85.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+        )
+        Text(value, color = tone, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
+    }
+}
+
+/** The strip's `.btn` / `.btn.primary` — bordered white, or emerald-filled for the primary. */
+@Composable
+private fun StripButton(label: String, primary: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(9.dp))
+            .background(if (primary) Emerald else Card)
+            .then(if (primary) Modifier else Modifier.border(1.dp, Line, RoundedCornerShape(9.dp)))
+            .clickable { onClick() }
+            .heightIn(min = 38.dp)
+            .padding(horizontal = 13.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label, color = if (primary) Color.White else Ink,
+            fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1,
+        )
+    }
+}
+
+/**
+ * The RESTORED `#tabbar` — a fixed bottom bar on paper with a top hairline: the four nav segments,
+ * each a glyph over a tiny mono uppercase label with a 4dp dot slot beneath. Active = pine ink +
+ * emerald dot; tapping a segment opens its first view (the chip row follows the segment).
+ */
+@Composable
+private fun TabBar(active: Segment, onSegment: (Segment) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().background(Paper).drawTopHairline(Line).navigationBarsPadding(),
+    ) {
+        Row(Modifier.fillMaxWidth().height(62.dp)) {
+            Segment.entries.forEach { seg ->
+                val on = seg == active
+                Column(
+                    Modifier.weight(1f).fillMaxHeight().clickable { onSegment(seg) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+                ) {
+                    Text(
+                        seg.glyph, color = if (on) Pine else Ink2,
+                        fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.24.sp,
+                    )
+                    Text(
+                        seg.shortLabel, color = if (on) Pine else Ink2, fontFamily = Mono,
+                        fontSize = 8.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.48.sp,
+                    )
+                    Box(
+                        Modifier.padding(top = 1.dp).size(4.dp)
+                            .background(if (on) Emerald else Color.Transparent, CircleShape),
+                    )
+                }
+            }
+        }
     }
 }
 
