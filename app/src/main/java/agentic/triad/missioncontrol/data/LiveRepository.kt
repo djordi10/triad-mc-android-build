@@ -1,5 +1,8 @@
 package agentic.triad.missioncontrol.data
 
+import agentic.triad.missioncontrol.mcp.CheckupRun
+import agentic.triad.missioncontrol.mcp.McpEnvelope
+import agentic.triad.missioncontrol.mcp.ProposeAction
 import agentic.triad.missioncontrol.mcp.TriadMcpClient
 import kotlinx.serialization.json.JsonObject
 
@@ -33,5 +36,17 @@ class LiveRepository(
                 ),
             )
         }
+    }
+
+    override suspend fun propose(action: ProposeAction): McpEnvelope = try {
+        client.propose(action)
+    } catch (t: Throwable) {
+        McpEnvelope(ok = false, error = t.message ?: "propose failed to send")
+    }
+
+    override suspend fun recordCheckup(run: CheckupRun): McpEnvelope = try {
+        client.recordCheckup(run)
+    } catch (t: Throwable) {
+        McpEnvelope(ok = false, error = t.message ?: "record_checkup failed to send")
     }
 }

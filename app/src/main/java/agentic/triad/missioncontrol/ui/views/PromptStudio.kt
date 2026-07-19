@@ -12,6 +12,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,12 +27,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
+import agentic.triad.missioncontrol.mcp.McpEnvelope
+import agentic.triad.missioncontrol.mcp.ProposeAction
 import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.Gauge
 import agentic.triad.missioncontrol.ui.components.KvRow
@@ -74,9 +79,12 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 
 // ── PROMPT STUDIO (view 10) — modular prompt · direct to the LLM · measured · versioned ──────────
 // P-1..P-6 · the studio's RUN path is the one in Mission Control that is NOT an MCP client. It reads
@@ -85,7 +93,8 @@ import kotlinx.serialization.json.put
 // 14 packet-named blocks, and — only once explicitly armed — POSTs directly to Ollama and reports the
 // MEASURED bench. History is append-only; export files a proposal and applies nothing (R-C1).
 
-private val PROMPT_TOOLS = listOf("get_validator_rejects", "get_limits", "get_config_preset", "prompt_get")
+private val PROMPT_TOOLS =
+    listOf("get_validator_rejects", "get_limits", "get_config_preset", "get_packet", "prompt_get")
 
 /** A field that may be served as literal JSON null — em-dash for absent AND null (the honest-nulls
  *  law). `text()` alone would print "null" for a JsonNull value, which reads as a fabricated word. */
@@ -102,46 +111,123 @@ private fun shortFp(raw: String): String {
     return "sha256:" + t.take(8)
 }
 
+/** The composer fingerprint — the same 32-bit rolling hash the PRVIEW module fingerprints the
+ *  rendered prompt with, so a version's fp is stable and content-addressed client-side (P-1/L-2).
+ *  Kotlin Int arithmetic wraps on overflow (no exception), matching the JS `|0` semantics. */
+private fun fpHash(s: String): String {
+    var h = 0
+    for (c in s) h = (h shl 5) - h + c.code
+    return (h.toLong() and 0xffffffffL).toString(16).padStart(8, '0')
+}
+
 // The direct-to-LLM target, from the preset (P-3). NOT the MCP.
 private const val OLLAMA_BASE = "http://10.0.0.2:11434"
 private const val OLLAMA_MODEL = "fingpt-crypto:v5-full-test"
 
-/** One composer block: names the context_packet field it reads (P-4), its token count, its toggle. */
+/** One composer block: names the context_packet field it reads (P-4), its token count, its toggle,
+ *  and the prompt fragment it emits (`body`) — so the rendered prompt and the export template are the
+ *  real assembled text, not a summary. Fields/bodies mirror the PRVIEW BLOCKS array 1:1. */
 private data class Block(
     val name: String,
     val reads: String,
     val tokens: Int,
     var enabled: Boolean,
+    val body: String,
     val core: Boolean = false,
     val warn: String? = null,
     val risk: Boolean = false,
 )
 
-/** The 14 blocks from §1 — 12 toggleable, 2 core, risk envelope red + OFF by default (AT-P1/P4). */
+/** The 14 blocks from §1 / the PRVIEW BLOCKS array — 12 toggleable, 2 core, risk envelope red + OFF
+ *  by default (AT-P1/P4). Each block names its context_packet/1 field (P-4/AT-P3). */
 private fun defaultBlocks(): List<Block> = listOf(
-    Block("Role & task", "—", 62, enabled = true, core = true),
-    Block("Market structure", "timeframes[*].trend · last_bos · last_choch · swing_*", 384, enabled = true),
-    Block("Zones — order blocks", "timeframes[*].order_blocks[]", 418, enabled = true),
-    Block("Zones — FVGs", "timeframes[*].fvgs[]", 402, enabled = true),
-    Block("Liquidity", "timeframes[*].liquidity[]", 224, enabled = true),
-    Block("Volatility & regime", "volatility.atr[*] · realized_vol_1h · regime", 74, enabled = true),
     Block(
-        "Derivatives", "derivatives.*", 58, enabled = true,
-        warn = "basis_bps is null — ask the model about basis and it will invent one (P-4/AT-P5).",
+        "Role & task", "—", 62, enabled = true, core = true,
+        body = "You are TRIAD's adjudicator. Given the market context below, decide whether to TAKE " +
+            "or SKIP.\nEmit ONLY the JSON contract. No prose.",
     ),
     Block(
-        "Order flow", "flow.*", 52, enabled = true,
-        warn = "liq notionals are both 0 — the field is present but empty.",
+        "Market structure",
+        "timeframes[1m,5m,15m,1h,4h].trend · last_bos · last_choch · swing_high · swing_low",
+        384, enabled = true,
+        body = "STRUCTURE\n{{#tf}}{tf}: trend={trend} bos={bos.dir}@{bos.price} " +
+            "choch={choch.dir}@{choch.price} swing=[{low},{high}]\n{{/tf}}",
     ),
-    Block("Spread & depth", "spread_depth.*", 36, enabled = true),
-    Block("Session", "session.*", 26, enabled = true),
-    Block("Position state", "position_state.*", 31, enabled = true),
-    Block("Data quality — the guard", "data_quality.*", 28, enabled = true),
     Block(
-        "Risk envelope", "limit_config/1 — NOT IN THE PACKET", 96, enabled = false, risk = true,
-        warn = "the 96 tokens that would change everything — OFF by default, mirroring reality (AT-P4).",
+        "Zones — order blocks", "timeframes[*].order_blocks[] (low·high·dir·mitigated)", 418,
+        enabled = true,
+        body = "ORDER BLOCKS\n{{#tf}}{tf}: {{#ob}}[{low}-{high} {dir}{mitigated?' MIT':''}] {{/ob}}\n{{/tf}}",
     ),
-    Block("Output contract", "model_output.v1.guided (vendored)", 118, enabled = true, core = true),
+    Block(
+        "Zones — fair value gaps", "timeframes[*].fvgs[] (low·high·dir·fill_pct)", 402, enabled = true,
+        body = "FVG\n{{#tf}}{tf}: {{#fvg}}[{low}-{high} {dir} {fill_pct}%] {{/fvg}}\n{{/tf}}",
+    ),
+    Block(
+        "Liquidity", "timeframes[*].liquidity[] (price·kind: eqh|eql|session_high|session_low)", 224,
+        enabled = true,
+        body = "LIQUIDITY\n{{#tf}}{tf}: {{#liq}}{kind}@{price} {{/liq}}\n{{/tf}}",
+    ),
+    Block(
+        "Volatility & regime", "volatility.atr[*] · realized_vol_1h · regime", 74, enabled = true,
+        body = "VOLATILITY\natr: 1m={atr.1m} 5m={atr.5m} 15m={atr.15m} 1h={atr.1h} 4h={atr.4h}\n" +
+            "rv_1h={realized_vol_1h} regime={regime}",
+    ),
+    Block(
+        "Derivatives",
+        "derivatives.funding_rate · oi · oi_delta_15m · oi_delta_1h · basis_bps", 58, enabled = true,
+        warn = "basis_bps is null in the live packet. Ask the model about basis and it will invent " +
+            "one (P-4/AT-P5).",
+        body = "DERIVATIVES\nfunding={funding_rate} next={next_funding_ts}\noi={oi} d15m={oi_delta_15m} " +
+            "d1h={oi_delta_1h}\nbasis_bps={basis_bps}",
+    ),
+    Block(
+        "Order flow", "flow.cvd_5m · cvd_1h · aggr_buy_ratio_5m · liq_*_notional_5m", 52, enabled = true,
+        warn = "liq_long_notional_5m and liq_short_notional_5m are both 0. Verify the feed before you " +
+            "trust them.",
+        body = "FLOW\ncvd_5m={cvd_5m} cvd_1h={cvd_1h} aggr_buy={aggr_buy_ratio_5m}\n" +
+            "liqs: long={liq_long_notional_5m} short={liq_short_notional_5m}",
+    ),
+    Block(
+        "Spread & depth", "spread_depth.spread_bps · depth_bid_10bps · depth_ask_10bps", 36, enabled = true,
+        body = "MICROSTRUCTURE\nspread={spread_bps}bps depth_bid={depth_bid_10bps} depth_ask={depth_ask_10bps}",
+    ),
+    Block(
+        "Session", "session.name · minutes_to_next_open · day_of_week", 26, enabled = true,
+        body = "SESSION\n{name} · {minutes_to_next_open}m to next open · dow={day_of_week}",
+    ),
+    Block(
+        "Position state",
+        "position_state.open_positions_total · symbol_position · symbol_exposure_notional", 31,
+        enabled = true,
+        body = "POSITION\nopen={open_positions_total} this_symbol={symbol_position} " +
+            "exposure={symbol_exposure_notional}",
+    ),
+    Block(
+        "Data quality — the guard", "data_quality.gaps · staleness_ms · degraded_modules[]", 28,
+        enabled = true,
+        body = "DATA QUALITY\ngaps={gaps} staleness={staleness_ms}ms degraded={degraded_modules}\n" +
+            "If any module is degraded, SKIP and say so.",
+    ),
+    Block(
+        "Risk envelope",
+        "limit_config/1 — min_stop_width_bps · gross_rr_floor · net_rr_floor · max_entry_ttl_s · " +
+            "conviction_take_threshold",
+        96, enabled = false, risk = true,
+        warn = "NOT IN THE CONTEXT PACKET. get_limits has these values. The packet does not carry " +
+            "them, so the model has never seen them — OFF by default, mirroring reality (AT-P4).",
+        body = "HARD CONSTRAINTS — your proposal is REJECTED if it violates any of these:\n" +
+            "  stop distance  >= {min_stop_width_bps} bps  AND >= {min_stop_atr_mult} x ATR\n" +
+            "  gross R:R      >= {gross_rr_floor}\n  net R:R (after fees) >= {net_rr_floor}\n" +
+            "  entry TTL      <= {max_entry_ttl_s}s\n  take only if conviction >= {conviction_take_threshold}\n" +
+            "Do not propose a trade that breaks these. Say SKIP instead.",
+    ),
+    Block(
+        "Output contract", "model_output.v1.guided.json (vendored · guided decoding on)", 118,
+        enabled = true, core = true,
+        body = "OUTPUT — JSON only, matching model_output/1:\n" +
+            "{\"verdict\":\"take|skip\",\"conviction\":0-100,\"side\":\"long|short\",\n" +
+            " \"entry\":num,\"stop\":num,\"targets\":[num],\"ttl_s\":int,\"rationale\":\"<=200 chars\"}",
+    ),
 )
 
 @Composable
@@ -150,6 +236,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
     val s by vm.state.collectAsState()
     val d = s.data
     val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
 
     // ── thesis: the live validator kills vs the limits the model was never shown ──
     val vr = d["get_validator_rejects"] as? JsonObject
@@ -182,6 +269,19 @@ fun PromptStudioScreen(repo: MissionRepository) {
     val pgTemplateReal = pgTemplate != "—" && pgTemplate.isNotEmpty()
     val pgPinned = pg.bool("prompt_pinned")
 
+    // ── get_packet — source the block fields live where the packet is served (AT-P3/P4/P5) ──
+    // Shape: {packet:{feature_versions{}, timeframes{}, derivatives{basis_bps}, context_hash}}. When
+    // absent the composer degrades to the spec's block table with the honest field markers baked in.
+    val packet = (d["get_packet"] as? JsonObject).obj("packet")
+    val featureModules = guardDerive(0) { packet.obj("feature_versions")?.size ?: 0 }
+    val timeframeDepth = guardDerive(5) { packet.obj("timeframes")?.size?.takeIf { it > 0 } ?: 5 }
+    // AT-P5: basis_bps served as literal null in the live packet — detect it live, don't assume.
+    val basisNullLive = guardDerive(true) {
+        val dv = packet.obj("derivatives")
+        dv == null || nn(dv, "basis_bps") == "—"
+    }
+    val packetLive = packet != null
+
     // ── composer state — the 14 blocks (AT-P1) ──
     val blocks = remember { defaultBlocks().toMutableStateList() }
     var version by remember { mutableIntStateOf(1) } // toggle-driven re-render tick
@@ -207,24 +307,24 @@ fun PromptStudioScreen(repo: MissionRepository) {
     var tokensIn by remember { mutableStateOf<Int?>(null) }
     var tokensOut by remember { mutableStateOf<Int?>(null) }
     var tokPerSec by remember { mutableStateOf<Double?>(null) }
+    var runText by remember { mutableStateOf<String?>(null) } // the model's actual completion (never faked)
 
     // ── history (P-6, append-only) ──
-    data class Run(val label: String, val version: Int, val tokens: Int, val measuredMs: Long?)
+    data class Run(val label: String, val version: Int, val tokens: Int, val fp: String, val measuredMs: Long?)
     val history = remember { mutableStateListOf<Run>() }
     var runCounter by remember { mutableIntStateOf(0) }
 
-    // Build the prompt template from the enabled block names/fields (a simple concatenation — P-5).
-    fun buildPrompt(): String = buildString {
-        appendLine("# TRIAD prompt — assembled client-side, $enabledCount blocks, $enabledTokens tokens")
-        blocks.filter { it.enabled }.forEach { b ->
-            appendLine("## ${b.name}  (reads: ${b.reads}, ~${b.tokens} tok)")
-        }
-        appendLine("Respond with model_output.v1.guided.")
-    }
+    // Render the prompt as the real assembled text — each enabled block's body joined (the PRVIEW
+    // `render()`), so the bench measures, and the export template carries, the actual prompt (P-5/§5).
+    fun buildPrompt(): String =
+        blocks.filter { it.enabled }.joinToString("\n\n") { it.body }
+    val renderedPrompt = version.let { buildPrompt() }
+    val renderFp = fpHash(renderedPrompt)
 
     // The direct-to-Ollama call (P-3/P-5). Parse the real bench; never invent numbers.
     fun run() {
         runError = null
+        runText = null
         running = true
         scope.launch {
             val prompt = buildPrompt()
@@ -232,7 +332,10 @@ fun PromptStudioScreen(repo: MissionRepository) {
                 put("model", OLLAMA_MODEL)
                 put("prompt", prompt)
                 put("stream", false)
-                put("options", buildJsonObject { put("temperature", 0); put("seed", 7) })
+                put(
+                    "options",
+                    buildJsonObject { put("temperature", 0); put("seed", 7); put("num_predict", 350) },
+                )
             }.toString()
             val outcome = runCatching {
                 val client = HttpClient()
@@ -266,8 +369,9 @@ fun PromptStudioScreen(repo: MissionRepository) {
                     } else {
                         null
                     }
+                    runText = (json["response"] as? JsonPrimitive)?.content
                     runCounter += 1
-                    history.add(Run("run #$runCounter", version, enabledTokens, runMs))
+                    history.add(Run("run #$runCounter", version, enabledTokens, renderFp, runMs))
                 }
             }.onFailure { e ->
                 runError = e.message ?: "network error (routable private address + OLLAMA_ORIGINS required)"
@@ -335,7 +439,12 @@ fun PromptStudioScreen(repo: MissionRepository) {
         }
 
         // ── the composer — 14 blocks + the live token meter (AT-P1/P3/P8/P11) ──
-        McCard("The composer — 14 blocks, from the real packet", "get_packet fields · client-side") {
+        val packetSrc = if (packetLive) {
+            "context_packet/1 · $featureModules feature modules, live · $timeframeDepth timeframes deep"
+        } else {
+            "context_packet/1 · get_packet not served — block table from the spec (fields honest)"
+        }
+        McCard("The composer — 14 blocks, from the real packet", packetSrc) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("token meter", color = Tone.NEUTRAL.fg(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Text(
@@ -371,13 +480,21 @@ fun PromptStudioScreen(repo: MissionRepository) {
                     }
                 }
             }
+            Note(
+                "P-4 · a block must name the field it reads. Two blocks lie if switched on: Derivatives " +
+                    "— basis_bps is ${if (basisNullLive) "null in the live packet" else "present"}, so " +
+                    "asking about basis ${if (basisNullLive) "makes the model invent one" else "is safe"} " +
+                    "(AT-P5). Risk envelope — not in the packet at all: drawn red, OFF by default, because " +
+                    "that is the truth of what runs today. Switch it on and the meter rises by exactly 96.",
+                if (basisNullLive) WARN else NEUTRAL,
+            )
         }
 
         // ── P-2 / P-3 — the arming drawer ──
         McCard("Arm the studio — P-2 · OFF until you turn it on", "no MCP · direct to LLM (P-3)") {
             KvRow("target", "$OLLAMA_BASE/api/generate", INFO)
             KvRow("model", OLLAMA_MODEL, NEUTRAL)
-            KvRow("params", "temperature 0 · seed 7", NEUTRAL)
+            KvRow("params", "temperature 0 · seed 7 · num_predict 350", NEUTRAL)
             KvRow("state", if (armed) "ARMED" else "OFF · zero fetches to the LLM have been made", if (armed) BAD else UNK)
             Note(
                 "The RUN path is the one in Mission Control that is NOT an MCP client — MCP is read-only " +
@@ -445,6 +562,20 @@ fun PromptStudioScreen(repo: MissionRepository) {
                         "prompt_eval_count (in) / eval_count (out) → tok/s. Graded vs the preset budget " +
                         "(${deadlineP95}s p95 / ${deadlineCap}s cap).",
                 )
+                runText?.takeIf { it.isNotBlank() }?.let { rt ->
+                    KvRow("what came back", "model_output.v1.guided", INFO)
+                    Column(
+                        Modifier.fillMaxWidth().padding(top = 6.dp)
+                            .background(Tone.NEUTRAL.soft(), RoundedCornerShape(8.dp))
+                            .horizontalScroll(rememberScrollState())
+                            .padding(10.dp),
+                    ) {
+                        Text(
+                            rt.take(900) + if (rt.length > 900) "…" else "",
+                            fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Tone.NEUTRAL.fg(),
+                        )
+                    }
+                }
             } else {
                 Note("No run yet. Arm the studio, then Run — the bench reports measured numbers, not estimates.", UNK)
             }
@@ -465,20 +596,49 @@ fun PromptStudioScreen(repo: MissionRepository) {
             Note("The slowest real path is 48% of budget — and it is the path you would most want headroom on.")
         }
 
+        // ── the rendered prompt — the real assembled text, fingerprinted (§5 / P-1) ──
+        McCard("The rendered prompt", "fp $renderFp · $enabledTokens tok · client-side") {
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(Tone.NEUTRAL.soft(), RoundedCornerShape(8.dp))
+                    .border(1.dp, INFO.fg().copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                    .horizontalScroll(rememberScrollState())
+                    .padding(10.dp),
+            ) {
+                Text(
+                    renderedPrompt, fontFamily = FontFamily.Monospace, fontSize = 11.sp,
+                    color = Tone.NEUTRAL.fg(),
+                )
+            }
+            val offBlocks = blocks.filter { !it.enabled }
+            if (offBlocks.isNotEmpty()) {
+                Note("OFF: " + offBlocks.joinToString(", ") { it.name }, UNK)
+            }
+            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { clipboard.setText(AnnotatedString(renderedPrompt)) }) { Text("Copy") }
+                OutlinedButton(onClick = {
+                    // Save a version WITHOUT a run — carries the fp/tokens, no measured latency (P-6).
+                    version += 1
+                    runCounter += 1
+                    history.add(Run("saved v — run #$runCounter", version, enabledTokens, renderFp, null))
+                }) { Text("Save version") }
+            }
+        }
+
         // ── history — append-only, restore appends (P-6 / AT-P14/P15) ──
         McCard("History — append-only · restore is a new version (P-6)", "client-side · L-6") {
             if (history.isEmpty()) {
-                Note("No versions yet. Every Run appends a version carrying its block set, token count, and MEASURED latency.", UNK)
+                Note("No versions yet. Save version or Run appends one, carrying its fingerprint, token count, and (for a Run) its MEASURED latency.", UNK)
             } else {
                 MiniTable(
-                    listOf("version", "run", "tokens", "measured", ""),
-                    history.mapIndexed { idx, r ->
+                    listOf("version", "run", "fp", "tokens", "measured"),
+                    history.map { r ->
                         listOf(
                             "v${r.version}" to NEUTRAL,
                             r.label to NEUTRAL,
+                            r.fp to UNK,
                             "${r.tokens} tok" to NEUTRAL,
                             (r.measuredMs?.let { "$it ms" } ?: "—") to (if (r.measuredMs == null) UNK else GOOD),
-                            "#${idx + 1}" to UNK,
                         )
                     },
                 )
@@ -496,19 +656,44 @@ fun PromptStudioScreen(repo: MissionRepository) {
             }
         }
 
-        // ── export — the change-plan op, filed as a proposal, applies nothing (P-1 / §5 / R-C1) ──
+        // ── export — the change-plan op, filed as a REAL proposal, applies nothing (P-1 / §5 / R-C1) ──
         var showExport by remember { mutableStateOf(false) }
+        var rationale by remember {
+            mutableStateOf(
+                "Add intelligence.prompt_template so effective_fp covers the prompt (Lanes L-2). Includes " +
+                    "the risk-envelope block: the validator kills 689 of 691 proposals on ttl_bounds, " +
+                    "stop_distance and net_rr_floor — constraints the context packet never carried.",
+            )
+        }
+        var filing by remember { mutableStateOf(false) }
+        var proposalId by remember { mutableStateOf<String?>(null) }
+        var exportError by remember { mutableStateOf<String?>(null) }
+        val baseFp = shortFp(nn(pg, "fingerprint"))
+
         McCard("Export → propose preset patch", "propose_action · R-C1 (applies nothing)") {
             Button(onClick = { showExport = true }) { Text("Export → propose preset patch") }
             if (showExport) {
-                val blockNames = blocks.filter { it.enabled }.joinToString(", ") { "\"${it.name}\"" }
+                // The change-plan op, built from the LIVE composer state (§5): replace prompt_template
+                // with {blocks, template, fingerprint, tokens}. `template` is the real assembled prompt.
+                val enabledBlocks = blocks.filter { it.enabled }
+                val patchArgs = buildJsonObject {
+                    put("op", "replace")
+                    put("path", "/domains/intelligence/prompt_template")
+                    putJsonObject("value") {
+                        putJsonArray("blocks") { enabledBlocks.forEach { add(it.name) } }
+                        put("template", renderedPrompt)
+                        put("fingerprint", "fp:$renderFp")
+                        put("tokens", enabledTokens)
+                    }
+                    put("base_fingerprint", baseFp)
+                }
                 val opJson = buildString {
                     appendLine("{ \"op\": \"replace\",")
                     appendLine("  \"path\": \"/domains/intelligence/prompt_template\",")
                     appendLine("  \"value\": {")
-                    appendLine("    \"blocks\": [$blockNames],")
-                    appendLine("    \"template\": \"<assembled client-side>\",")
-                    appendLine("    \"fingerprint\": \"fp:<sha256 of blocks+template>\",")
+                    appendLine("    \"blocks\": [${enabledBlocks.joinToString(", ") { "\"${it.name}\"" }}],")
+                    appendLine("    \"template\": \"<the rendered prompt above, $enabledTokens tok>\",")
+                    appendLine("    \"fingerprint\": \"fp:$renderFp\",")
                     appendLine("    \"tokens\": $enabledTokens } }")
                 }
                 Column(
@@ -520,11 +705,44 @@ fun PromptStudioScreen(repo: MissionRepository) {
                 ) {
                     Text(opJson, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Tone.NEUTRAL.fg())
                 }
+                OutlinedTextField(
+                    value = rationale,
+                    onValueChange = { rationale = it },
+                    label = { Text("rationale — required") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
                 Note(
-                    "Files as a proposal via the Propose drawer — R-C1: it applies nothing. The ceremony " +
-                        "stays: change-plan → triad-config compile → git → triadctl config verify → apply.",
+                    "R-C1: this files a proposal and applies nothing. The ceremony stays: change-plan → " +
+                        "triad-config compile → git → triadctl config verify → apply.",
                     INFO,
                 )
+                Button(
+                    enabled = rationale.isNotBlank() && !filing,
+                    onClick = {
+                        exportError = null
+                        proposalId = null
+                        filing = true
+                        scope.launch {
+                            val env = runCatching {
+                                repo.propose(
+                                    ProposeAction(
+                                        kind = "prompt_template",
+                                        args = patchArgs,
+                                        rationale = rationale.trim(),
+                                    ),
+                                )
+                            }.getOrElse { McpEnvelope(ok = false, error = it.message ?: "propose failed") }
+                            if (env.ok) {
+                                proposalId = (env.data as? JsonObject).text("proposal_id")
+                            } else {
+                                exportError = env.error ?: "propose returned ok=false"
+                            }
+                            filing = false
+                        }
+                    },
+                ) { Text(if (filing) "Filing…" else "File the change-plan →") }
+                proposalId?.let { KvRow("proposal_id", it, GOOD) }
+                exportError?.let { Note("Proposal failed — $it", BAD) }
             }
         }
 

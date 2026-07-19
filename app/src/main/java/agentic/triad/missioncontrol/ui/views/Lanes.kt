@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
@@ -12,9 +14,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
+import agentic.triad.missioncontrol.mcp.McpEnvelope
+import agentic.triad.missioncontrol.mcp.ProposeAction
 import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
@@ -45,8 +50,11 @@ import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.str
 import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.nav.View
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 //  LANES (view 14) — CSL-1 Config-Store Lane Overhaul, pointed at the live config store.
@@ -229,6 +237,36 @@ fun LanesScreen(repo: MissionRepository) {
 
     var expanded by remember { mutableStateOf(-1) }
 
+    // ── the propose control surface (AT-L13 / L-7) — the ONLY write this view makes ──
+    // The lane register (get_lanes) + the lineage (get_preset_lineage) drive WHAT can be proposed:
+    // graduating/arming a lane (kind="lane_change"), or rolling back to a prior preset version
+    // (kind="rollback"). Reduction-only (design R3): the button FILES a change-plan for a human at
+    // triadctl — it applies NOTHING. Every file pins base_fingerprint ($fpShort) so a stale plan
+    // cannot apply. The returned proposal_id (or the error) is shown in the result ribbon below.
+    val proposeScope = rememberCoroutineScope()
+    var proposing by remember { mutableStateOf(false) }
+    var proposeResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+
+    fun fileProposal(action: ProposeAction) {
+        if (proposing) return
+        proposing = true
+        proposeResult = null
+        proposeScope.launch {
+            val env: McpEnvelope = try {
+                repo.propose(action)
+            } catch (e: Throwable) {
+                McpEnvelope(ok = false, error = e.message ?: "propose call failed")
+            }
+            proposeResult = if (env.ok) {
+                val pid = (env.data as? JsonObject).text("proposal_id")
+                true to "FILED · proposal_id $pid · kind=${action.kind} — a change-plan for triadctl; the app applied NOTHING."
+            } else {
+                false to "REFUSED · ${env.error ?: "unknown error"} · kind=${action.kind}"
+            }
+            proposing = false
+        }
+    }
+
     ViewScaffold(
         View.LANES,
         stance = listOf(
@@ -262,6 +300,17 @@ fun LanesScreen(repo: MissionRepository) {
             Triple("ledger", "$ledgerCount", if (ledgerCount == 0) BAD else NEUTRAL),
             Triple("applied fp", fpShort, NEUTRAL),
         )
+
+        // ── the propose result ribbon — the returned proposal_id or the error, shown LOUD ──
+        // Reduction-only: this dashboard proposes; arming/rollback is the human ceremony at triadctl.
+        proposeResult?.let { (ok, msg) ->
+            Ribbon(
+                if (ok) "Proposal filed — triadctl applies, not the app (L-7)" else "Proposal refused",
+                msg,
+                if (ok) GOOD else BAD,
+            )
+        }
+        if (proposing) Note("filing proposal… the app proposes; it applies nothing.", INFO)
 
         // ── the two identities — one of them is missing (pIdentities) ──
         McCard("The two identities — one of them is missing", "get_config_preset · D1") {
@@ -386,6 +435,46 @@ fun LanesScreen(repo: MissionRepository) {
                                 "live lane. " + (if (goClean) "" else "NO-GO."),
                             SEV,
                         )
+                        Note(
+                            "No propose button on the live lane — the interlock refuses at the source (AT-L12).",
+                            SEV,
+                        )
+                    } else {
+                        // AT-L13 · every non-interlocked lane FILES a lane_change change-plan — it does
+                        // not arm the lane. The change-plan carries the lane id + the target fingerprint;
+                        // triadctl compiles, verifies, and applies (L-7). L-2 note verbatim from CSLVIEW.
+                        val bindsKind = if (lane.absent) "candidate" else "applied"
+                        Note(
+                            "L-2 · a fingerprint must cover everything it promotes — the preset does not pin a " +
+                                "prompt template, so effective_fp would not cover the prompt.",
+                            WARN,
+                        )
+                        Row(Modifier.padding(top = 6.dp)) {
+                            Button(
+                                enabled = !proposing,
+                                onClick = {
+                                    fileProposal(
+                                        ProposeAction(
+                                            kind = "lane_change",
+                                            args = buildJsonObject {
+                                                put("lane", lane.name)
+                                                put("track", lane.track)
+                                                put("binds", bindsKind)
+                                                put("env", lane.env)
+                                                put("real_money", lane.realMoney == "YES")
+                                                put("base_fingerprint", fpRaw)
+                                                put("target_fp", if (strategyFp == "—") fpRaw else strategyFp)
+                                                put("schema", "triad-lane/1")
+                                            },
+                                            rationale = "CSL-1 P1: vendor triad-lane/1 and write the ${lane.name} " +
+                                                "overlay. Blocked on L-2: the preset does not pin a prompt template, " +
+                                                "so effective_fp would not cover the prompt. The GUI proposes; " +
+                                                "triadctl applies (L-7).",
+                                        ),
+                                    )
+                                },
+                            ) { Text(if (proposing) "filing…" else "Propose lane change →") }
+                        }
                     }
                 }
             }
@@ -564,6 +653,49 @@ fun LanesScreen(repo: MissionRepository) {
                 versions.firstOrNull()?.let { first ->
                     val notes = nn(first, "notes")
                     if (notes != "—") Note("v${nn(first, "v")} · $notes", NEUTRAL)
+                }
+                // AT-L13 · rollback = promote a prior version → a NEW append-only ledger row (L-6).
+                // Only a NON-applied version is a rollback target; the applied version is where we are.
+                val rollbackTargets = guardDerive(emptyList<JsonObject>()) { versions.filter { !it.bool("applied") } }
+                if (rollbackTargets.isEmpty()) {
+                    Note(
+                        "L-6 · history is append-only · rollback is a new row — but there is no prior version to " +
+                            "roll back to (candidate: null, and the lineage holds only the applied version).",
+                        UNK,
+                    )
+                } else {
+                    // L-6 note verbatim from CSLVIEW (the get_promotion_ledger RULES).
+                    Note(
+                        "L-6 · history is append-only · rollback is a NEW ROW with action:\"rollback\". Nothing is " +
+                            "ever rewritten. The button FILES the change-plan; triadctl applies it.",
+                        WARN,
+                    )
+                    rollbackTargets.forEach { v ->
+                        Row(Modifier.padding(top = 6.dp)) {
+                            Button(
+                                enabled = !proposing,
+                                onClick = {
+                                    fileProposal(
+                                        ProposeAction(
+                                            kind = "rollback",
+                                            args = buildJsonObject {
+                                                put("lane", "live")
+                                                put("action", "rollback")
+                                                put("preset", lineageEnv.text("preset"))
+                                                put("target_version", nn(v, "v"))
+                                                put("target_fp", nn(v, "fp"))
+                                                put("base_fingerprint", fpRaw)
+                                            },
+                                            rationale = "L-6 rollback = promote prior version v${nn(v, "v")} " +
+                                                "(${shortFp(nn(v, "fp"))}) as a new append-only ledger row. " +
+                                                "base_fingerprint pinned so a stale plan cannot apply. The GUI " +
+                                                "proposes; triadctl applies (L-7).",
+                                        ),
+                                    )
+                                },
+                            ) { Text(if (proposing) "filing…" else "Propose rollback → v${nn(v, "v")}") }
+                        }
+                    }
                 }
             }
             KvRow(

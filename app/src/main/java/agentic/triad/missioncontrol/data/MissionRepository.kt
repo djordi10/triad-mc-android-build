@@ -1,6 +1,8 @@
 package agentic.triad.missioncontrol.data
 
+import agentic.triad.missioncontrol.mcp.CheckupRun
 import agentic.triad.missioncontrol.mcp.McpEnvelope
+import agentic.triad.missioncontrol.mcp.ProposeAction
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 
@@ -17,6 +19,17 @@ interface MissionRepository {
 
     /** Fetch one tool's envelope. LIVE caches the last good result per tool for offline survival. */
     suspend fun tool(name: String, args: JsonObject = buildJsonObject { }): ToolResult
+
+    /**
+     * File a proposal — the ONLY mutation the app makes (with [recordCheckup]). It lands in the
+     * propose inbox for a human at `triadctl`; it applies nothing. This is the whole control surface:
+     * every "arm", "kill", config-change, or prompt-export from a view is a [ProposeAction], never a
+     * direct write. DEMO returns an honest local ack; LIVE calls `propose_action` over MCP.
+     */
+    suspend fun propose(action: ProposeAction): McpEnvelope
+
+    /** Append a checkup run (observability side-channel, never the bus). Graceful if unsupported. */
+    suspend fun recordCheckup(run: CheckupRun): McpEnvelope
 }
 
 /**

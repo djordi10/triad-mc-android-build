@@ -85,7 +85,9 @@ import agentic.triad.missioncontrol.ui.views.McpScreen
 import agentic.triad.missioncontrol.ui.views.OpsScreen
 import agentic.triad.missioncontrol.ui.views.PromptStudioScreen
 import agentic.triad.missioncontrol.ui.views.QueryConsoleScreen
+import agentic.triad.missioncontrol.ui.views.ReaderWriterScreen
 import agentic.triad.missioncontrol.ui.views.ShadowScreen
+import agentic.triad.missioncontrol.ui.views.StrategyScreen
 import agentic.triad.missioncontrol.ui.views.TopologyScreen
 import agentic.triad.missioncontrol.ui.views.TradeLogsScreen
 import kotlinx.coroutines.launch
@@ -149,7 +151,7 @@ private fun BrandMark(fontSize: androidx.compose.ui.unit.TextUnit, modifier: Mod
  *  · `#tabbar` — the RESTORED fixed bottom bar (compact widths only): four segments, glyph over a
  *    tiny mono label, a 4dp emerald dot under the active one; tapping goes to the segment's first
  *    view (which also swaps the chip row).
- * The ☰ still opens the full 19-view pine sheet; on a wide window the segmented rail is shown
+ * The ☰ still opens the full 21-view pine sheet; on a wide window the segmented rail is shown
  * alongside and the tab bar is dropped (the web hides `#tabbar` above phone width).
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -161,7 +163,7 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
     val wide = widthClass != WindowWidthSizeClass.Compact
     val here = View.entries.firstOrNull { it.route == route }
     val seg = here?.segment ?: Segment.OPERATE
-    // The ☰ opens the full 19-view index (the pine drawer).
+    // The ☰ opens the full 21-view index (the pine drawer).
     var showMenu by remember { mutableStateOf(false) }
     val live = app.repository.mode.name == "LIVE"
 
@@ -256,7 +258,7 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
         }
     }
 
-    // The full-view index — every one of the 19 views by segment, opened by the ☰ hamburger.
+    // The full-view index — every one of the 21 views by segment, opened by the ☰ hamburger.
     if (showMenu) {
         ModalBottomSheet(onDismissRequest = { showMenu = false }, containerColor = Pine) {
             Column(
@@ -454,7 +456,7 @@ private fun TabBar(active: Segment, onSegment: (Segment) -> Unit) {
     }
 }
 
-/** The wide-window rail: the nineteen views under their four segment headers, matching the web. */
+/** The wide-window rail: the twenty-one views under their four segment headers, matching the web. */
 @Composable
 private fun SegmentedRail(route: String, onGo: (String) -> Unit) {
     Column(
@@ -507,8 +509,10 @@ private fun NavGraphBuilder.graph(app: TriadApp, nav: NavController) {
     composable(View.EXECUTOR.route) { ExecutorScreen(repo) }
     composable(View.CHECKUP.route) { CheckupScreen(repo) }
     composable(View.OPS.route) { OpsScreen(repo) }
+    composable(View.DATAFLOW.route) { ReaderWriterScreen(repo) }
     composable(View.ANALYTICS.route) { AnalyticsScreen(repo) }
     composable(View.TRADE_LOGS.route) { TradeLogsScreen(repo) }
+    composable(View.STRATEGY.route) { StrategyScreen(repo) }
     composable(View.DATABANK.route) { DatabankScreen(repo) }
     composable(View.QUERY_CONSOLE.route) { QueryConsoleScreen(repo) }
     composable(View.INTELLIGENCE.route) { IntelligenceScreen(repo) }

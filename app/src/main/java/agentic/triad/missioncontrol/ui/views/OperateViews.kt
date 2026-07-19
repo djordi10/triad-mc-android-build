@@ -35,7 +35,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TileMode
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import agentic.triad.missioncontrol.mcp.CheckupRun
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -2699,18 +2702,26 @@ fun CheckupScreen(repo: MissionRepository) {
         Modifier.fillMaxSize().background(Paper).verticalScroll(rememberScrollState())
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
-        // (a) the dark header band — ⇔ CKVIEW `.top`. "Run checkup" in CKVIEW is get_checkup{force}
-        // + a record_checkup APPEND (C-5): both are argumented/write calls this read-only client
-        // does not have, so the button says so honestly instead of pretending.
+        // (a) the dark header band — ⇔ CKVIEW `.top`. "Run checkup" re-polls the reads and appends
+        // this verdict via record_checkup (C-5) — the one write the wall permits besides propose.
+        val ckScope = rememberCoroutineScope()
         CkOpsHeader(
             "MISSION CONTROL · CHECKUP v1.0",
             listOf<Pair<String, () -> Unit>>(
+                // Run checkup = re-poll the reads AND append this verdict via record_checkup (C-5),
+                // the one observability write the wall permits. A proposal-free side-channel: it
+                // records the run, applies nothing.
                 "Run checkup" to {
-                    Toast.makeText(
-                        ctx,
-                        "Run checkup = get_checkup{force} + a record_checkup append (C-5) — writes are not wired in this read-only client. Refresh re-polls the same reads.",
-                        Toast.LENGTH_LONG,
-                    ).show()
+                    ckScope.launch {
+                        val env = repo.recordCheckup(CheckupRun(verdict = verdictShown))
+                        vm.refresh()
+                        Toast.makeText(
+                            ctx,
+                            if (env.ok) "Checkup recorded (verdict $verdictShown) + re-polled."
+                            else "record_checkup unavailable (${env.error ?: "no reason"}); re-polled reads instead.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
                 },
                 "Refresh" to { vm.refresh() },
             ),

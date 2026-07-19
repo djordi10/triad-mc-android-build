@@ -1,11 +1,24 @@
 package agentic.triad.missioncontrol.ui.views
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
 import agentic.triad.missioncontrol.data.MissionRepository
+import agentic.triad.missioncontrol.mcp.ProposeAction
 import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.HBarChart
@@ -37,7 +50,12 @@ import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.str
 import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.nav.View
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 private fun row(vararg cells: Pair<String, Tone>) = cells.toList()
 
@@ -327,6 +345,11 @@ fun ConfigScreen(repo: MissionRepository) {
             }
         }
 
+        // ── the control surface (v5.18) — client draft → change-plan → EXPORT as a proposal ──
+        // The safe half that "already works": build a config change IN THE APP, read the diff, and
+        // file it as a proposal. It never applies — there is no config_apply ("NO TOOL WRITES IT").
+        ConfigDraftCard(repo, domains, fpRaw)
+
         McCard("Operator actions — proposals, never commands", "propose_action") {
             Row { Tag("circuit breaker", WARN); Tag("hard kill", SEV); Tag("cancel all", WARN); Tag("pause symbol", NEUTRAL) }
             Note("Every button emits a signed operator-action/1 payload {via:'config-gui', requires:'triadctl confirm'}. The executor honors only triadctl after its own confirm. The GUI cannot apply. Ever.")
@@ -351,6 +374,119 @@ fun ConfigScreen(repo: MissionRepository) {
 // ── small local formatting helpers (keep readers honest — em-dash on absence) ──
 private fun num(o: JsonObject?, k: String): String = o.field(k).str()
 private fun Boolean.yn(): String = if (this) "true" else "false"
+
+/**
+ * The Config-Store control surface (v5.18): build a config change IN THE APP over the served preset,
+ * see the old→new diff and the change-plan (the JSON op), then EXPORT it as a proposal. This is the
+ * "safe half" — it files a `config_change` proposal via repo.propose(); it NEVER applies. There is no
+ * config_apply ("NO TOOL WRITES IT"). Old values are read live from get_config_preset (honest em-dash
+ * on absence); the new value + the plan are pure client-side state until a human runs the ceremony.
+ */
+@Composable
+private fun ConfigDraftCard(repo: MissionRepository, domains: JsonObject?, baseFingerprint: String) {
+    val scope = rememberCoroutineScope()
+    // Headline levers the draft can edit — each reads its OLD value live from the served preset.
+    val knobs = listOf(
+        Triple("risk", "conviction_threshold", "conviction threshold"),
+        Triple("risk", "min_stop_width_bps", "min stop width bps · 45bps law"),
+        Triple("risk", "net_rr_floor", "net RR floor"),
+        Triple("risk", "gross_rr_floor", "gross RR floor"),
+        Triple("risk", "risk_pct_equity", "risk % equity"),
+        Triple("risk", "global_exposure_cap_pct", "global exposure cap %"),
+        Triple("risk", "dd_daily_pct", "daily DD halt %"),
+        Triple("execution", "time_stop_mult", "time-stop mult"),
+    )
+    var sel by remember { mutableStateOf(0) }
+    var newValue by remember { mutableStateOf("") }
+    var rationale by remember { mutableStateOf("") }
+    var inFlight by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+
+    val safeSel = sel.coerceIn(0, knobs.size - 1)
+    val (dom, key, _) = knobs[safeSel]
+    val oldRaw = domains.obj(dom).field(key).str()
+    val path = "/domains/$dom/$key"
+
+    // The client-side change-plan (change-plan/1) — the grouped op a human compiles + verifies. Built
+    // fresh each recomposition from the selected lever + the typed value; guardDerive keeps it honest.
+    val changePlan = guardDerive(buildJsonObject { }) {
+        buildJsonObject {
+            put("schema", "change-plan/1")
+            put("base_fingerprint", baseFingerprint)
+            putJsonArray("groups") {
+                add(
+                    buildJsonObject {
+                        put("name", "gui-draft")
+                        putJsonArray("ops") {
+                            add(
+                                buildJsonObject {
+                                    put("op", "replace")
+                                    put("path", path)
+                                    val fromD = oldRaw.toDoubleOrNull()
+                                    if (fromD != null) put("from", fromD) else put("from", oldRaw)
+                                    val toD = newValue.toDoubleOrNull()
+                                    if (toD != null) put("to", toD) else put("to", newValue)
+                                },
+                            )
+                        }
+                    },
+                )
+            }
+            put("apply", "triad-config compile && triadctl config verify && triadctl config apply")
+        }
+    }
+
+    McCard("Client draft → change-plan → proposal (the safe half — never applies)", "get_config_preset · propose_action") {
+        // The design's ceremony note, verbatim.
+        Note("proposal → triad-config compile → git → triadctl config verify; NO TOOL WRITES IT", WARN)
+        Note("Build the change IN THE APP: pick a lever, set a new value client-side, read the diff, then Export → proposal. The app files a config_change proposal (propose_action); it never applies. config_apply does not exist.", NEUTRAL)
+
+        // ── pick a lever (client-side selection only) ──
+        Row(Modifier.horizontalScroll(rememberScrollState())) {
+            knobs.forEachIndexed { i, k ->
+                Box(Modifier.clickable { sel = i; result = null }) {
+                    Tag((if (i == safeSel) "● " else "○ ") + k.third, if (i == safeSel) INFO else NEUTRAL)
+                }
+            }
+        }
+
+        KvRow("lever", "$dom.$key", NEUTRAL)
+        KvRow("path", path, NEUTRAL)
+        KvRow("old → new", oldRaw + "  →  " + newValue.ifBlank { "—" }, if (newValue.isBlank()) UNK else WARN)
+
+        OutlinedTextField(newValue, { newValue = it; result = null }, label = { Text("new value (client-side draft)") })
+        OutlinedTextField(rationale, { rationale = it; result = null }, label = { Text("rationale + evidence (required)") })
+
+        // ── change-plan preview: the grouped op, one fingerprint per apply ──
+        MiniTable(
+            listOf("op", "path", "from → to"),
+            listOf(row("replace" to INFO, path to NEUTRAL, (oldRaw + " → " + newValue.ifBlank { "—" }) to NEUTRAL)),
+        )
+        Note(changePlan.toString(), NEUTRAL)
+
+        Button(
+            enabled = !inFlight && newValue.isNotBlank() && rationale.isNotBlank(),
+            onClick = {
+                inFlight = true
+                result = null
+                scope.launch {
+                    val env = repo.propose(ProposeAction(kind = "config_change", args = changePlan, rationale = rationale))
+                    val pid = (env.data as? JsonObject).text("proposal_id")
+                    result = if (env.ok) true to pid else false to (env.error ?: "propose failed")
+                    inFlight = false
+                }
+            },
+        ) { Text(if (inFlight) "Filing…" else "Export → proposal") }
+
+        result?.let { (ok, msg) ->
+            Ribbon(
+                if (ok) "Proposal filed · $msg" else "Propose failed",
+                if (ok) "proposal_id=$msg — it lands in the inbox for a human at triadctl. Nothing applied; the ceremony compiles + verifies it." else msg,
+                if (ok) GOOD else BAD,
+            )
+        }
+    }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 //  GOVERNANCE (view 13) — LIVE: get_go_no_go_status (the 9/10 gates) + get_proposals (the inbox).
@@ -473,6 +609,11 @@ fun GovernanceScreen(repo: MissionRepository) {
             }
         }
 
+        // ── the control surface (v5.18) — FILE a proposal on the inbox (propose + client-draft) ──
+        // Each existing proposal above stays read-only (ratify/apply is the human ceremony); this is
+        // the ONLY write the app makes — propose_action, which executes nothing.
+        GovernanceProposeCard(repo)
+
         McCard("What actually works — honest UNKNOWN over a flattering default", "get_kill_state · get_attestation · get_config_active") {
             Row { Tag("control_path:false", GOOD); Tag("propose executes nothing", GOOD); Tag("attestation real", GOOD) }
             Note("The governance design is right; report UNKNOWN, never a flattering default (G-4). The instrumentation, not the design, is what's blind pre-live.")
@@ -489,5 +630,68 @@ fun GovernanceScreen(repo: MissionRepository) {
                 "a checklist must be answerable · report UNKNOWN not a flattering default · the read path is never a " +
                 "control path · config is code · every finding must become a rule.",
         )
+    }
+}
+
+/**
+ * Governance control surface (v5.18): FILE a proposal on the inbox via propose_action. This is the
+ * only write the app makes and it EXECUTES NOTHING — it appends a record a human runs at triadctl
+ * after its own confirm (G-5). The existing proposals list stays read-only; ratify/apply is the
+ * ceremony, not the app. A proposal without a rationale is a command, so the rationale is required.
+ */
+@Composable
+private fun GovernanceProposeCard(repo: MissionRepository) {
+    val scope = rememberCoroutineScope()
+    val kinds = listOf(
+        "alert_on_the_shadow_plane",
+        "flag_gate_8_vacuous",
+        "add_gate_10",
+        "ship_gate_evidence",
+        "pin_the_calibration",
+        "propose_halt",
+        "other",
+    )
+    var sel by remember { mutableStateOf(0) }
+    var rationale by remember { mutableStateOf("") }
+    var inFlight by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    val safeSel = sel.coerceIn(0, kinds.size - 1)
+    val kind = kinds[safeSel]
+
+    McCard("File a proposal — propose_action (executes nothing)", "propose_action") {
+        Note("G-5 · The inbox write is a proposal, not a command: it appends a record; a human runs it at triadctl after its own confirm. A proposal without a rationale is a command — write the why.", WARN)
+
+        Row(Modifier.horizontalScroll(rememberScrollState())) {
+            kinds.forEachIndexed { i, k ->
+                Box(Modifier.clickable { sel = i; result = null }) {
+                    Tag((if (i == safeSel) "● " else "○ ") + k, if (i == safeSel) INFO else NEUTRAL)
+                }
+            }
+        }
+        KvRow("kind", kind, NEUTRAL)
+        OutlinedTextField(rationale, { rationale = it; result = null }, label = { Text("rationale (required) — what you saw, what to run") })
+
+        Button(
+            enabled = !inFlight && rationale.isNotBlank(),
+            onClick = {
+                inFlight = true
+                result = null
+                scope.launch {
+                    val args = buildJsonObject { put("from", "governance") }
+                    val env = repo.propose(ProposeAction(kind = kind, args = args, rationale = rationale))
+                    val pid = (env.data as? JsonObject).text("proposal_id")
+                    result = if (env.ok) true to pid else false to (env.error ?: "propose failed")
+                    inFlight = false
+                }
+            },
+        ) { Text(if (inFlight) "Filing…" else "File proposal") }
+
+        result?.let { (ok, msg) ->
+            Ribbon(
+                if (ok) "Proposal filed · $msg" else "Propose failed",
+                if (ok) "proposal_id=$msg — the inbox is no longer empty. Ratify/apply is the human ceremony, not the app." else msg,
+                if (ok) GOOD else BAD,
+            )
+        }
     }
 }
