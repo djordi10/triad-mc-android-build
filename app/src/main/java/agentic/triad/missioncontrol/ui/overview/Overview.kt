@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,15 +23,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -43,9 +50,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.data.Mode
+import agentic.triad.missioncontrol.mcp.McpEnvelope
+import agentic.triad.missioncontrol.mcp.ProposeAction
+import agentic.triad.missioncontrol.ui.theme.Amber
+import agentic.triad.missioncontrol.ui.theme.AmberSoft
 import agentic.triad.missioncontrol.ui.theme.Blue
 import agentic.triad.missioncontrol.ui.theme.Card
 import agentic.triad.missioncontrol.ui.theme.Emerald
@@ -92,10 +104,13 @@ import agentic.triad.missioncontrol.ui.components.text
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Overview view 01 — the five-second page, a 1:1 native mirror of the web dashboard's phone Overview
@@ -133,6 +148,46 @@ private const val COVERAGE_FLOOR = 0.80
 // The PEND trio (wiring §3): they 404 until built, so the strip's reads-ok census must not count
 // them as errors — exactly the web renderStrip's `!PENDING[k]` filter.
 private val OVERVIEW_PEND = setOf("get_money_path", "get_risk_envelope", "get_truth_coverage")
+
+// The build specs the three §3 PEND reads print until they ship — ported verbatim from OVVIEW.PENDING.
+// The panels keep stitching client-side; these boxes disclose that stitch loudly (O-3), and the day a
+// tool answers the box flips to a one-line "LIVE" confirmation (never the stale NOT-BUILT headline).
+private const val SPEC_MONEY_PATH =
+    "get_money_path  →  wiring §3.1\n" +
+        "{ stages:[{stage,n_24h,n_total,conv_from_prev,floor}],\n" +
+        "  chokepoint:{stage,conv,floor,reason,top_refusals[]},\n" +
+        "  fast_exit:{independent,armed,triggered_24h,p99_ms},\n" +
+        "  skips:{n,first_class,note} }\n\n" +
+        "RULES\n" +
+        "· conv_from_prev is null (not 0) when upstream n == 0 — division by\n" +
+        "  zero is an absence, not a collapse (O-3).\n" +
+        "· chokepoint = FIRST stage where n[i-1] > 0 and conv < floor.\n" +
+        "· floors come from limit_config + the take-rate band, never the GUI.\n" +
+        "Until built, the spine above is stitched client-side from\n" +
+        "get_databank + get_take_rate + get_positions + get_loop_status."
+private const val SPEC_RISK_ENVELOPE =
+    "get_risk_envelope  →  wiring §3.2\n" +
+        "{ open_positions, fills_without_armed_stop, unprotected_notional_quote,\n" +
+        "  gross:{notional_quote,cap,utilization}, net:{...}, per_symbol[],\n" +
+        "  drawdown:{today_pct,daily_stop_pct,weekly_stop_pct,action_*,in_force},\n" +
+        "  cooldowns:{active[],trigger,minutes,scope},\n" +
+        "  breaker:{state,since,who,why}, kill:{state,armed,scope}, caps_present }\n\n" +
+        "RULES\n" +
+        "· fills_without_armed_stop is the Sev-1 counter. COMPUTED from the\n" +
+        "  ledger (fills ⟕ resting stop orders by position_id). NEVER null.\n" +
+        "· If it cannot be derived, the field is null AND the RISK pill goes\n" +
+        "  UNKNOWN. It does not go green."
+private const val SPEC_TRUTH_COVERAGE =
+    "get_truth_coverage  →  wiring §3.3\n" +
+        "{ components_total, by_status:{GREEN,YELLOW,RED,UNKNOWN}, coverage_pct,\n" +
+        "  verdict, verdict_rule, unprobed:[{id,plane,fix}],\n" +
+        "  planes:[{plane,up,reason}], attestation_clean, config_dirty }\n\n" +
+        "RULES\n" +
+        "· verdict_rule is a STRING THE SERVER SHIPS, so the GUI cannot quietly\n" +
+        "  redefine \"green\". Today: \"GREEN requires coverage >= 0.80 and reds == 0\".\n" +
+        "· coverage_pct is law O-2 in one field.\n" +
+        "· unprobed[] is a work list — the fastest path from UNKNOWN to a\n" +
+        "  real verdict."
 
 // ── the top chrome hexes (web `.ovwrap .strip` + `#appbar .live` mode dot) ─────────────────────────
 private val OvStripBg = Color(0xFFFBFAF7)     // .strip background (#fbfaf7)
@@ -528,6 +583,9 @@ fun OverviewScreen(repo: MissionRepository) {
                 KvRow("⌁ chokepoint", if (M.tr == null) "UNKNOWN" else "none (take-rate in band)", if (M.tr == null) Tone.UNK else Tone.GOOD)
             }
             Note("O-8: the chokepoint is computed at the FIRST stage where conversion falls below its floor — the spine dies where conversion collapses, and names the top refusal reason. It is computed, not chosen.")
+            // §3.1 · get_money_path — 404 until built. The spine above is stitched client-side; this box
+            // discloses that (O-3), and flips to a LIVE note the day the server ships the read.
+            OvPendSpec("get_money_path", SPEC_MONEY_PATH, served = s.data["get_money_path"] != null)
         }
 
         // ── 1.3 RISK — is money exposed, and is it protected? (always present · O-4) ──────────────────
@@ -594,6 +652,9 @@ fun OverviewScreen(repo: MissionRepository) {
             KvRow("kill", M.kl?.let { M.kl.text("state").uppercase() } ?: "UNKNOWN", stateTone(M.kl.text("state")))
             if (M.br.field("control_path") != null && !M.br.bool("control_path")) Tag("READ-ONLY MIRROR", Tone.INFO)
             Note("O-5: this page cannot arm, release, or flatten. When the ledger has no breaker events the chip reads UNKNOWN — it is never rendered as safe, and never as off. AT-OV8: the Sev-1 fills-without-armed-stop row is present in every state.")
+            // §3.2 · get_risk_envelope — the Sev-1 counter's home. Until it ships, the row above stitches
+            // its zero from ledger.fills; this box names what it would carry (O-3 disclosure).
+            OvPendSpec("get_risk_envelope", SPEC_RISK_ENVELOPE, served = M.re != null)
         }
 
         // ── 1.4 TRUTH — how much of this is actually known? (coverage before verdict · O-2) ───────────
@@ -604,15 +665,10 @@ fun OverviewScreen(repo: MissionRepository) {
                 Triple("verdict", M.truth, verdictTone(M.truth)),
             )
             Note("O-2 · coverage before verdict. ${M.verdictRule}")
-            MiniTable(
-                listOf("status", "count"),
-                listOf(
-                    listOf("GREEN" to Tone.GOOD, M.byGreen.toString() to Tone.GOOD),
-                    listOf("YELLOW" to Tone.WARN, M.byYellow.toString() to Tone.WARN),
-                    listOf("RED" to Tone.BAD, M.byRed.toString() to Tone.BAD),
-                    listOf("UNKNOWN" to Tone.UNK, M.byUnknown.toString() to Tone.UNK),
-                ),
-            )
+            // The census heatmap (web pTruth `.census`): one cell per checkup component, coloured by
+            // status — GREEN filled, UNKNOWN a hatched empty cell (O-1: an unprobed cell must NOT read
+            // as a green one). The count tags follow the grid, exactly as the HTML lays them out.
+            TruthCensus(M)
             if (M.byRed == 0 && M.byUnknown > 0) {
                 Ribbon(
                     "Zero reds is not good news here.",
@@ -651,6 +707,9 @@ fun OverviewScreen(repo: MissionRepository) {
                 },
             )
             Note("P12 · config is code. A runtime whose fingerprint does not match the applied preset is unattested, and this panel turns red before any other panel is believed.")
+            // §3.3 · get_truth_coverage — until it ships, the census/verdict above are stitched from
+            // get_checkup; the verdict_rule the server would own is applied client-side (O-2 disclosure).
+            OvPendSpec("get_truth_coverage", SPEC_TRUTH_COVERAGE, served = s.data["get_truth_coverage"] != null)
         }
 
         // ── 1.5 EDGE — is there anything worth trading? (four books · O-6 no cross-cohort sums) ────────
@@ -796,6 +855,9 @@ fun OverviewScreen(repo: MissionRepository) {
                 )
             }
             Note("The dashboard inherits the MCP wall (O-5): it reads, replays, and proposes. A human executes at triadctl. There is no enable, release, reset, place, or flatten on this page.")
+            // The web pNext `Propose action` button (id=ov_btnPropose) — the ONE write this page makes:
+            // it FILES a record on the inbox via repo.propose(); it applies nothing (O-5).
+            OvProposeAction(repo)
         }
 
         // ── 1.8 LATENCY — declared vs measured (O-1: every live cell is hatched, not green) ───────────
@@ -1185,4 +1247,182 @@ private fun stateTone(state: String): Tone = when (state.lowercase()) {
     "armed", "tripped", "fired" -> Tone.SEV
     "clear", "safe", "off" -> Tone.GOOD
     else -> Tone.WARN
+}
+
+// ── the §3 PEND build-spec box (web `.pend`) + the Truth census heatmap + the propose control ──────
+
+/**
+ * The web `.pend` build-spec box — the honest disclosure for a §3 read that 404s until built: an amber
+ * bordered card with the mono NOT-BUILT headline over the read's wiring spec. When [served] the tool
+ * has shipped, so the box collapses to a one-line LIVE confirmation (never the stale NOT-BUILT line).
+ */
+@Composable
+private fun OvPendSpec(tool: String, spec: String, served: Boolean) {
+    if (served) {
+        Note("$tool · LIVE — this panel now reads the server value directly, not the client-side stitch.", Tone.GOOD)
+        return
+    }
+    Column(
+        Modifier.fillMaxWidth().padding(top = 12.dp)
+            .background(AmberSoft, RoundedCornerShape(10.dp))
+            .border(1.dp, Amber, RoundedCornerShape(10.dp))
+            .padding(horizontal = 13.dp, vertical = 12.dp),
+    ) {
+        Text(
+            "PEND · $tool NOT BUILT — this panel is stitched client-side",
+            color = Amber, fontFamily = EstateMono, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp, lineHeight = 14.sp,
+        )
+        Text(
+            spec, color = Ink2, fontFamily = EstateMono, fontSize = 10.sp, lineHeight = 15.sp,
+            modifier = Modifier.padding(top = 7.dp).horizontalScroll(rememberScrollState()),
+        )
+    }
+}
+
+/**
+ * The census heatmap (web pTruth `.census`) — one cell per checkup component, coloured by status:
+ * GREEN/YELLOW/RED filled, UNKNOWN a hatched empty cell so an unprobed component can never read as a
+ * green one (O-1). The count tags (GREEN n · YELLOW n · RED n · UNKNOWN n · VERDICT) follow the grid.
+ */
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun TruthCensus(M: Model) {
+    if (M.comps.isEmpty()) {
+        KvRow("census", "UNKNOWN — get_checkup returned no components", Tone.UNK)
+    } else {
+        FlowRow(
+            Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            M.comps.forEach { c -> CensusCell(c.text("status", "UNKNOWN")) }
+        }
+    }
+    FlowRow(
+        Modifier.fillMaxWidth().padding(top = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Tag("GREEN ${M.byGreen}", Tone.GOOD)
+        Tag("YELLOW ${M.byYellow}", Tone.WARN)
+        Tag("RED ${M.byRed}", Tone.BAD)
+        Tag("UNKNOWN ${M.byUnknown}", Tone.UNK)
+        Tag("VERDICT: ${M.truth}", verdictTone(M.truth))
+    }
+}
+
+/** One census cell — a 26dp square. Probed cells fill solid; UNKNOWN draws a faint diagonal hatch on a
+ *  near-empty cell (the web `.cc.u.hatch`), never a filled/green look. */
+@Composable
+private fun CensusCell(status: String) {
+    val shape = RoundedCornerShape(4.dp)
+    val fill: Color? = when (status.uppercase()) {
+        "GREEN" -> Emerald
+        "YELLOW" -> Amber
+        "RED" -> Red
+        else -> null
+    }
+    if (fill != null) {
+        Box(Modifier.size(26.dp).background(fill, shape).border(1.dp, fill, shape))
+    } else {
+        Box(
+            Modifier.size(26.dp)
+                .background(Unk.copy(alpha = 0.12f), shape)
+                .border(1.dp, Line, shape)
+                .drawBehind {
+                    var x = -size.height
+                    while (x < size.width) {
+                        drawLine(
+                            Unk.copy(alpha = 0.5f),
+                            Offset(x, size.height), Offset(x + size.height, 0f),
+                            strokeWidth = 1f,
+                        )
+                        x += 6f
+                    }
+                },
+        )
+    }
+}
+
+/**
+ * The web pNext `Propose action` control — the ONE write this page makes. It FILES a record on the
+ * inbox via [MissionRepository.propose] (a human executes at triadctl); it applies nothing (O-5). A
+ * kind chip + a required rationale; the returned proposal_id (or the error) is shown in the ribbon.
+ */
+@Composable
+private fun OvProposeAction(repo: MissionRepository) {
+    val scope = rememberCoroutineScope()
+    val kinds = listOf(
+        "config_change", "entries_disable", "entries_enable", "kill_drill",
+        "breaker_reset_request", "flatten_request", "phase_change", "other",
+    )
+    var sel by remember { mutableIntStateOf(0) }
+    var rationale by remember { mutableStateOf("") }
+    var opened by remember { mutableStateOf(false) }
+    var inFlight by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    val kind = kinds[sel.coerceIn(0, kinds.size - 1)]
+
+    if (!opened) {
+        Box(
+            Modifier.fillMaxWidth().padding(top = 10.dp)
+                .background(Emerald, RoundedCornerShape(9.dp))
+                .heightIn(min = 44.dp)
+                .clickable { opened = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Propose action", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+        return
+    }
+
+    Note("The propose lane — a record for a human to execute via triadctl. It performs nothing (O-5). A proposal without a rationale is a command — write the why.", Tone.INFO)
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp).horizontalScroll(rememberScrollState())) {
+        kinds.forEachIndexed { i, k ->
+            Box(Modifier.clickable { sel = i; result = null }) {
+                Tag((if (i == sel) "● " else "○ ") + k, if (i == sel) Tone.INFO else Tone.NEUTRAL)
+            }
+        }
+    }
+    KvRow("kind", kind, Tone.NEUTRAL)
+    OutlinedTextField(
+        rationale, { rationale = it; result = null },
+        label = { Text("rationale (required) — cite the evidence") },
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+    )
+    Button(
+        enabled = !inFlight && rationale.isNotBlank(),
+        onClick = {
+            inFlight = true
+            result = null
+            scope.launch {
+                val env: McpEnvelope = try {
+                    repo.propose(
+                        ProposeAction(
+                            kind = kind,
+                            args = buildJsonObject { put("from", "overview") },
+                            rationale = rationale.trim(),
+                        ),
+                    )
+                } catch (e: Throwable) {
+                    McpEnvelope(ok = false, error = e.message ?: "propose failed")
+                }
+                result = if (env.ok) {
+                    true to (env.data as? JsonObject).text("proposal_id")
+                } else {
+                    false to (env.error ?: "propose returned ok=false")
+                }
+                inFlight = false
+            }
+        },
+        modifier = Modifier.padding(top = 8.dp),
+    ) { Text(if (inFlight) "Filing…" else "File proposal") }
+    result?.let { (ok, msg) ->
+        Ribbon(
+            if (ok) "Proposal filed · $msg" else "Propose failed",
+            if (ok) "proposal_id=$msg — the inbox is no longer empty. Ratify/apply is the human ceremony at triadctl, not the app." else msg,
+            if (ok) Tone.GOOD else Tone.BAD,
+        )
+    }
 }

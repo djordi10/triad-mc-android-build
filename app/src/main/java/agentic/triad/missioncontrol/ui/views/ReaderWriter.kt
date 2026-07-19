@@ -52,6 +52,8 @@ import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.components.arr
 import agentic.triad.missioncontrol.ui.nav.View
+import agentic.triad.missioncontrol.ui.theme.Amber
+import agentic.triad.missioncontrol.ui.theme.AmberSoft
 import agentic.triad.missioncontrol.ui.theme.Card
 import agentic.triad.missioncontrol.ui.theme.Emerald
 import agentic.triad.missioncontrol.ui.theme.Ink
@@ -194,6 +196,47 @@ private val HOLES_FIXTURE = listOf(
     HoleRow("outcomes", 56862, 0, "written to SQLite · DuckDB view empty"),
     HoleRow("decisions", 11528, 9703, "1,825 rows have null join keys"),
 )
+
+// ── the §5.x build specs (RWVIEW.PENDING) — rendered as the HTML `.pend` blocks. The first two are
+// LIVE on the server now, so their spec shows ONLY when the tool is absent this poll (honest-null);
+// provision_nats is a mutation that does not exist, so its spec always shows in the transport card. ──
+private const val SPEC_SEAM_AUDIT =
+    "get_seam_audit  ->  wiring §5.2     ** rows written vs readable **\n" +
+        "{ tables:[ { table:\"refusals\", rows_written:115,\n" +
+        "             rows_readable:18, gap:97, gap_pct:0.843 } ] }\n\n" +
+        "RULES  (RW-4)\n" +
+        "· \"rows written\" (the writer's count) and \"rows readable\" (what the\n" +
+        "  view returns) are measured in DIFFERENT PLACES and NOBODY\n" +
+        "  COMPARES THEM. refusals: 115 vs 18. That gap is invisible on\n" +
+        "  every other page.\n" +
+        "· The audit must run writer-count MINUS view-count per table and\n" +
+        "  raise anything non-zero. It is the cheapest integrity check in\n" +
+        "  the system and it does not exist."
+private const val SPEC_RW_MAP =
+    "get_reader_writer_map  ->  wiring §5.1   ** the explicit edges **\n" +
+        "{ edges:[ { writer:\"ledger.context.packets\", rows:45692,\n" +
+        "            readers:[], lag_s:null, status:\"ORPHAN\" },\n" +
+        "          { writer:\"ledger.refusals\", rows:115,\n" +
+        "            readers:[\"refusals view\"], readable:18,\n" +
+        "            status:\"HOLE\" } ],\n" +
+        "  orphans:1, holes:2, mismaps:1 }\n\n" +
+        "RULES  (RW-2 / RW-3)\n" +
+        "· Today there is NO tool that maps a writer to its readers. This\n" +
+        "  page reconstructs the edges by hand from get_service_status +\n" +
+        "  get_view_catalog. The map must be a first-class read: which\n" +
+        "  writer feeds which reader, and the lag on that edge.\n" +
+        "· An ORPHAN (writer, no reader) and a MISMAP (reader, wrong\n" +
+        "  writer) are DIFFERENT failures and must be reported separately."
+private const val SPEC_PROVISION_NATS =
+    "provision_nats  ->  wiring §5.3     ** the dedup between them **\n" +
+        "svc: NATS JetStream is not provisioned. get_bus_status ->\n" +
+        "     transport: unavailable (nats).\n" +
+        "RULES  (RW-5)\n" +
+        "· No bus -> no consumer dedup -> the same candidate is written\n" +
+        "  twice -> 164 dup candidates -> 8 dup adjudications -> 5,277 dup\n" +
+        "  bank rows -> INFLATION 2.93x.\n" +
+        "· The reader reads every duplicate the writer emits. The dedup\n" +
+        "  belongs BETWEEN them, in the transport. It is missing."
 
 // ── the live-derived model ───────────────────────────────────────────────────────────────────────
 private data class RwLane(val owner: String, val stream: String, val ageS: Double?)
@@ -391,6 +434,8 @@ fun ReaderWriterScreen(repo: MissionRepository) {
                     "exist. It is the cheapest integrity check in the system, and it would have caught the " +
                     "refusals hole, the orphaned packets, and the outcomes mismap the day each one appeared.",
             )
+            // §5.2 · get_seam_audit — LIVE (holesLive) it drives the table above; ABSENT its build spec.
+            if (!m.haveAudit) RwPendSpec("get_seam_audit", SPEC_SEAM_AUDIT)
         }
 
         // ── §3 · THE ORPHAN & THE MISMAP — different bugs (AT-RW3 / RW5 / RW11) ──
@@ -413,6 +458,8 @@ fun ReaderWriterScreen(repo: MissionRepository) {
                     "elsewhere. A status board shows both as \"outcomes: empty / packets: ok\" and hides the " +
                     "truth of each. The map has to name which is which.",
             )
+            // §5.1 · get_reader_writer_map — LIVE it counts the edges above; ABSENT its build spec.
+            if (!m.haveMap) RwPendSpec("get_reader_writer_map", SPEC_RW_MAP)
         }
 
         // ── §4 · THE DEDUP IS DOWN — NATS → 2.93× inflation (AT-RW9) ──
@@ -437,6 +484,8 @@ fun ReaderWriterScreen(repo: MissionRepository) {
                     "reader (it correctly reads what is there). Dedup is a property of the pipe. Provision NATS, " +
                     "and the same writer and the same reader stop inflating — with no change to either.",
             )
+            // §5.3 · provision_nats — a mutation that does not exist; its build spec always shows here.
+            RwPendSpec("provision_nats", SPEC_PROVISION_NATS)
         }
 
         // ── per-layer row integrity — rows vs distinct (AT-RW10) ──
@@ -715,6 +764,30 @@ private fun IntegGrid() {
                 if (pair.size == 1) Box(Modifier.weight(1f))
             }
         }
+    }
+}
+
+// ── the `.pend` build-spec block — a §5.x wiring spec for a tool that is NOT BUILT ────────────────
+/** The HTML `.pend` panel: an amber bordered card with the mono NOT-BUILT headline over the read's
+ *  wiring spec. Shown for get_seam_audit / get_reader_writer_map only when that (now-live) tool is
+ *  absent this poll, and always for provision_nats (a mutation that does not exist). */
+@Composable
+private fun RwPendSpec(tool: String, spec: String) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 12.dp)
+            .background(AmberSoft, RoundedCornerShape(10.dp))
+            .border(1.dp, Amber, RoundedCornerShape(10.dp))
+            .padding(horizontal = 13.dp, vertical = 12.dp),
+    ) {
+        Text(
+            "PEND · $tool NOT BUILT",
+            color = Amber, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp, lineHeight = 14.sp,
+        )
+        Text(
+            spec, color = Ink2, fontFamily = Mono, fontSize = 10.sp, lineHeight = 15.sp,
+            modifier = Modifier.padding(top = 7.dp),
+        )
     }
 }
 

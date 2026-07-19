@@ -1,14 +1,22 @@
 package agentic.triad.missioncontrol.ui.views
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,6 +58,12 @@ import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.str
 import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.nav.View
+import agentic.triad.missioncontrol.ui.theme.Card
+import agentic.triad.missioncontrol.ui.theme.Ink
+import agentic.triad.missioncontrol.ui.theme.Ink2
+import agentic.triad.missioncontrol.ui.theme.Line
+import agentic.triad.missioncontrol.ui.theme.Red
+import agentic.triad.missioncontrol.ui.theme.RedSoft
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -518,6 +532,68 @@ fun LanesScreen(repo: MissionRepository) {
             )
         }
 
+        // ── §6.1 · the thing that would be promoted — the 11-domain tile grid (pPreset · AT-L9) ──
+        // The HTML's signature per-domain grid: each domain the applied preset carries, rendered as a
+        // tile with its live headline value. The mcp tile turns red when it holds the example.com
+        // placeholder; the FinGPT bias-role ribbon closes the card. All values derive live off the
+        // served preset (guardDerive-wrapped, honest em-dash when a field is absent).
+        McCard("The thing that would be promoted", "get_config_preset · $domainCount domains") {
+            val domKeys = guardDerive(emptyList<String>()) { domains?.keys?.toList() ?: emptyList() }
+                .ifEmpty {
+                    listOf(
+                        "symbols", "regimes", "risk", "execution", "cag", "intelligence",
+                        "personas", "logger", "aux", "mcp", "tuning",
+                    )
+                }
+            fun domVal(k: String): String = guardDerive("—") {
+                when (k) {
+                    "symbols" -> "$symbolCount whitelisted"
+                    "regimes" -> "${domains.obj("regimes")?.size ?: 0} · extreme=0.0"
+                    "risk" -> {
+                        val r = domains.obj("risk")
+                        "conv ${r.text("conviction_threshold")} · stop ${r.text("min_stop_width_bps")}bps"
+                    }
+                    "execution" -> {
+                        val x = domains.obj("execution")
+                        "${x.text("exit_profile")} · ${x.text("exec_arm")}"
+                    }
+                    "cag" -> "ttl ${domains.obj("cag").text("ttl_s")}s"
+                    "intelligence" -> modelTag.substringBefore(":")
+                    "personas" -> "${domains.obj("personas").field("list").list().size} shadow books"
+                    "logger" -> domains.obj("logger").text("horizons")
+                    "aux" -> "kronos + fingpt"
+                    "mcp" -> if (urlIsPlaceholder) "⚠ example.com" else "ok"
+                    "tuning" -> "edge ≥${domains.obj("tuning").text("edge_min_weeks")}w"
+                    else -> "—"
+                }
+            }
+            domKeys.chunked(2).forEach { pair ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pair.forEach { k ->
+                        DomainTile(Modifier.weight(1f), k, domVal(k), bad = (k == "mcp" && urlIsPlaceholder))
+                    }
+                    if (pair.size == 1) Box(Modifier.weight(1f))
+                }
+            }
+            if (urlIsPlaceholder) {
+                Ribbon(
+                    "The applied preset contains a placeholder — and it is marked dirty: false",
+                    "domains.mcp.http_url = $mcpUrl — the real endpoint is triad-mc.bgzr.io. This preset is " +
+                        "clean, committed and fingerprinted, and the fingerprint attests to a dead URL. CSL-1 makes " +
+                        "that fingerprint the input to every promotion and every delivery stamp. Fix it before you " +
+                        "build the promoter, not after.",
+                    SEV,
+                )
+            }
+            Ribbon(
+                "And this preset is what put FinGPT in the chair",
+                "intelligence.model_tag = ${if (modelTag == "—") "—" else modelTag} — the playbook assigns " +
+                    "FinGPT to the BIAS role, not adjudication. The config store is where that decision lives, " +
+                    "and there is no ledger entry explaining it.",
+                WARN,
+            )
+        }
+
         // ── §7 · the promotion ledger headline — live numbers, honestly (AT-L8) ──
         McCard("§7 · promotion ledger — $ledgerCount ENTRIES", "get_promotion_ledger") {
             KvRow("entries", "$ledgerCount", if (ledgerCount == 0) UNK else NEUTRAL)
@@ -793,6 +869,28 @@ fun LanesScreen(repo: MissionRepository) {
                 "change-plan → triad-config compile → git → triadctl config verify → apply. Read-only here; the only " +
                 "write is propose_action (AT-L13).",
             INFO,
+        )
+    }
+}
+
+/** One domain tile of the promotion grid (web pPreset `.dom`) — a mono domain name over its bold live
+ *  headline value. The mcp tile turns red ([bad]) when the served preset holds the example.com
+ *  placeholder — the fingerprint attests to a dead URL. */
+@Composable
+private fun DomainTile(modifier: Modifier, name: String, value: String, bad: Boolean) {
+    Column(
+        modifier.padding(bottom = 8.dp)
+            .background(if (bad) RedSoft else Card, RoundedCornerShape(9.dp))
+            .border(1.dp, if (bad) Red else Line, RoundedCornerShape(9.dp))
+            .padding(horizontal = 11.dp, vertical = 9.dp),
+    ) {
+        Text(
+            name, color = if (bad) Red else Ink2, fontFamily = FontFamily.Monospace,
+            fontSize = 9.sp, letterSpacing = 0.5.sp, fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            value, color = Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp, lineHeight = 15.sp,
+            modifier = Modifier.padding(top = 4.dp),
         )
     }
 }

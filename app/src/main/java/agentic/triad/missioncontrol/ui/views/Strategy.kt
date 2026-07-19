@@ -1,8 +1,25 @@
 package agentic.triad.missioncontrol.ui.views
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.ui.ToolsViewModel
@@ -16,6 +33,7 @@ import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
+import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
 import agentic.triad.missioncontrol.ui.components.Tone.GOOD
@@ -34,6 +52,9 @@ import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.nav.View
+import agentic.triad.missioncontrol.ui.theme.Amber
+import agentic.triad.missioncontrol.ui.theme.AmberSoft
+import agentic.triad.missioncontrol.ui.theme.Ink2
 import kotlinx.serialization.json.JsonObject
 
 private fun row(vararg cells: Pair<String, Tone>) = cells.toList()
@@ -144,6 +165,44 @@ private val FLEET_COMBOS = listOf(
     "Sweep ⊕ order-block",
 )
 
+// ── the PEND build specs (PFVIEW.PENDING) — the tools that would close the fleet's blind spots.
+// Rendered as prominent preformatted code panels (the HTML `.pend` block), never as one-line notes.
+private const val SPEC_TRACK_WATCH =
+    "get_track_watch  ->  wiring §5.1     ** windowed WR/EV per strategy **\n" +
+        "{ strategies:[ { id:\"sweep_reclaim\", track:\"...\",\n" +
+        "    windows:{ \"24h\":{n,resolved,wins,wr,ev,net_r},\n" +
+        "              \"7d\":{...}, \"30d\":{...}, \"all\":{...} },\n" +
+        "    recording:{ status:\"live\", last_row_ts, rows_24h },\n" +
+        "    ci:{ wr_lo, wr_hi } } ] }\n\n" +
+        "RULES  (S-5)\n" +
+        "· TODAY THE BANK ANSWERS ONE WINDOW: 'all'. get_shadow_bank has\n" +
+        "  no since/until on the outcome axis, so 24h / 7d / 30d CANNOT BE\n" +
+        "  COMPUTED from it. bin/triad_track_watch.sh logs a 30-min\n" +
+        "  snapshot line; it is a text log, not a queryable series.\n" +
+        "· This tool must window the SQLite bank by resolved_at and return\n" +
+        "  n + wins + WR + Wilson CI PER WINDOW. Without it every recency\n" +
+        "  column on this page is a fossil."
+private const val SPEC_DETECTOR_SPLIT =
+    "get_detector_split  ->  wiring §5.2     ** per-detector outcomes **\n" +
+        "{ by_detector:[ { detector_id:\"sweep_reclaim\",\n" +
+        "    resolved, wr, ev_r, net_r, ci_lo, ci_hi } ] }\n\n" +
+        "RULES  (S-3)\n" +
+        "· get_shadow_bank group_by SUPPORTS stop_bucket|cohort|symbol|side\n" +
+        "  and NOT detector_id. Per-detector outcome splits require joining\n" +
+        "  DuckDB candidate geometry to SQLite outcomes — WHICH MCP CANNOT\n" +
+        "  DO. That is why the detector rows above show candidate counts but\n" +
+        "  borrow their WR from TRIAD-A.\n" +
+        "· The DuckDB 'outcomes' view is EMPTY; all resolved outcomes live\n" +
+        "  in the SQLite bank only. This tool must own that join."
+private const val SPEC_RESOLVE_STUCK =
+    "resolve_stuck_tracks  ->  wiring §5.4     ** the M2/M3 fix **\n" +
+        "svc: triad-cf/1 must advance shadow_outcome off 'open' once pnl_r\n" +
+        "     is written. 349 rows are resolved-but-open RIGHT NOW.\n" +
+        "RULES  (S-4)\n" +
+        "· This is a one-line resolver bug with a large blast radius: every\n" +
+        "  SMC-track number on every dashboard reads zero while the data\n" +
+        "  exists underneath. Fix the writer, and M2/M3 light up."
+
 // win-rate tone against the 2.5R breakeven (web: wr>=be ? "g" : "r").
 private fun wrTone(wr: Double?): Tone = when {
     wr == null -> UNK
@@ -211,10 +270,15 @@ fun StrategyScreen(repo: MissionRepository) {
     val calFeasible = guardDerive(false) { (cal?.get("feasible") as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false }
     val calStatus = cal.text("status")
 
+    // ── the Track A/B toggle (PFVIEW `track`, default "B") — re-labels the stance strip
+    //    (MECHANICAL ↔ LLM-GATED) and dims the non-selected book row in the fleet table. ──
+    var track by remember { mutableStateOf("B") }
+    val trackA = track == "A"
+
     ViewScaffold(
         View.STRATEGY,
         stance = listOf(
-            Stance("track", "LLM-GATED", GOOD),
+            Stance("track", if (trackA) "MECHANICAL" else "LLM-GATED", if (trackA) BAD else GOOD),
             Stance("track A EV", rr(b0.ev), BAD),
             Stance("track B EV", rr(m1.ev), GOOD),
             Stance("track B N", nf(m1.n), WARN),
@@ -243,8 +307,13 @@ fun StrategyScreen(repo: MissionRepository) {
             wordTone = SEV,
         )
 
-        // ── the trackpick pair — Track A · Mechanical vs Track B · LLM-gated (web .trackpick) ─────────
+        // ── the trackpick pair — Track A · Mechanical vs Track B · LLM-gated (web .trackpick).
+        //    Tap a card to make it the selected track: the stance strip re-labels and the fleet books
+        //    table dims the other track's row (the same interactivity the HTML buttons drive). ──
         McCard("Track A · Mechanical", "B0 · take every candidate") {
+            Row(Modifier.fillMaxWidth().clickable { track = "A" }) {
+                Tag(if (trackA) "● SELECTED — drives the page" else "○ tap to select this track", if (trackA) INFO else UNK)
+            }
             Note("take every candidate the detectors fire — no LLM")
             StatRow(
                 Triple("EV / sel", rr(b0.ev), BAD),
@@ -253,6 +322,9 @@ fun StrategyScreen(repo: MissionRepository) {
             )
         }
         McCard("Track B · LLM-gated 🔒", "M1 · the FinGPT gate") {
+            Row(Modifier.fillMaxWidth().clickable { track = "B" }) {
+                Tag(if (!trackA) "● SELECTED — drives the page" else "○ tap to select this track", if (!trackA) INFO else UNK)
+            }
             Note("the same candidates, taken only when FinGPT says take")
             StatRow(
                 Triple("EV / sel", rr(m1.ev), GOOD),
@@ -312,14 +384,15 @@ fun StrategyScreen(repo: MissionRepository) {
             MiniTable(
                 listOf("strategy", "state", "rec", "cand", "WR", "EV", "sig"),
                 FLEET_DETECTORS.map { det ->
+                    // WR/EV are borrowed from TRIAD-A and follow the selected track (web trackRows).
                     row(
                         det.name to NEUTRAL,
                         det.state to det.stateTone,
                         "LIVE" to GOOD,
                         nf(det.cand) to NEUTRAL,
+                        (if (trackA) "25.3%" else "66.7%") to (if (trackA) BAD else GOOD),
+                        (if (trackA) "-0.126R" else "+0.778R") to (if (trackA) BAD else GOOD),
                         "borrowed" to UNK,
-                        "via TRIAD-A" to UNK,
-                        "—" to UNK,
                     )
                 },
             )
@@ -341,7 +414,7 @@ fun StrategyScreen(repo: MissionRepository) {
                 },
             )
 
-            Note("books — the strategy, priced (Track A = mechanical · Track B = LLM-gated)", INFO)
+            Note("books — the strategy, priced (Track ${track} = ${if (trackA) "mechanical" else "LLM-gated"})", INFO)
             MiniTable(
                 listOf("strategy", "role", "rec", "n", "WR", "EV / sel", "sig"),
                 books.map { b ->
@@ -358,7 +431,7 @@ fun StrategyScreen(repo: MissionRepository) {
                         b.dir == "pos" -> GOOD
                         else -> SEV
                     }
-                    row(
+                    val cells = row(
                         b.name to NEUTRAL,
                         roleLabel to (if (b.role == "A") BAD else if (b.role == "B") GOOD else NEUTRAL),
                         b.rec.uppercase() to (if (b.rec == "live") GOOD else if (b.rec == "dead") UNK else WARN),
@@ -367,6 +440,9 @@ fun StrategyScreen(repo: MissionRepository) {
                         rr(b.ev) to evTone(b.ev),
                         sigCell to sigTone,
                     )
+                    // dim the non-selected track's book row (web `dead` class): the other track recedes.
+                    val dim = (!trackA && b.role == "A") || (trackA && b.role == "B")
+                    if (dim) cells.map { it.first to UNK } else cells
                 },
             )
 
@@ -393,6 +469,8 @@ fun StrategyScreen(repo: MissionRepository) {
                     "${pctv(b0.wr)} on n=${nf(b0.n)} are not the same kind of number — a table that showed only the " +
                     "percentages would be lying by omission. Every EV carries its Wilson interval and its sample size.",
             )
+            // the per-detector split that MCP cannot do yet — the join DuckDB↔SQLite (S-3), NOT BUILT.
+            PfPendSpec("get_detector_split", SPEC_DETECTOR_SPLIT)
         }
 
         // ── detector registry (get_detector_registry — live) ─────────────────────────────────────────
@@ -448,6 +526,8 @@ fun StrategyScreen(repo: MissionRepository) {
                     "floor 52 minutes ago is measuring two different strategies as one. Until get_track_watch windows " +
                     "the bank by resolved_at, this page shows lifetime and nothing finer — and says so.",
             )
+            // get_track_watch — LIVE the day it ships (haveWindows), else the §5.1 spec block, NOT BUILT.
+            if (!haveWindows) PfPendSpec("get_track_watch", SPEC_TRACK_WATCH)
         }
 
         // ── pScale() — where the bleed is · the scale law (get_shadow_bank group_by stop_bucket) ──────
@@ -514,6 +594,8 @@ fun StrategyScreen(repo: MissionRepository) {
                     "the honest third state — and names the writer that has to change. Fix the one field, and $open rows " +
                     "of already-computed P&L light up two whole tracks. The measurement lies while the data tells the truth.",
             )
+            // the one-line resolver fix (triad-cf/1) with the large blast radius — the §5.4 spec, NOT BUILT.
+            PfPendSpec("resolve_stuck_tracks", SPEC_RESOLVE_STUCK)
         }
 
         LawBlock(
@@ -521,6 +603,28 @@ fun StrategyScreen(repo: MissionRepository) {
             "A win rate is a rumour without its N and its CI · Track B is Track A gated by the LLM · a per-detector " +
                 "split needs a join MCP cannot do yet · a defect is drawn as a defect, never a zero · recency windows " +
                 "or the number is a fossil · read-only.",
+        )
+    }
+}
+
+/** The web `.pend` build-spec block (amber, monospace) — a tool the fleet needs that is NOT BUILT.
+ *  Rendered as a prominent preformatted code panel, exactly like the HTML, never a one-line note. */
+@Composable
+private fun PfPendSpec(tool: String, spec: String) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 12.dp)
+            .background(AmberSoft, RoundedCornerShape(10.dp))
+            .border(1.dp, Amber, RoundedCornerShape(10.dp))
+            .padding(horizontal = 13.dp, vertical = 12.dp),
+    ) {
+        Text(
+            "PEND · $tool NOT BUILT",
+            color = Amber, fontFamily = FontFamily.Monospace, fontSize = 10.sp,
+            fontWeight = FontWeight.Bold, letterSpacing = 1.sp, lineHeight = 14.sp,
+        )
+        Text(
+            spec, color = Ink2, fontFamily = FontFamily.Monospace, fontSize = 10.sp, lineHeight = 15.sp,
+            modifier = Modifier.padding(top = 7.dp),
         )
     }
 }

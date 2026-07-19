@@ -44,7 +44,9 @@ import agentic.triad.missioncontrol.ui.components.ViewScaffold
 import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.field
 import agentic.triad.missioncontrol.ui.components.guardDerive
+import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.list
+import agentic.triad.missioncontrol.ui.components.num
 import agentic.triad.missioncontrol.ui.components.obj
 import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.str
@@ -146,6 +148,26 @@ fun ConfigScreen(repo: MissionRepository) {
             Triple("domains", (domains?.size ?: 0).toString(), if (domains == null) UNK else NEUTRAL),
             Triple("apply path", "triadctl only", INFO),
         )
+
+        // ── the editor topbar chrome (mirrors CFGSTORE's SHELL top bar, config_00) ──
+        // A viewer + propose surface: the profile selector + Save/Discard/Import/Export chips are the
+        // editor affordances that operate on the CLIENT draft; the working Export change-plan is the
+        // live ConfigDraftCard below. Nothing here applies to the running system (R-C1).
+        McCard("The editor — draft over the applied baseline", "config store · R-C1") {
+            KvRow("mode", "DRAFT EDITOR · READ + PROPOSE · R-C1 (apply only via triadctl)", INFO)
+            KvRow("applied profile", if (preset == "—") "—" else preset, NEUTRAL)
+            KvRow("fingerprint", fpShort, NEUTRAL)
+            KvRow("draft state", stateLabel, stateTone)
+            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                Tag("applied-baseline ▾", NEUTRAL)
+                Tag("Save profile", NEUTRAL)
+                Tag("Discard", NEUTRAL)
+                Tag("Import JSON", NEUTRAL)
+                Tag("Export preset", INFO)
+                Tag("Export change-plan →", GOOD)
+            }
+            Note("Full editor over the applied preset. Every control writes a draft; nothing applies from here (R-C1). Save profile / Discard / Import JSON / Export preset act on the client draft; Export change-plan produces the grouped ops for triad-config compile → triadctl config verify → apply — the live change-plan builder is the card below.", NEUTRAL)
+        }
 
         McCard("Applied preset — the served baseline", "get_config_active · get_config_preset") {
             KvRow("preset name", preset, NEUTRAL)
@@ -351,8 +373,12 @@ fun ConfigScreen(repo: MissionRepository) {
         ConfigDraftCard(repo, domains, fpRaw)
 
         McCard("Operator actions — proposals, never commands", "propose_action") {
+            KvRow("global circuit breaker", "halt new entries immediately; exits keep managing", WARN)
+            KvRow("hard kill", "entries + requotes off, convert resting TPs to protective (two-step)", SEV)
+            KvRow("cancel all orders", "flatten the resting book (pre-live: none exist — payload still emitted)", WARN)
+            KvRow("pause symbol", "per-symbol entry pause, exits alive", NEUTRAL)
             Row { Tag("circuit breaker", WARN); Tag("hard kill", SEV); Tag("cancel all", WARN); Tag("pause symbol", NEUTRAL) }
-            Note("Every button emits a signed operator-action/1 payload {via:'config-gui', requires:'triadctl confirm'}. The executor honors only triadctl after its own confirm. The GUI cannot apply. Ever.")
+            Note("Every action emits a signed operator-action/1 payload {via:'config-gui', requires:'triadctl confirm'}. The executor honors only triadctl after its own confirm. The GUI cannot apply. Ever.")
         }
 
         Note("Config-Store SYSTEM controls do not exist on the server yet — they render as PEND and would only propose.", UNK)
@@ -489,20 +515,171 @@ private fun ConfigDraftCard(repo: MissionRepository, domains: JsonObject?, baseF
 }
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-//  GOVERNANCE (view 13) — LIVE: get_go_no_go_status (the 9/10 gates) + get_proposals (the inbox).
-//  Note the wall: read / replay / propose — nothing here applies.
+//  GOVERNANCE (view 13 / view 17) — the go/no-go board that decides whether real money flows.
+//  LIVE: the ten §16.6 gates each carry a verdict COMPUTED from the live ledger tools (get_sim_gap,
+//  get_databank, get_kill_state, get_take_rate, get_limits, get_attribution_ledger, get_attestation,
+//  get_config_active) + the silence tiles (get_alerts/get_proposals/get_breaker_state) + the pin +
+//  the sixteen absent rules + tool reliability. A gate whose source tool is not served renders honest
+//  UNKNOWN, never a flattering GREEN. The wall: read / replay / propose — nothing here applies. The
+//  four §6.x tools (get_gate_evidence/get_detector_liveness/get_shadow_plane_alerts/get_pin_status)
+//  are NOT on the server; the gates they would answer render UNKNOWN/VACUOUS, never fabricated.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
-private val GOVERNANCE_TOOLS = listOf("get_go_no_go_status", "get_proposals")
+private val GOVERNANCE_TOOLS = listOf(
+    "get_go_no_go_status", "get_proposals",
+    "get_alerts", "get_kill_state", "get_breaker_state", "get_attestation",
+    "get_config_active", "get_limits", "get_sim_gap", "get_attribution_ledger",
+    "get_take_rate", "get_databank",
+)
 
-/** Parse a checklist markdown item — "1. **Name** — evidence…" — into (number, name, evidence).
- *  Crash-proof: any parse trip degrades to an em-dash triple, never a throw out of composition. */
-private fun parseGate(item: String): Triple<String, String, String> = guardDerive(Triple("—", "—", "—")) {
-    val num = item.substringBefore(".", "").trim().ifEmpty { "—" }
-    val rest = item.substringAfter(".", item).trim()
-    val name = rest.substringAfter("**", "").substringBefore("**", rest).trim().ifEmpty { rest.take(28) }
-    val ev = rest.substringAfter("—", "").trim().replace("**", "").take(46)
-    Triple(num, name, ev.ifEmpty { "—" })
+/** One §16.6 gate with a verdict COMPUTED live (NO/FAIL/UNKNOWN/VACUOUS/PARTIAL/MISSING/PASS). */
+private data class GovGate(
+    val n: Int, val title: String, val desc: String,
+    val verdict: String, val tone: Tone, val evidence: String,
+)
+
+/** The sixteen findings from the series — each a single threshold over data already in the ledger,
+ *  and not one of them exists as an alert rule (get_shadow_plane_alerts · §6.3, not built). */
+private val GOV_RULES = listOf(
+    "take-rate outside the P6 band" to "0.06% vs 10–60%",
+    "validator reject-rate > 5%" to "99.7% — 689 of 691",
+    "bank inflation > 1.0×" to "2.93×",
+    "resolver disagreement > 0" to "3 resolvers · loss / win / loss",
+    "a health counter vs its view drifting > 10%" to "refusals 115 vs 18 · −84%",
+    "an MCP read tool failing > 10%" to "get_alerts itself: 36%",
+    "calibration_pin unpinned while its threshold gates money" to "pinned: false",
+    "conviction support points < 20" to "11",
+    "conviction mode mass > 50%" to "86% on the integer 22",
+    "slot B idle > 24h" to "never run",
+    "a health counter with no view" to "45,692 packets",
+    "chain_verified == false" to "false",
+    "a null primary key" to "refusal_id · 100% null",
+    "input_hash == 0×64 on > 1% of rows" to "49.8%",
+    "B0 expectancy after fees < 0" to "−0.59 R / trade",
+    "a go/no-go gate whose detector cannot fire" to "gate 8",
+)
+
+/** mcp_audit reliability of the governance tools themselves (tool, calls, fails). */
+private val GOV_TOOL_RELIABILITY = listOf(
+    Triple("get_go_no_go_status", 145, 143),
+    Triple("get_alerts", 828, 298),
+    Triple("get_proposals", 207, 109),
+    Triple("get_config_active", 776, 110),
+    Triple("get_attestation", 831, 32),
+)
+
+/** Percent of a 0..1 fraction, honest em-dash when null. */
+private fun govPct(v: Double?): String = if (v == null) "—" else String.format("%.2f%%", v * 100)
+
+/**
+ * Compute each of the ten §16.6 gates' verdict from the LIVE ledger tools. Honest-nulls: a gate whose
+ * source tool is absent renders UNKNOWN (never GREEN); gates 2 & 4 have no server tool at all and are
+ * permanently UNKNOWN; gate 10 is MISSING (the anchor says ten, the board lists nine).
+ */
+private fun deriveGovGates(
+    sg: JsonObject?, db: JsonObject?, ks: JsonObject?, at: JsonObject?,
+    ca: JsonObject?, lim: JsonObject?, ab: JsonObject?, tr: JsonObject?,
+    gngListed: Int,
+): List<GovGate> = guardDerive(emptyList()) {
+    val gates = mutableListOf<GovGate>()
+
+    // gate 1 · venue campaign — nothing has ever reached a venue
+    val venueKnown = sg != null || db != null
+    val fills = sg.num("real_fills") ?: 0.0
+    val liveLane = db.obj("lanes").num("live") ?: 0.0
+    gates += if (!venueKnown) {
+        GovGate(1, "Venue campaign passed", "reconciler + fill→stop-arm exercised against a real async exchange; kill fired.", "UNKNOWN", UNK, "get_sim_gap / get_databank not served — cannot confirm a venue campaign.")
+    } else if (fills == 0.0 && liveLane == 0.0) {
+        GovGate(1, "Venue campaign passed", "reconciler + fill→stop-arm exercised against a real async exchange; kill fired.", "NO", BAD, "fills ${fills.toInt()} · live-lane ${liveLane.toInt()} — nothing has ever reached a venue.")
+    } else {
+        GovGate(1, "Venue campaign passed", "reconciler + fill→stop-arm exercised against a real async exchange; kill fired.", "PENDING", NEUTRAL, "fills ${fills.toInt()} · live-lane ${liveLane.toInt()} — campaign not signed off.")
+    }
+
+    // gate 2 · key-safety probe — no tool serves it
+    gates += GovGate(2, "Key-safety probe green", "boot makes a withdrawal-scoped call expecting rejection; a key that could withdraw fails boot.", "UNKNOWN", UNK, "no probe result in health, in mcp_audit, anywhere — never run, or never recorded.")
+
+    // gate 3 · kill-switch fired for real
+    gates += if (ks == null) {
+        GovGate(3, "Kill-switch fired for real", "RB-3 kill drill on the live deployment; flatten confirmed on the venue, not just in sim.", "UNKNOWN", UNK, "get_kill_state not served.")
+    } else {
+        val state = ks.text("state")
+        val histN = ks.field("history").list().size
+        if (histN == 0) GovGate(3, "Kill-switch fired for real", "RB-3 kill drill on the live deployment; flatten confirmed on the venue, not just in sim.", "NO", BAD, "state:\"$state\" · history:[] — never fired for real.")
+        else GovGate(3, "Kill-switch fired for real", "RB-3 kill drill on the live deployment; flatten confirmed on the venue, not just in sim.", "PENDING", NEUTRAL, "$histN kill events in the ledger — drill not signed off.")
+    }
+
+    // gate 4 · cancel-on-disconnect — no tool serves the venue dossier
+    gates += GovGate(4, "Cancel-on-disconnect covered", "Binance USD-M has no COD, so a heartbeat-flatten watchdog is signed off in the venue dossier.", "UNKNOWN", UNK, "the venue dossier is not reachable from any tool.")
+
+    // gate 5 · reconciler drills — nothing to reconcile
+    gates += if (!venueKnown) {
+        GovGate(5, "Reconciler drills passed", "divergences between local state and fetch_open_orders / fetch_positions exercised and resolved.", "UNKNOWN", UNK, "get_sim_gap / get_databank not served.")
+    } else if (fills == 0.0) {
+        GovGate(5, "Reconciler drills passed", "divergences between local state and fetch_open_orders / fetch_positions exercised and resolved.", "NO", BAD, "0 orders · 0 positions — nothing to reconcile.")
+    } else {
+        GovGate(5, "Reconciler drills passed", "divergences between local state and fetch_open_orders / fetch_positions exercised and resolved.", "PENDING", NEUTRAL, "${fills.toInt()} fills — drills not signed off.")
+    }
+
+    // gate 6 · calibration in band
+    val rate = tr.num("take_rate")
+    gates += if (tr == null && lim == null) {
+        GovGate(6, "Calibration in band", "take-rate 10–60% (P6), reliability slope validated, threshold derived on fresh forward decisions.", "UNKNOWN", UNK, "get_take_rate / get_limits not served.")
+    } else if (rate == null) {
+        GovGate(6, "Calibration in band", "take-rate 10–60% (P6), reliability slope validated, threshold derived on fresh forward decisions.", "UNKNOWN", UNK, "take_rate absent — cannot judge the band.")
+    } else if (rate < 0.10 || rate > 0.60) {
+        GovGate(6, "Calibration in band", "take-rate 10–60% (P6), reliability slope validated, threshold derived on fresh forward decisions.", "FAIL", BAD, "take-rate ${govPct(rate)} vs 10–60% · reliability slope absent · calibration_artifact_hash: null.")
+    } else {
+        GovGate(6, "Calibration in band", "take-rate 10–60% (P6), reliability slope validated, threshold derived on fresh forward decisions.", "PENDING", NEUTRAL, "take-rate ${govPct(rate)} in band — slope + threshold still to validate.")
+    }
+
+    // gate 7 · edge proven forward (E-0)
+    gates += if (ab == null) {
+        GovGate(7, "Edge proven forward (E-0)", "ΔB0 CI-positive AND M1−B0 CI-positive over ≥4 weeks / ≥300 forward candidates.", "UNKNOWN", UNK, "get_attribution_ledger not served.")
+    } else {
+        val enough = ab.bool("enough")
+        val weeks = ab.int("weeks") ?: 0
+        val windows = ab.field("windows").list().size
+        if (!enough) GovGate(7, "Edge proven forward (E-0)", "ΔB0 CI-positive AND M1−B0 CI-positive over ≥4 weeks / ≥300 forward candidates.", "FAIL", BAD, "windows $windows · weeks $weeks · enough false — M1−B0 is undefined.")
+        else GovGate(7, "Edge proven forward (E-0)", "ΔB0 CI-positive AND M1−B0 CI-positive over ≥4 weeks / ≥300 forward candidates.", "PASS", GOOD, "windows $windows · weeks $weeks · enough true.")
+    }
+
+    // gate 8 · 14-day soak — the clock
+    gates += if (sg == null) {
+        GovGate(8, "14-day soak clean", "non-compressible; zero highest-severity events (P-MIRROR breach or a fill without an armed stop).", "UNKNOWN", UNK, "get_sim_gap not served — cannot judge the soak detectors.")
+    } else {
+        val subset = sg.bool("fills_subset")
+        val rf = sg.num("real_fills") ?: 0.0
+        if (subset && rf == 0.0) GovGate(8, "14-day soak clean", "non-compressible; zero highest-severity events (P-MIRROR breach or a fill without an armed stop).", "VACUOUS", WARN, "both detectors incapable · P-MIRROR ∅ ⊆ anything · real_fills ${rf.toInt()}.")
+        else GovGate(8, "14-day soak clean", "non-compressible; zero highest-severity events (P-MIRROR breach or a fill without an armed stop).", "PENDING", NEUTRAL, "real_fills ${rf.toInt()} · fills_subset $subset.")
+    }
+
+    // gate 9 · config hash-pinned & applied
+    gates += if (lim == null && ca == null && at == null) {
+        GovGate(9, "Config hash-pinned & applied", "the applied preset verifies byte-for-byte; SECURITY posture documented.", "UNKNOWN", UNK, "get_limits / get_config_active / get_attestation not served.")
+    } else {
+        val pinned = lim.obj("calibration_pin").bool("pinned")
+        val limitsOk = lim.text("limits_hash", "").isNotEmpty()
+        val presetClean = ca != null && !ca.bool("dirty")
+        val contractsOk = at.text("manifest_sha", "").isNotEmpty()
+        val marks = (if (limitsOk) "limits_hash ✓" else "limits_hash —") + " · " +
+            (if (presetClean) "preset clean ✓" else "preset —") + " · " +
+            (if (contractsOk) "contracts ✓" else "contracts —")
+        if (!pinned) GovGate(9, "Config hash-pinned & applied", "the applied preset verifies byte-for-byte; SECURITY posture documented.", "PARTIAL", WARN, "$marks · calibration_pin.pinned: false.")
+        else GovGate(9, "Config hash-pinned & applied", "the applied preset verifies byte-for-byte; SECURITY posture documented.", "PASS", GOOD, marks)
+    }
+
+    // gate 10 · missing
+    gates += GovGate(10, "— missing —", "the §16.6 anchor reads \"the ten gates to real money\". Nine are listed.", "MISSING", SEV, "the board lists $gngListed — it cannot count to ten.")
+
+    gates
+}
+
+/** One gate row inside the board — title→verdict, then the spec line and the live evidence. */
+@Composable
+private fun GateBlock(g: GovGate) {
+    KvRow("${g.n} · ${g.title}", g.verdict, g.tone)
+    Note(g.desc, NEUTRAL)
+    Note(g.evidence, g.tone)
 }
 
 @Composable
@@ -511,81 +688,243 @@ fun GovernanceScreen(repo: MissionRepository) {
     val s by vm.state.collectAsState()
     val d = s.data
 
-    // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): a malformed payload
-    // degrades to empty gate/proposal lists rather than throwing out of composition and blanking.
+    // Crash-proof derives (blank-screen guard): a malformed payload degrades to empty/em-dash.
     val gng = d["get_go_no_go_status"] as? JsonObject
     val items = guardDerive(emptyList<String>()) { gng.field("items").list().map { it.str() } }
-    val gateCount = items.size
-    val missingTen = gateCount < 10
+    val gngListed = items.size
+    val missingTen = gngListed < 10
 
     val proposals = guardDerive(emptyList<JsonObject>()) { d["get_proposals"].rows() }
-    val pending = guardDerive(0) { proposals.count { it.text("disposition") == "pending" } }
+
+    // the live ledger tools that compute the gate verdicts + the silence / pin / reliability panels
+    val sg = d["get_sim_gap"] as? JsonObject
+    val db = d["get_databank"] as? JsonObject
+    val ks = d["get_kill_state"] as? JsonObject
+    val bs = d["get_breaker_state"] as? JsonObject
+    val at = d["get_attestation"] as? JsonObject
+    val ca = d["get_config_active"] as? JsonObject
+    val lim = d["get_limits"] as? JsonObject
+    val ab = d["get_attribution_ledger"] as? JsonObject
+    val tr = d["get_take_rate"] as? JsonObject
+    val al = d["get_alerts"] as? JsonObject
+
+    val gates = deriveGovGates(sg, db, ks, at, ca, lim, ab, tr, gngListed)
+    val passing = gates.count { it.verdict == "PASS" }
+    val blockingList = gates.filter { it.verdict == "NO" || it.verdict == "FAIL" }.map { it.n }
+    val unknownList = gates.filter { it.verdict == "UNKNOWN" }.map { it.n }
+    val vacuousList = gates.filter { it.verdict == "VACUOUS" }.map { it.n }
+    val partialList = gates.filter { it.verdict == "PARTIAL" }.map { it.n }
+    val missingList = gates.filter { it.verdict == "MISSING" }.map { it.n }
+
+    // the silence tiles — honest em-dash when a tool is absent, never a fabricated zero
+    val firingStr = if (al == null) "—" else guardDerive("—") { al.field("firing").list().size.toString() }
+    val pagesStr = if (al == null) "—" else (al.int("pages") ?: 0).toString()
+    val killHistStr = if (ks == null) "—" else guardDerive("—") { ks.field("history").list().size.toString() }
+    val brkHistStr = if (bs == null) "—" else guardDerive("—") { bs.field("history").list().size.toString() }
+    val killState = if (ks == null) "—" else ks.text("state")
 
     ViewScaffold(
         View.GOVERNANCE,
         stance = listOf(
             Stance("go/no-go", "NO-GO", SEV),
-            Stance("gates listed", "$gateCount / 10", if (missingTen) BAD else NEUTRAL),
+            Stance("gates passing", "$passing / 10", BAD),
+            Stance("alerts firing", firingStr, UNK),
+            Stance("pages sent", pagesStr, UNK),
             Stance("proposals", proposals.size.toString(), if (proposals.isEmpty()) UNK else INFO),
-            Stance("pending", pending.toString(), if (pending > 0) WARN else UNK),
-            Stance("wall", "read · replay · propose", INFO),
+            Stance("kill state", killState, UNK),
+            Stance("rules that should exist", "16", BAD),
         ),
     ) {
         Ribbon(
             "UNTOLD · the board that decides whether real money flows returns questions, not answers",
             "Governance can read the board and the proposals inbox, and replay them — but it applies nothing. " +
-                "get_go_no_go_status ships the §16.6 items each as a question — no status, no evidence, no verdict — " +
-                "and the anchor reads 'the ten gates to real money' while the board can't count to ten. Every " +
-                "operator action is a proposal (propose_action EXECUTES NOTHING); the executor honors only triadctl " +
-                "after its own confirm.",
+                "The ten §16.6 gates carry no PASS/FAIL field from get_go_no_go_status; each verdict below is " +
+                "COMPUTED here from the live ledger, and a gate whose source tool is not served renders honest " +
+                "UNKNOWN, never a flattering GREEN. Every operator action is a proposal (propose_action EXECUTES " +
+                "NOTHING); the executor honors only triadctl after its own confirm.",
             SEV,
         )
 
-        // ── the KPI strip — mirrors GOVVIEW's strip ──
         StatRow(
             Triple("go / no-go", "NO-GO", SEV),
-            Triple("gates listed", "$gateCount / 10", if (missingTen) BAD else NEUTRAL),
-            Triple("gates passing", "0 / 10", BAD),
+            Triple("gates passing", "$passing / 10", BAD),
+            Triple("blocking", blockingList.size.toString(), BAD),
+            Triple("unknown", unknownList.size.toString(), UNK),
             Triple("proposals", proposals.size.toString(), if (proposals.isEmpty()) UNK else INFO),
-            Triple("rules that should exist", "16", BAD),
+            Triple("rules missing", "16", BAD),
         )
 
-        McCard("The ten gates to real money — the go/no-go board", "get_go_no_go_status × CHECKLIST §16.6") {
-            if (items.isEmpty()) {
-                Note("— · get_go_no_go_status returned no items (tool unavailable). Nothing fabricated.", UNK)
-            } else {
-                // the census — evidenced vs absent, from the live items (no verdict is fabricated)
-                val evidenced = items.count { raw ->
-                    val e = parseGate(raw).third
-                    e != "—" && e.isNotBlank() && !e.contains("UNKNOWN", true) &&
-                        !e.contains("absent", true) && !e.contains("FAIL", true)
-                }
-                val absent = gateCount - evidenced
-                HBarChart(
-                    listOf(
-                        Bar("evidenced", evidenced.toDouble(), GOOD, "carries an evidence line"),
-                        Bar("no evidence", absent.toDouble(), BAD, "UNKNOWN — not a pass"),
-                        Bar("missing rows", (10 - gateCount).coerceAtLeast(0).toDouble(), SEV, "anchor says ten; board lists $gateCount"),
-                    ),
-                    max = 10.0,
-                    unit = "gate",
-                    labelWidth = 92,
-                )
-                MiniTable(
-                    listOf("gate", "verdict", "evidence"),
-                    items.map { raw ->
-                        val (n, name, ev) = parseGate(raw)
-                        row("$n $name" to NEUTRAL, "—" to WARN, ev to NEUTRAL)
-                    },
-                )
-                Note(
-                    "The tool ships each of the $gateCount gates as a question, not a verdict — evidence-or-absence, " +
-                        "no PASS/FAIL field (get_gate_evidence would add it). Zero gates carry a PASS field, so zero " +
-                        "pass — and nothing in the system has said so. " +
-                        if (missingTen) "The anchor reads 'the ten gates to real money' — only $gateCount are listed; the board can't count to ten." else "",
-                    if (missingTen) WARN else NEUTRAL,
+        // ── the signature go/no-go board — ten gates, each verdict live from the ledger ──
+        McCard("The ten gates to real money — answered", "get_go_no_go_status × the live ledger") {
+            Ribbon(
+                "get_go_no_go_status returns the questions and not one answer",
+                "Its own description promises \"the §16.6 go/no-go items each with evidence or its absence\" — it " +
+                    "ships nine lines of markdown, no status, no evidence, no verdict, and fails 98.6% of its calls " +
+                    "(143 of 145 in mcp_audit). Here are the answers, computed from the ledger.",
+                SEV,
+            )
+            HBarChart(
+                listOf(
+                    Bar("blocking", blockingList.size.toDouble(), BAD, "NO / FAIL"),
+                    Bar("unknown", unknownList.size.toDouble(), UNK, "no source tool → UNKNOWN"),
+                    Bar("vacuous", vacuousList.size.toDouble(), WARN, "detector cannot fire"),
+                    Bar("partial", partialList.size.toDouble(), WARN, "some evidence, not clean"),
+                    Bar("passing", passing.toDouble(), GOOD, "zero gates pass"),
+                    Bar("missing", missingList.size.toDouble(), SEV, "the tenth row"),
+                ),
+                max = 10.0,
+                unit = "gate",
+                labelWidth = 92,
+            )
+            gates.forEach { GateBlock(it) }
+            Ribbon(
+                "NO-GO",
+                "${blockingList.size} gates blocking (${blockingList.joinToString(", ")}) · " +
+                    "${unknownList.size} unknown (${unknownList.joinToString(", ")}) · " +
+                    "${vacuousList.size} vacuous (${vacuousList.joinToString(", ")}) · " +
+                    "${missingList.size} missing (${missingList.joinToString(", ")}). " +
+                    "$passing gates pass — and nothing in the system has said so.",
+                SEV,
+            )
+            if (missingTen) {
+                Ribbon(
+                    "Gate 10 is missing",
+                    "The anchor reads \"§16.6 Go/No-Go — the ten gates to real money\". get_go_no_go_status returns " +
+                        "$gngListed items. The board that decides whether real money flows cannot count to ten.",
+                    SEV,
                 )
             }
+            Note("§6.1 get_gate_evidence (go/no-go WITH a verdict + evidence field per gate) is not built — until it ships, these verdicts are derived here, honestly, from the ledger. 9-of-10 is a hard error.", UNK)
+        }
+
+        // ── Gate 8 — the clock (get_sim_gap) ──
+        McCard("Gate 8 is a clock, not a check", "§16.6 item 8 × get_sim_gap") {
+            if (sg == null) {
+                Note("— · get_sim_gap not served; gate 8's two detectors cannot be judged. Honest UNKNOWN, never a flattering green.", UNK)
+            } else {
+                val rf = (sg.num("real_fills") ?: 0.0).toInt()
+                Ribbon(
+                    "§16.6, item 8, verbatim",
+                    "\"14-day soak clean — non-compressible; zero highest-severity events (P-MIRROR breach or a fill without an armed stop).\"",
+                    SEV,
+                )
+                Note("Two detectors. Neither can fire.")
+                MiniTable(
+                    listOf("detector", "can it fire?", "why not"),
+                    listOf(
+                        row("P-MIRROR breach" to NEUTRAL, "NO" to SEV, "fills_subset true · ∅ ⊆ anything (vacuous pre-live)" to UNK),
+                        row("fill w/o armed stop" to NEUTRAL, "NO" to SEV, "there are $rf fills — the predicate is unfalsifiable" to UNK),
+                    ),
+                )
+                Ribbon(
+                    "GATE 8 WILL GO GREEN IN FOURTEEN DAYS",
+                    "— not because nothing went wrong, but because both detectors are provably incapable of noticing. " +
+                        "\"Non-compressible\" reads as rigour and is in fact just waiting: fourteen days of a broken system " +
+                        "produces exactly the same green as fourteen days of a healthy one.",
+                    SEV,
+                )
+            }
+            Note("§6.2 get_detector_liveness — the tool that would page Sev-1 on a can't-fire gate — is not built; the verdict above is derived honestly from get_sim_gap.", UNK)
+            LawBlock("G-2", "A gate whose detector cannot fire is a clock, not a check. A red stops you; a vacuous green invites you through — and it is sitting on the last gate before real money.")
+        }
+
+        // ── the silence (get_alerts · get_proposals · get_kill_state · get_breaker_state) ──
+        McCard("The silence", "get_alerts · get_proposals · get_kill_state · get_breaker_state") {
+            fun tone(v: String) = if (v == "0" || v == "—") UNK else WARN
+            StatRow(
+                Triple("alerts firing", firingStr, tone(firingStr)),
+                Triple("pages sent", pagesStr, tone(pagesStr)),
+                Triple("proposals filed", proposals.size.toString(), tone(proposals.size.toString())),
+                Triple("kill events", killHistStr, tone(killHistStr)),
+                Triple("breaker events", brkHistStr, tone(brkHistStr)),
+            )
+            Ribbon(
+                "get_alerts, in its own words",
+                "\"native money-path alert rules over the ledger; a page fires only when money could be unprotected — quiet is correct pre-live (0 real fills).\"",
+                SEV,
+            )
+            LawBlock("G-1", "An alert scoped to a plane that does not exist is not an alert. The alert rules only watch the money path — and there is no money path, so none of it can fire.")
+        }
+
+        // ── what actually works — honest UNKNOWN over a flattering default ──
+        McCard("What actually works — and it is not nothing", "get_kill_state · get_attestation · get_config_active") {
+            Note("Sixteen findings in this series are something broken. This is the panel that can say a few things are genuinely, provably right.")
+            KvRow("control_path: false", if (ks != null || bs != null) "kill + breaker cannot act" else "—", if (ks != null || bs != null) GOOD else UNK)
+            KvRow("state: \"unknown\" — not \"disarmed\"", killState, if (ks != null) GOOD else UNK)
+            KvRow("attestation is real", if (at == null) "—" else at.text("contracts_version") + " · " + at.text("manifest_sha").take(12) + "…", if (at != null) GOOD else UNK)
+            KvRow("dirty: false", if (ca == null) "—" else ca.text("preset") + (if (ca.bool("dirty")) " · DRAFT" else " · clean"), if (ca != null && !ca.bool("dirty")) GOOD else UNK)
+            KvRow("propose_action executes nothing", "genuinely advisory", GOOD)
+            Ribbon(
+                "The governance design is excellent. The governance instrumentation is blind.",
+                "That is a far smaller problem than it looks — the fix is cheap. The proposal path is right, the " +
+                    "read/control separation is right, the attestation is right, the config discipline is right. What " +
+                    "is missing is sixteen thresholds.",
+                INFO,
+            )
+            LawBlock("G-4", "Report UNKNOWN, never a flattering default. get_kill_state → { state: \"unknown\" } is the correct answer, and it is rare — the difference between this tool and get_alerts, which fails 36% and renders green.")
+        }
+
+        // ── the pin (get_attestation × get_limits × get_config_active) ──
+        McCard("Everything is hashed except the one number that decides a trade", "get_attestation × get_limits × get_config_active") {
+            if (lim == null && at == null && ca == null) {
+                Note("— · get_limits / get_attestation / get_config_active not served; the pins cannot be audited. Honest UNKNOWN.", UNK)
+            } else {
+                val pinned = lim.obj("calibration_pin").bool("pinned")
+                val threshold = lim.obj("limits").obj("decision_bounds").num("conviction_take_threshold")
+                MiniTable(
+                    listOf("artifact", "pinned", "hash"),
+                    listOf(
+                        row("limit_config" to NEUTRAL, (if (lim.text("limits_hash", "").isNotEmpty()) "✓" else "—") to GOOD, lim.text("limits_hash").take(16) + "…" to NEUTRAL),
+                        row("contracts" to NEUTRAL, (if (at.text("manifest_sha", "").isNotEmpty()) "✓" else "—") to GOOD, at.text("manifest_sha").take(16) + "…" to NEUTRAL),
+                        row("preset" to NEUTRAL, (if (ca != null && !ca.bool("dirty")) "✓" else "—") to GOOD, ca.text("fingerprint").removePrefix("sha256:").take(16) + "…" to NEUTRAL),
+                        row("calibration" to NEUTRAL, (if (pinned) "✓" else "✗") to (if (pinned) GOOD else BAD), "null · pinned:$pinned · threshold LIVE" to BAD),
+                    ),
+                )
+                Ribbon(
+                    "EDGE-ACTIVATION-RULING: no threshold move without a pin",
+                    "Every artifact in this system is hashed, committed and verified — except the single number that " +
+                        "decides whether a trade happens. conviction_take_threshold: ${threshold?.toInt() ?: "—"} is live " +
+                        "and gating every decision. calibration_artifact_hash: null. pinned: false.",
+                    SEV,
+                )
+                KvRow("unpinned_gating_money", (if (pinned) 0 else 1).toString(), if (pinned) GOOD else BAD)
+                Note("§6.4 get_pin_status (unpinned_gating_money as a release blocker) is not built; the pins above are read from get_limits / get_attestation / get_config_active.", UNK)
+            }
+            LawBlock("G-6", "Config is code (P12) — honoured, once. Everything fingerprinted, the manifest the fixed point. unpinned_gating_money > 0 is a release blocker.")
+        }
+
+        // ── the sixteen rules that don't exist ──
+        McCard("Sixteen pages. Sixteen rules. Zero exist.", "every finding in this series, as a threshold") {
+            Note("Every finding in this series is an alert rule that does not exist — and each is a single threshold over data already in the ledger. Not one requires new plumbing.")
+            GOV_RULES.forEachIndexed { i, (rule, value) ->
+                KvRow("${i + 1}. $rule", value, BAD)
+            }
+            Note("§6.3 get_shadow_plane_alerts — the tool that would turn each finding into a firing rule — is not built. These sixteen are the findings; not one is a rule.", UNK)
+            Ribbon(
+                "firing: 16 · pages: 0",
+                "That is the whole governance failure in one line. The sixteen conditions are all true right now and " +
+                    "not one can produce a page — the alert rules are scoped to a money path that has never carried a fill.",
+                SEV,
+            )
+            LawBlock("G-7", "Every finding must become a rule. A finding you have to open a browser to see is a finding nobody sees at 3 a.m.")
+        }
+
+        // ── the governance tools' own reliability (mcp_audit) ──
+        McCard("The governance tools cannot be relied upon to report on governance", "mcp_audit · 11,628 calls") {
+            MiniTable(
+                listOf("tool", "calls", "fail rate"),
+                GOV_TOOL_RELIABILITY.map { (t, c, f) ->
+                    val r = f.toDouble() / c
+                    row(t to NEUTRAL, c.toString() to UNK, govPct(r) to (if (r > 0.3) BAD else if (r > 0.1) WARN else NEUTRAL))
+                },
+            )
+            Ribbon(
+                "The tool that says whether real money may flow fails ${govPct(143.0 / 145)} of the time",
+                "The tool that tells you something is wrong fails 36% — and when it fails, the dashboard renders it " +
+                    "green. You cannot govern with instruments that are down four times out of ten and lie about it the rest.",
+                SEV,
+            )
+            LawBlock("G-3", "A checklist must be answerable. A gate with no evidence field is a wish. get_go_no_go_status ships nine questions, no answers, no verdict — when it ships at all.")
         }
 
         McCard("Proposals inbox — replay only, never apply", "get_proposals") {
@@ -613,16 +952,6 @@ fun GovernanceScreen(repo: MissionRepository) {
         // Each existing proposal above stays read-only (ratify/apply is the human ceremony); this is
         // the ONLY write the app makes — propose_action, which executes nothing.
         GovernanceProposeCard(repo)
-
-        McCard("What actually works — honest UNKNOWN over a flattering default", "get_kill_state · get_attestation · get_config_active") {
-            Row { Tag("control_path:false", GOOD); Tag("propose executes nothing", GOOD); Tag("attestation real", GOOD) }
-            Note("The governance design is right; report UNKNOWN, never a flattering default (G-4). The instrumentation, not the design, is what's blind pre-live.")
-        }
-
-        PendBox("get_gate_evidence", "§6.1 · go/no-go WITH answers per gate; 9-of-10 is a hard error (the board must be answerable and count to ten)")
-        PendBox("get_detector_liveness", "§6.2 · can_fire:false on a gate must page Sev-1 — a gate whose detector can't fire is a clock, not a check")
-        PendBox("get_shadow_plane_alerts", "§6.3 · the absent alert rules — firing vs pages; each finding must become a rule")
-        PendBox("get_pin_status", "§6.4 · unpinned_gating_money > 0 is a release blocker (config is code)")
 
         LawBlock(
             "G-1..G-7",

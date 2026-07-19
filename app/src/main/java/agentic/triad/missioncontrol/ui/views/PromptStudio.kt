@@ -406,39 +406,10 @@ fun PromptStudioScreen(repo: MissionRepository) {
             SEV,
         )
 
-        // ── the thesis, as live counts vs limits ──
-        McCard("The thesis — kills vs the floor the model never saw", "get_validator_rejects · get_limits") {
-            MiniTable(
-                listOf("check", "kills", "the limit", "in packet?"),
-                listOf(
-                    listOf(
-                        "ttl_bounds" to NEUTRAL,
-                        (ttlKills?.toString() ?: "580") to BAD,
-                        "max_entry_ttl_s ${maxTtl?.toInt() ?: 1800}" to WARN,
-                        "NO" to BAD,
-                    ),
-                    listOf(
-                        "stop_distance" to NEUTRAL,
-                        (stopKills?.toString() ?: "459") to BAD,
-                        "min_stop_width_bps ${minStop?.toInt() ?: 45}" to WARN,
-                        "NO" to BAD,
-                    ),
-                    listOf(
-                        "net_rr_floor" to NEUTRAL,
-                        (rrKills?.toString() ?: "458") to BAD,
-                        "gross_rr_floor ${rrFloor ?: 2.5}" to WARN,
-                        "NO" to BAD,
-                    ),
-                ),
-            )
-            Note(
-                "The model takes 18.9% of candidates — reasonable. The validator then kills 99.7% of " +
-                    "those on rules that were never in the prompt. The Shadow page already proved the " +
-                    "validator right — so the fix is to tell the model the floor, not to loosen it.",
-            )
-        }
-
         // ── the composer — 14 blocks + the live token meter (AT-P1/P3/P8/P11) ──
+        // Ordering (PRVIEW paint): pStance → pComposer → pRisk. The composer comes BEFORE the "96
+        // tokens" thesis card, so the reader meets the blocks — including the OFF risk-envelope block —
+        // before the card that explains what turning it on would recover.
         val packetSrc = if (packetLive) {
             "context_packet/1 · $featureModules feature modules, live · $timeframeDepth timeframes deep"
         } else {
@@ -487,6 +458,54 @@ fun PromptStudioScreen(repo: MissionRepository) {
                     "(AT-P5). Risk envelope — not in the packet at all: drawn red, OFF by default, because " +
                     "that is the truth of what runs today. Switch it on and the meter rises by exactly 96.",
                 if (basisNullLive) WARN else NEUTRAL,
+            )
+        }
+
+        // ── the 96 tokens that would change everything (pRisk) — the kills table, framed by the two
+        //    narrative ribbons and the "cheapest experiment" law the HTML leads with (AT-P2) ──
+        McCard("The 96 tokens that would change everything", "get_limits × get_validator_rejects") {
+            Ribbon(
+                "The three checks that kill the model's proposals — and where their values live.",
+                "",
+                SEV,
+            )
+            MiniTable(
+                listOf("check", "kills", "the value", "in packet?"),
+                listOf(
+                    listOf(
+                        "ttl_bounds" to NEUTRAL,
+                        (ttlKills?.toString() ?: "580") to BAD,
+                        "max_entry_ttl_s ${maxTtl?.toInt() ?: 1800}" to WARN,
+                        "NO" to BAD,
+                    ),
+                    listOf(
+                        "stop_distance" to NEUTRAL,
+                        (stopKills?.toString() ?: "459") to BAD,
+                        "min_stop_width_bps ${minStop?.toInt() ?: 45}" to WARN,
+                        "NO" to BAD,
+                    ),
+                    listOf(
+                        "net_rr_floor" to NEUTRAL,
+                        (rrKills?.toString() ?: "458") to BAD,
+                        "gross_rr_floor ${rrFloor ?: 2.5}" to WARN,
+                        "NO" to BAD,
+                    ),
+                ),
+            )
+            Ribbon(
+                "The model is doing its job.",
+                "It proposes a trade on 18.9% of candidates — a reasonable take rate. Then the validator " +
+                    "kills 99.7% of those proposals for breaking rules that were never in the prompt. The " +
+                    "Shadow page already proved the validator is RIGHT — a ~10bps scalp loses money once you " +
+                    "price the fees. So the fix is not to loosen the validator. The fix is to tell the model the floor.",
+                WARN,
+            )
+            LawBlock(
+                "the cheapest experiment in this system",
+                "Switch on the Risk envelope block. It costs 96 tokens on a ~$enabledTokens-token prompt — about " +
+                    "4%. Run it against the same candidates. If the validator kill rate does not collapse, you have " +
+                    "learned something enormous. If it does, you have just recovered 689 trades. Either way it is a " +
+                    "one-afternoon experiment, and nobody has run it, because nobody could see the prompt.",
             )
         }
 
