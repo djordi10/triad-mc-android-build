@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,8 +23,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -214,20 +220,25 @@ fun VerdictBanner(
  */
 @Composable
 fun McCard(title: String, tool: String = "", content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
     Column(
         Modifier.fillMaxWidth().padding(bottom = 12.dp)
-            .background(Card, RoundedCornerShape(14.dp))
-            .border(1.dp, Line, RoundedCornerShape(14.dp))
-            .padding(horizontal = 16.dp, vertical = 15.dp),
+            .clip(shape)
+            .background(Card)
+            .border(1.dp, Line, shape),
     ) {
-        Text(title, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Ink, fontSize = 15.sp, letterSpacing = (-0.2).sp)
-        if (tool.isNotEmpty()) {
-            Text(
-                "reads · $tool", color = Unk, fontFamily = Mono, fontSize = 9.sp, letterSpacing = 0.4.sp,
-                lineHeight = 13.sp, modifier = Modifier.padding(top = 3.dp),
-            )
+        // A pine header band marks where each section starts — real contrast against the white body so a
+        // long scroll of cards reads as distinct sections, not one blur. (Shared across every view's McCard.)
+        Column(Modifier.fillMaxWidth().background(Pine).padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(title, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.5.sp, letterSpacing = (-0.2).sp)
+            if (tool.isNotEmpty()) {
+                Text(
+                    "reads · $tool", color = EmeraldBright.copy(alpha = 0.85f), fontFamily = Mono, fontSize = 9.sp,
+                    letterSpacing = 0.4.sp, lineHeight = 13.sp, modifier = Modifier.padding(top = 3.dp),
+                )
+            }
         }
-        Column(Modifier.padding(top = 9.dp)) { content() }
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) { content() }
     }
 }
 
@@ -332,6 +343,51 @@ fun Ribbon(headline: String, body: String = "", tone: Tone = Tone.SEV) {
 }
 
 /**
+ * A one-line verdict — a full-height tone bar + a bold ink headline over a dimmed subline. Leads a card
+ * so its single most important claim reads first, above the supporting rows; the long reasoning belongs
+ * in a [WhyBox] underneath. (IntrinsicSize.Min lets the bar match the text height.)
+ */
+@Composable
+fun Verdict(headline: String, sub: String = "", tone: Tone = Tone.SEV) {
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(top = 9.dp, bottom = 3.dp)) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(tone.fg(), RoundedCornerShape(2.dp)))
+        Column(Modifier.padding(start = 11.dp)) {
+            Text(headline, color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, lineHeight = 18.sp)
+            if (sub.isNotEmpty()) {
+                Text(sub, color = Ink2, fontSize = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp))
+            }
+        }
+    }
+}
+
+/**
+ * A collapsed "why / law" disclosure — the long explanatory prose (O-laws, rationale notes) folds in
+ * here, default hidden, so a card reads as verdict + evidence until the reader asks for the reasoning.
+ * [label] names the trigger. Same interaction as the Topology PEND rows.
+ */
+@Composable
+fun WhyBox(label: String = "WHY IT MATTERS", content: @Composable ColumnScope.() -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(10.dp)
+    Column(
+        Modifier.fillMaxWidth().padding(top = 10.dp)
+            .clip(shape)
+            .border(1.dp, if (open) Ink2 else Line, shape)
+            .clickable { open = !open }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                label, color = Ink2, fontFamily = Mono, fontSize = 10.sp, letterSpacing = 0.5.sp,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+            )
+            Text(if (open) "▾" else "▸", color = Unk, fontFamily = Mono, fontSize = 11.sp)
+        }
+        if (open) Column(Modifier.padding(top = 10.dp)) { content() }
+    }
+}
+
+/**
  * A law footnote — the web `.law`: a soft neutral well with a pine left bar and a mono uppercase
  * `LAW · <id>` eyebrow (pine), then the rule text.
  */
@@ -380,13 +436,26 @@ fun PendBox(tool: String, spec: String) {
  */
 @Composable
 fun KvRow(k: String, v: String, tone: Tone = Tone.NEUTRAL) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(k, color = Ink2, fontSize = 12.sp)
-        Text(v, color = if (tone == Tone.NEUTRAL) Ink else tone.fg(), fontFamily = Mono, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+    val vColor = if (tone == Tone.NEUTRAL) Ink else tone.fg()
+    // A long value squeezed into the right column used to wrap one word per line. When it won't fit
+    // inline, drop it to its own left-aligned line under the key so it wraps as normal prose.
+    if (v.length > 20) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+            Text(k, color = Ink2, fontSize = 12.sp)
+            Text(
+                v, color = vColor, fontFamily = Mono, fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
+                lineHeight = 17.sp, modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    } else {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(k, color = Ink2, fontSize = 12.sp, modifier = Modifier.weight(1f).padding(end = 10.dp))
+            Text(v, color = vColor, fontFamily = Mono, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+        }
     }
 }
 
@@ -397,34 +466,35 @@ fun KvRow(k: String, v: String, tone: Tone = Tone.NEUTRAL) {
  */
 @Composable
 fun MiniTable(headers: List<String>, rows: List<List<Pair<String, Tone>>>) {
-    Column(Modifier.fillMaxWidth().padding(top = 6.dp).horizontalScroll(rememberScrollState())) {
-        Row(
-            Modifier.padding(bottom = 6.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            headers.forEach { h ->
+    // Columns fill the width by weight instead of fixed 112dp cells inside a horizontal scroll — the old
+    // fixed cells forced mono text to wrap one word per line, leaving ragged rows + wasted whitespace. The
+    // last column (usually the wordy "reason / value / action") gets 1.5× so it wraps cleanly; cells align
+    // to the top so a tall wrapped cell never floats the others mid-height.
+    val n = headers.size.coerceAtLeast(1)
+    fun w(i: Int) = if (i == n - 1) 1.5f else 1f
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+            headers.forEachIndexed { i, h ->
                 Text(
                     h.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.sp, letterSpacing = 0.8.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.width(112.dp).padding(end = 6.dp),
+                    modifier = Modifier.weight(w(i)).padding(end = 8.dp),
                 )
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
         rows.forEach { r ->
-            Column {
-                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                    r.forEach { (cell, tone) ->
-                        Text(
-                            cell, color = if (tone == Tone.NEUTRAL) Ink else tone.fg(),
-                            fontFamily = Mono, fontSize = 12.sp,
-                            fontWeight = if (tone == Tone.NEUTRAL) FontWeight.Normal else FontWeight.SemiBold,
-                            modifier = Modifier.width(112.dp).padding(end = 6.dp),
-                        )
-                    }
+            Row(Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
+                r.forEachIndexed { i, (cell, tone) ->
+                    Text(
+                        cell, color = if (tone == Tone.NEUTRAL) Ink else tone.fg(),
+                        fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp,
+                        fontWeight = if (tone == Tone.NEUTRAL) FontWeight.Normal else FontWeight.SemiBold,
+                        modifier = Modifier.weight(w(i)).padding(end = 8.dp),
+                    )
                 }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(HairLine))
             }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(HairLine))
         }
     }
 }

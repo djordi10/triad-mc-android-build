@@ -10,8 +10,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -84,12 +87,14 @@ import agentic.triad.missioncontrol.ui.theme.Blue
 import agentic.triad.missioncontrol.ui.theme.BlueSoft
 import agentic.triad.missioncontrol.ui.theme.Card
 import agentic.triad.missioncontrol.ui.theme.Emerald
+import agentic.triad.missioncontrol.ui.theme.EmeraldBright
 import agentic.triad.missioncontrol.ui.theme.EmeraldSoft
 import agentic.triad.missioncontrol.ui.theme.Ink
 import agentic.triad.missioncontrol.ui.theme.Ink2
 import agentic.triad.missioncontrol.ui.theme.Line
 import agentic.triad.missioncontrol.ui.theme.Paper
 import agentic.triad.missioncontrol.ui.theme.Pine
+import agentic.triad.missioncontrol.ui.theme.PineTextDim
 import agentic.triad.missioncontrol.ui.theme.Sev
 import agentic.triad.missioncontrol.ui.theme.Unk
 import agentic.triad.missioncontrol.ui.theme.UnkSoft
@@ -1631,13 +1636,40 @@ private fun SrcHeading(label: String, topPad: Dp = 14.dp) {
     )
 }
 
-/** One stance stat row — the phone rendering of a `.pill` (key / verdict / note, stacked). */
+/** A one-line audit verdict — a tone bar + a bold ink headline over a dimmed subline. Replaces the prose
+ *  ribbons in the transport/services/keyholder cards; the full reasoning folds into a [WhyAccordion] below. */
 @Composable
-private fun StanceStat(key: String, verdict: String, tone: Tone, note: String) {
-    Column(Modifier.fillMaxWidth().padding(top = 9.dp)) {
-        Text(key, color = Ink2, fontFamily = TopoMono, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
-        Text(verdict, color = tone.fg(), fontFamily = TopoDisp, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, modifier = Modifier.padding(top = 2.dp))
-        Text(note, color = Ink2, fontFamily = TopoMono, fontSize = 10.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 2.dp))
+private fun TopoVerdict(headline: String, sub: String, tone: Tone = Tone.SEV) {
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(top = 11.dp)) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(tone.fg(), RoundedCornerShape(2.dp)))
+        Column(Modifier.padding(start = 11.dp)) {
+            Text(headline, color = Ink, fontFamily = TopoDisp, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, lineHeight = 18.sp)
+            Text(sub, color = Ink2, fontSize = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+    }
+}
+
+/** A collapsed "WHY IT MATTERS" disclosure. The long reasoning + law prose folds in here, default hidden,
+ *  so each card reads as a one-line verdict until tapped. Same interaction as [TopoPend]. */
+@Composable
+private fun WhyAccordion(content: @Composable ColumnScope.() -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(10.dp)
+    Column(
+        Modifier.fillMaxWidth().padding(top = 11.dp)
+            .clip(shape)
+            .border(1.dp, if (open) Ink2 else Line, shape)
+            .clickable { open = !open }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "WHY IT MATTERS", color = Ink2, fontFamily = TopoMono, fontSize = 10.sp,
+                letterSpacing = 0.5.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+            )
+            Text(if (open) "▾" else "▸", color = Unk, fontFamily = TopoMono, fontSize = 11.sp)
+        }
+        if (open) Column(Modifier.padding(top = 10.dp)) { content() }
     }
 }
 
@@ -1645,8 +1677,6 @@ private fun StanceStat(key: String, verdict: String, tone: Tone, note: String) {
  *  JS's exact bold/code runs, then the three stat rows, counts live-derived (em-dash on absence). */
 @Composable
 private fun TopoStanceRibbon(measured: Int, total: Int, unknown: Int, busErr: String?, laneCount: Int) {
-    val bold = SpanStyle(fontWeight = FontWeight.Bold, color = Ink)
-    val code = SpanStyle(fontFamily = TopoMono, fontSize = 12.sp, background = CodeWell)
     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         Text(
             "00 · OPERATE", color = Emerald, fontFamily = TopoMono, fontSize = 10.sp,
@@ -1656,31 +1686,33 @@ private fun TopoStanceRibbon(measured: Int, total: Int, unknown: Int, busErr: St
             "Topology", color = Ink, fontFamily = TopoDisp, fontWeight = FontWeight.ExtraBold,
             fontSize = 28.sp, letterSpacing = (-0.8).sp, modifier = Modifier.padding(top = 4.dp),
         )
-        Text(
-            buildAnnotatedString {
-                withStyle(bold) { append("14 nodes · 3 real heartbeats.") }
-                append(" The rest is inferred from a table having rows — not health.")
-            },
-            color = Ink, fontSize = 13.5.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp),
-        )
-        listOf(
-            "service_status returns ledger tables, not services",
-            "NATS + Prometheus down · only bridge_lag is live",
-            "venue crossed: ~\$101 · 13 orders · 2 positions — 0 fills recorded (blind)",
-            "keeper trio crash-loop → W-71 unapplied → 502",
-        ).forEach { line ->
-            Row(Modifier.padding(top = 5.dp)) {
-                Text("▸", color = Emerald, fontFamily = TopoMono, fontSize = 11.sp, modifier = Modifier.padding(end = 6.dp))
-                Text(line, color = Ink, fontFamily = TopoMono, fontSize = 11.sp, lineHeight = 15.sp)
+        // The verdict + bullets on a dark pine banner — the estate's headline reads with real contrast
+        // instead of ink-on-paper. The three stat blocks that used to follow are dropped: they restate
+        // the counts already in the stance card at the top of the scaffold.
+        Column(
+            Modifier.fillMaxWidth().padding(top = 10.dp)
+                .background(Pine, RoundedCornerShape(14.dp))
+                .padding(horizontal = 15.dp, vertical = 14.dp),
+        ) {
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = EmeraldBright)) { append("14 nodes · 3 real heartbeats.") }
+                    withStyle(SpanStyle(color = Color.White)) { append(" The rest is inferred from a table having rows, not health.") }
+                },
+                fontSize = 14.5.sp, lineHeight = 20.sp,
+            )
+            listOf(
+                "service_status returns ledger tables, not services",
+                "NATS + Prometheus down · only bridge_lag is live",
+                "venue crossed: ~\$101 · 13 orders · 2 positions · 0 fills recorded",
+                "keeper trio crash-loop → W-71 unapplied → 502",
+            ).forEach { line ->
+                Row(Modifier.padding(top = 7.dp)) {
+                    Text("▸", color = EmeraldBright, fontFamily = TopoMono, fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
+                    Text(line, color = PineTextDim, fontFamily = TopoMono, fontSize = 11.sp, lineHeight = 15.sp)
+                }
             }
         }
-        StanceStat("MEASURED", "GREEN", GOOD, "$measured of $total nodes — the databank, via get_bridge_lag")
-        StanceStat("NO HEALTH SOURCE", "UNKNOWN", UNK, "$unknown nodes — including the sole keyholder")
-        StanceStat(
-            "TRANSPORT", if (busErr != null) "RED" else "GREEN", if (busErr != null) BAD else GOOD,
-            (if (busErr != null) "NATS unavailable" else "NATS ok") + " · " +
-                (if (laneCount > 0) "$laneCount" else "—") + " lanes carrying everything",
-        )
     }
 }
 
@@ -1895,86 +1927,100 @@ fun TopologyScreen(repo: MissionRepository) {
 
         // ── pTransport · the map draws a transport that does not exist ──
         McCard("The map draws a transport that does not exist", "get_bus_status × get_bridge_lag") {
-            TxDiagramSays(m.busErr)
-            Text(
-                "≠", color = Sev, fontFamily = TopoDisp, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+            TopoVerdict(
+                if (m.busErr != null) "The diagram draws NATS JetStream. The bus was never provisioned."
+                else "The diagram draws NATS JetStream.",
+                if (m.busErr != null) "get_bus_status → transport: unavailable. The real ingest lanes carry every byte, and they are not on the diagram."
+                else "get_bus_status → ok.",
+                if (m.busErr != null) Tone.SEV else Tone.WARN,
             )
-            TxSystemSays(m.lanes.size)
-            SrcHeading("THE ONLY THREE THINGS IN THIS ESTATE WITH A HEARTBEAT", topPad = 16.dp)
-            if (m.lanes.isEmpty()) {
-                Note("— · get_bridge_lag returned no lanes (tool unavailable). Nothing fabricated.", UNK)
-            } else {
-                m.lanes.forEach { LaneLine(it) }
+            WhyAccordion {
+                TxDiagramSays(m.busErr)
+                Text(
+                    "≠", color = Sev, fontFamily = TopoDisp, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+                )
+                TxSystemSays(m.lanes.size)
+                SrcHeading("THE ONLY THREE THINGS IN THIS ESTATE WITH A HEARTBEAT", topPad = 16.dp)
+                if (m.lanes.isEmpty()) {
+                    Note("— · get_bridge_lag returned no lanes (tool unavailable). Nothing fabricated.", UNK)
+                } else {
+                    m.lanes.forEach { LaneLine(it) }
+                }
+                NatsRootCauseRibbon()
+                LawBlock(
+                    "M-2 · draw the transport that runs, not the one designed",
+                    "A map that shows a bus that doesn't exist and hides the lanes that do sends you debugging the wrong thing.",
+                )
             }
-            NatsRootCauseRibbon()
-            LawBlock(
-                "M-2 · draw the transport that runs, not the one designed",
-                "A map that shows a bus that doesn't exist and hides the lanes that do sends you debugging the wrong thing.",
-            )
             TopoPend("get_transport_actual", PEND_TRANSPORT_ACTUAL)
         }
 
         // ── pServices · services_up = tables ──
         McCard("\"services_up: $okTables / $tableCount\" — those $tableCount are TABLES", "get_service_status × get_system_overview") {
-            Ribbon(
-                "get_service_status is named for services. It returns ledger writers.",
-                "Not one of the six actual processes on the map — Signal, Gateway, Executor, the venue gateway, " +
-                    "Ollama, NATS — appears in it at all.",
-                SEV,
+            TopoVerdict(
+                "get_service_status returns ledger writers, not the 6 real processes.",
+                "Signal, Gateway, Executor, the venue gateway, Ollama, NATS — none appear. Six processes have no health source.",
             )
-            if (m.svc.isEmpty()) {
-                Note("— · get_service_status returned no rows (tool unavailable or empty). Nothing fabricated.", UNK)
-            } else {
-                Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                    m.svc.entries.forEach { (svc, st) ->
-                        val tone = when (st.lowercase()) {
-                            "ok" -> GOOD; "stale" -> WARN; "empty" -> UNK; "no_fingerprint" -> SEV; else -> UNK
+            WhyAccordion {
+                if (m.svc.isEmpty()) {
+                    Note("— · get_service_status returned no rows (tool unavailable or empty). Nothing fabricated.", UNK)
+                } else {
+                    Column(Modifier.fillMaxWidth()) {
+                        m.svc.entries.forEach { (svc, st) ->
+                            val tone = when (st.lowercase()) {
+                                "ok" -> GOOD; "stale" -> WARN; "empty" -> UNK; "no_fingerprint" -> SEV; else -> UNK
+                            }
+                            val means = when (st.lowercase()) {
+                                "ok" -> "row recently"
+                                "stale" -> "writer stopped"
+                                "empty" -> "never wrote"
+                                "no_fingerprint" -> "cannot identify itself"
+                                else -> "—"
+                            }
+                            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(svc, color = Ink, fontFamily = TopoMono, fontSize = 11.5.sp, modifier = Modifier.weight(1f))
+                                Text(st, color = tone.fg(), fontFamily = TopoMono, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                                Text("· $means", color = Ink2, fontFamily = TopoMono, fontSize = 9.5.sp, modifier = Modifier.padding(start = 6.dp))
+                            }
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(LaneHair))
                         }
-                        val means = when (st.lowercase()) {
-                            "ok" -> "row recently"
-                            "stale" -> "writer stopped"
-                            "empty" -> "never wrote"
-                            "no_fingerprint" -> "cannot identify itself"
-                            else -> "—"
-                        }
-                        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(svc, color = Ink, fontFamily = TopoMono, fontSize = 11.5.sp, modifier = Modifier.weight(1f))
-                            Text(st, color = tone.fg(), fontFamily = TopoMono, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
-                            Text("· $means", color = Ink2, fontFamily = TopoMono, fontSize = 9.5.sp, modifier = Modifier.padding(start = 6.dp))
-                        }
-                        Box(Modifier.fillMaxWidth().height(1.dp).background(LaneHair))
                     }
                 }
+                Note("intents & orders are STALE (a writer stopped), not EMPTY — fills & outcomes are EMPTY (never started). Different bugs.", WARN)
+                KvRow("system overview services_up", (m.servicesUp?.let { "$it / ${m.servicesTotal ?: "?"}" }) ?: "—", if (m.servicesUp == null) UNK else WARN)
+                LawBlock(
+                    "M-1 · services_up counts tables, not services",
+                    "Six real processes have no health source. A 5-line heartbeat file each closes it — the cheapest fix on this page.",
+                )
             }
-            Note("intents & orders are STALE (a writer stopped), not EMPTY — fills & outcomes are EMPTY (never started). Different bugs.", WARN)
-            KvRow("system overview services_up", (m.servicesUp?.let { "$it / ${m.servicesTotal ?: "?"}" }) ?: "—", if (m.servicesUp == null) UNK else WARN)
-            LawBlock(
-                "M-1 · services_up counts tables, not services",
-                "Six real processes have no health source. A 5-line heartbeat file each closes it — the cheapest fix on this page.",
-            )
             TopoPend("get_process_status", PEND_PROCESS_STATUS)
         }
 
         // ── pKeyholder · the sole keyholder has no health source ──
         McCard("The sole keyholder has no health source", "the topology × go/no-go gate 2") {
-            Ribbon(
-                "EXECUTOR · CCXT — the sole keyholder · maker-only · UDS socket",
-                "It is the only component in the estate that holds exchange credentials. Per P2 the model cannot " +
-                    "touch a venue; per the topology, everything funnels through this one process. It has no health " +
-                    "check, no heartbeat, no status row, and no tool that reports on it.",
-                SEV,
+            TopoVerdict(
+                "Executor · CCXT holds the only exchange keys, and nothing observes it.",
+                "No health check, no heartbeat, no status row. Gate 2 (key-safety) cannot be answered.",
             )
-            KvRow("health source", "NONE — not in any tool", BAD)
-            KvRow("go/no-go gate 2", "UNKNOWN — key-safety probe", UNK)
-            KvRow("orders sent, ever", "0 — never contacted a venue", NEUTRAL)
-            LawBlock(
-                "M-5",
-                "The sole keyholder must be the most instrumented process in the estate. It is the least. Gate 2 " +
-                    "reads: \"a key that could withdraw fails boot (Sev-1 #2).\" It cannot be answered, because nothing " +
-                    "observes the process that holds the key.",
-            )
+            WhyAccordion {
+                Note(
+                    "EXECUTOR · CCXT — the sole keyholder · maker-only · UDS socket. The only component in the estate " +
+                        "that holds exchange credentials. Per P2 the model cannot touch a venue; per the topology, " +
+                        "everything funnels through this one process.",
+                    SEV,
+                )
+                KvRow("health source", "NONE — not in any tool", BAD)
+                KvRow("go/no-go gate 2", "UNKNOWN — key-safety probe", UNK)
+                KvRow("orders sent, ever", "0 — never contacted a venue", NEUTRAL)
+                LawBlock(
+                    "M-5",
+                    "The sole keyholder must be the most instrumented process in the estate. It is the least. Gate 2 " +
+                        "reads: \"a key that could withdraw fails boot (Sev-1 #2).\" It cannot be answered, because nothing " +
+                        "observes the process that holds the key.",
+                )
+            }
             TopoPend("get_keyholder_status", PEND_KEYHOLDER_STATUS)
         }
     }

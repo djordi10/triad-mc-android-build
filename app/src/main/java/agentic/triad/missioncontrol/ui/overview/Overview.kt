@@ -87,6 +87,8 @@ import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.Ribbon
+import agentic.triad.missioncontrol.ui.components.Verdict
+import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone
@@ -416,8 +418,8 @@ private class Model(d: Map<String, JsonElement?>) {
         if (total > 0) "$byUnknown of $total components unprobed" else "no checkup",
     ).joinToString(" · ") + "."
 
-    // ---- THE ESTATE (phone first card — TPVIEW.derive() condensed: 12 nodes, statuses from the
-    //      same four sources; a node with no health source is UNKNOWN, never green · M-1/O-1) ----
+    // ---- THE ESTATE (phone first card — the same 14-node roster as the Topology view + the flow doc,
+    //      statuses from the same sources; a node with no health source is UNKNOWN, never green · M-1/O-1) ----
     val svcMap: Map<String, String> =
         ss.arr("services").rows().associate { it.text("service", it.text("name")) to it.text("status") }
     val laneCount: Int? = if (bl == null) null else bl.arr("lanes").rows().size
@@ -434,28 +436,32 @@ private class Model(d: Map<String, JsonElement?>) {
         else -> elseSt
     }
 
+    // The 14 estate nodes — the SAME roster the Topology view (00) and the source-of-truth flow doc use,
+    // so the two screens never disagree on what the estate is. The old 12-pill observability taxonomy
+    // (NATS · Ledger · Labeler · Calibration) diverged from the doc; it is replaced by the doc's planes:
+    // market → signal → gateway/model → executor → venue → binance, the fork → relay → telegram/uponly →
+    // hyperliquid, and learning · dtbnk · gui. No NATS node (the bus was never provisioned, spec §2).
     val pills: List<NodePill> = listOf(
-        NodePill("Market + Aux feeds", if (feedDark) PillSt.UNK else PillSt.MEAS),
-        NodePill("LLM serving", PillSt.UNK),                 // no health source at all
+        NodePill("Market", if (feedDark) PillSt.UNK else PillSt.MEAS),
         NodePill("Signal", tableSt("ledger.candidates", PillSt.IDLE)),
         NodePill("Gateway", tableSt("ledger.decisions", PillSt.IDLE)),
+        NodePill("Model", PillSt.UNK),                       // slot-A v5, external LLM — no health source
         NodePill(
             "Executor",
             if (svcMap["ledger.intents"] == "stale" || svcMap["ledger.orders"] == "stale") PillSt.IDLE else PillSt.UNK,
         ),
-        NodePill("Venue Gateway", PillSt.UNK, key = true),   // the sole keyholder — least instrumented
-        NodePill("Exchange", PillSt.UNK),
-        NodePill("NATS JetStream — 7 streams", if (busDown) PillSt.DOWN else PillSt.MEAS, bus = true),
-        NodePill("Ledger", tableSt("ledger.context.packets", PillSt.IDLE)),
+        NodePill("Venue Gateway", PillSt.UNK, key = true),   // VGP · the sole keyholder — least instrumented
+        NodePill("Binance", PillSt.UNK),
+        NodePill("Relay", PillSt.UNK),                       // the fork — keyless distribution
+        NodePill("Telegram", PillSt.UNK),
+        NodePill("UpONLY", PillSt.UNK),
+        NodePill("Hyperliquid", PillSt.UNK),
         NodePill(
-            "Labeler · Outcome",
+            "Learning",
             if (svcMap.isEmpty()) PillSt.UNK else if (svcMap["ledger.outcomes"] == "empty") PillSt.IDLE else PillSt.INFER,
         ),
-        NodePill(
-            "Calibration · Books",
-            if (cal == null) PillSt.UNK else if (cal.text("status") == "absent") PillSt.IDLE else PillSt.INFER,
-        ),
-        NodePill("Databank", if ((laneCount ?: 0) > 0) PillSt.MEAS else PillSt.UNK),
+        NodePill("DTBNK", if ((laneCount ?: 0) > 0) PillSt.MEAS else PillSt.UNK),
+        NodePill("GUI", PillSt.MEAS),                        // shadow-ops :8802
     )
     val measuredNodes: Int = pills.count { it.st == PillSt.MEAS }
 }
@@ -582,7 +588,9 @@ fun OverviewScreen(repo: MissionRepository) {
             } else {
                 KvRow("⌁ chokepoint", if (M.tr == null) "UNKNOWN" else "none (take-rate in band)", if (M.tr == null) Tone.UNK else Tone.GOOD)
             }
-            Note("O-8: the chokepoint is computed at the FIRST stage where conversion falls below its floor — the spine dies where conversion collapses, and names the top refusal reason. It is computed, not chosen.")
+            WhyBox("THE LAW · O-8") {
+                Note("O-8: the chokepoint is computed at the FIRST stage where conversion falls below its floor — the spine dies where conversion collapses, and names the top refusal reason. It is computed, not chosen.")
+            }
             // §3.1 · get_money_path — 404 until built. The spine above is stitched client-side; this box
             // discloses that (O-3), and flips to a LIVE note the day the server ships the read.
             OvPendSpec("get_money_path", SPEC_MONEY_PATH, served = s.data["get_money_path"] != null)
@@ -593,6 +601,19 @@ fun OverviewScreen(repo: MissionRepository) {
             "Risk — is money exposed, and is it protected?",
             "get_positions · get_exposure · get_limits · get_breaker_state",
         ) {
+            Verdict(
+                when {
+                    M.unprotected == null -> "Protection unknown — no risk-envelope source."
+                    M.unprotected == 0 -> "Protected — 0 fills without an armed stop."
+                    else -> "${M.unprotected} fills have no armed stop."
+                },
+                "The Sev-1 line: is any live position unprotected right now?",
+                when {
+                    M.unprotected == null -> Tone.UNK
+                    M.unprotected == 0 -> Tone.GOOD
+                    else -> Tone.SEV
+                },
+            )
             StatRow(
                 Triple("open positions", M.openN.toString(), if (M.openN == 0) Tone.GOOD else Tone.NEUTRAL),
                 Triple("today", "${fmt(M.so.num("today_pnl_r"), 2)}R", Tone.NEUTRAL),
@@ -651,7 +672,9 @@ fun OverviewScreen(repo: MissionRepository) {
             KvRow("breaker", M.br?.let { M.br.text("state").uppercase() } ?: "UNKNOWN", stateTone(M.br.text("state")))
             KvRow("kill", M.kl?.let { M.kl.text("state").uppercase() } ?: "UNKNOWN", stateTone(M.kl.text("state")))
             if (M.br.field("control_path") != null && !M.br.bool("control_path")) Tag("READ-ONLY MIRROR", Tone.INFO)
-            Note("O-5: this page cannot arm, release, or flatten. When the ledger has no breaker events the chip reads UNKNOWN — it is never rendered as safe, and never as off. AT-OV8: the Sev-1 fills-without-armed-stop row is present in every state.")
+            WhyBox("THE LAW · O-5") {
+                Note("O-5: this page cannot arm, release, or flatten. When the ledger has no breaker events the chip reads UNKNOWN — it is never rendered as safe, and never as off. AT-OV8: the Sev-1 fills-without-armed-stop row is present in every state.")
+            }
             // §3.2 · get_risk_envelope — the Sev-1 counter's home. Until it ships, the row above stitches
             // its zero from ledger.fills; this box names what it would carry (O-3 disclosure).
             OvPendSpec("get_risk_envelope", SPEC_RISK_ENVELOPE, served = M.re != null)
@@ -659,12 +682,18 @@ fun OverviewScreen(repo: MissionRepository) {
 
         // ── 1.4 TRUTH — how much of this is actually known? (coverage before verdict · O-2) ───────────
         McCard("Truth — how much of this is actually known?", "get_checkup · get_attestation · get_config_active") {
+            Verdict(
+                if (M.total == 0) "Truth coverage unknown — no checkup has run."
+                else "Coverage ${pct(M.coverage, 0)} · ${M.probed} of ${M.total} probed.",
+                "Coverage before verdict (O-2) — how much of this is actually measured.",
+                if (M.total == 0) Tone.UNK else if ((M.coverage ?: 0.0) >= COVERAGE_FLOOR) Tone.GOOD else Tone.BAD,
+            )
             StatRow(
                 Triple("probed / total", if (M.total > 0) "${M.probed} / ${M.total}" else "—", if (M.total == 0) Tone.UNK else Tone.NEUTRAL),
                 Triple("coverage", pct(M.coverage, 0), if (M.total == 0) Tone.UNK else if ((M.coverage ?: 0.0) >= COVERAGE_FLOOR) Tone.GOOD else Tone.BAD),
                 Triple("verdict", M.truth, verdictTone(M.truth)),
             )
-            Note("O-2 · coverage before verdict. ${M.verdictRule}")
+            WhyBox("THE LAW · O-2") { Note("O-2 · coverage before verdict. ${M.verdictRule}") }
             // The census heatmap (web pTruth `.census`): one cell per checkup component, coloured by
             // status — GREEN filled, UNKNOWN a hatched empty cell (O-1: an unprobed cell must NOT read
             // as a green one). The count tags follow the grid, exactly as the HTML lays them out.
@@ -706,7 +735,9 @@ fun OverviewScreen(repo: MissionRepository) {
                     )
                 },
             )
-            Note("P12 · config is code. A runtime whose fingerprint does not match the applied preset is unattested, and this panel turns red before any other panel is believed.")
+            WhyBox("THE LAW · P12") {
+                Note("P12 · config is code. A runtime whose fingerprint does not match the applied preset is unattested, and this panel turns red before any other panel is believed.")
+            }
             // §3.3 · get_truth_coverage — until it ships, the census/verdict above are stitched from
             // get_checkup; the verdict_rule the server would own is applied client-side (O-2 disclosure).
             OvPendSpec("get_truth_coverage", SPEC_TRUTH_COVERAGE, served = s.data["get_truth_coverage"] != null)
@@ -734,7 +765,9 @@ fun OverviewScreen(repo: MissionRepository) {
                     Tone.GOOD,
                 )
             }
-            Note("law · O-6 · net_r is never summed across books. B0, B1, M1 and K1 price the same candidate stream under different policies — their R is comparable, never additive. Forward-only (P8): every number here is counterfactual on data after the checkpoint cutoff.")
+            WhyBox("THE LAW · O-6 · P8") {
+                Note("law · O-6 · net_r is never summed across books. B0, B1, M1 and K1 price the same candidate stream under different policies — their R is comparable, never additive. Forward-only (P8): every number here is counterfactual on data after the checkpoint cutoff.")
+            }
             val order = listOf("B0", "B1", "M1", "K1")
             if (M.books != null) {
                 MiniTable(
@@ -790,6 +823,11 @@ fun OverviewScreen(repo: MissionRepository) {
 
         // ── 1.6 FLOW — is the front of the loop alive? ────────────────────────────────────────────────
         McCard("Flow — is the front of the loop alive?", "get_continuity · get_take_rate · get_databank · get_detector_registry") {
+            Verdict(
+                "Loop continuity: ${M.co.text("verdict", "UNKNOWN")}.",
+                "Worst leg wins across FLOW · CAG · BANK (W-33 watchdog).",
+                statusTone(M.co.text("verdict")),
+            )
             val legs = listOf("FLOW" to M.co.obj("flow"), "CAG" to M.co.obj("cag"), "BANK" to M.co.obj("bank"))
             MiniTable(
                 listOf("SLO", "state", "reason"),
@@ -820,7 +858,9 @@ fun OverviewScreen(repo: MissionRepository) {
                     M.refusals.map { (k, n) -> Bar(k, n.toDouble(), if (k.startsWith("invalid_output")) Tone.SEV else Tone.WARN) },
                 )
             }
-            Note("invalid_output:* is a P9 surface (reject, never repair): the model is emitting geometry that fails stop_distance / ttl_bounds / net_rr_floor. That is a defect in the model or the prompt — not market noise.")
+            WhyBox("THE LAW · P9") {
+                Note("invalid_output:* is a P9 surface (reject, never repair): the model is emitting geometry that fails stop_distance / ttl_bounds / net_rr_floor. That is a defect in the model or the prompt — not market noise.")
+            }
         }
 
         // ── 1.7 NEXT — the one thing to do (read-only · propose only · O-5) ───────────────────────────
@@ -838,8 +878,7 @@ fun OverviewScreen(repo: MissionRepository) {
                 val t = raw.replace(Regex("^\\d+\\.\\s*"), "").replace("**", "")
                 val head = t.substringBefore("—").trim()
                 val rest = t.substringAfter("—", "").trim()
-                KvRow("GATE ${i + 1} · $head", "ABSENT", Tone.UNK)
-                if (rest.isNotEmpty()) Note(rest.take(90) + if (rest.length > 90) "…" else "")
+                GateRow(i + 1, head, if (rest.length > 90) rest.take(90) + "…" else rest, "ABSENT", Tone.UNK)
             }
             KvRow("gates evidenced", "0 / ${items.size}", if (M.gng == null) Tone.UNK else Tone.NEUTRAL)
             val props = M.proposalsWrap.arr("proposals").rows()
@@ -854,7 +893,9 @@ fun OverviewScreen(repo: MissionRepository) {
                     props.map { p -> listOf((p as JsonObject).text("kind", p.text("id")) to Tone.NEUTRAL, p.text("status", "open") to Tone.NEUTRAL) },
                 )
             }
-            Note("The dashboard inherits the MCP wall (O-5): it reads, replays, and proposes. A human executes at triadctl. There is no enable, release, reset, place, or flatten on this page.")
+            WhyBox("THE LAW · O-5 · the MCP wall") {
+                Note("The dashboard inherits the MCP wall (O-5): it reads, replays, and proposes. A human executes at triadctl. There is no enable, release, reset, place, or flatten on this page.")
+            }
             // The web pNext `Propose action` button (id=ov_btnPropose) — the ONE write this page makes:
             // it FILES a record on the inbox via repo.propose(); it applies nothing (O-5).
             OvProposeAction(repo)
@@ -887,16 +928,20 @@ fun OverviewScreen(repo: MissionRepository) {
                 Triple("defensive window", "${M.lb.obj("defensive_window").int("consecutive_minutes_over_budget") ?: "—"}min", if (M.lb == null) Tone.UNK else Tone.NEUTRAL),
             )
             Note("margin ${M.lb.obj("request_deadline").int("margin_ms") ?: "—"}ms · consecutive over budget triggers the defensive window.")
-            Note("Every live cell is hatched, not green (O-1). Prometheus is absent, so the latency law is declared and unmeasured. A budget you are not measuring is a wish. Config ${M.lb.text("config_version")}.")
+            WhyBox("THE LAW · O-1") {
+                Note("Every live cell is hatched, not green (O-1). Prometheus is absent, so the latency law is declared and unmeasured. A budget you are not measuring is a wish. Config ${M.lb.text("config_version")}.")
+            }
         }
 
-        LawBlock(
-            "O-1..O-8",
-            "O-1 UNKNOWN is not GREEN and must not look like it · O-2 coverage is rendered before verdict · " +
-                "O-3 no-nulls: a named absence, never a dash-as-zero · O-4 zero is a claim · O-5 the page is read-only · " +
-                "O-6 net R is never summed across cohorts · O-7 conviction is uncalibrated until a pin · " +
-                "O-8 the chokepoint is computed, not chosen.",
-        )
+        WhyBox("THE OVERVIEW LAWS · O-1..O-8") {
+            LawBlock(
+                "O-1..O-8",
+                "O-1 UNKNOWN is not GREEN and must not look like it · O-2 coverage is rendered before verdict · " +
+                    "O-3 no-nulls: a named absence, never a dash-as-zero · O-4 zero is a claim · O-5 the page is read-only · " +
+                    "O-6 net R is never summed across cohorts · O-7 conviction is uncalibrated until a pin · " +
+                    "O-8 the chokepoint is computed, not chosen.",
+            )
+        }
     }
 }
 
@@ -1169,7 +1214,7 @@ private fun NodePillChip(p: NodePill) {
 /**
  * The estate — the phone's first card (the web Topology's `The estate` panel condensed into Overview):
  * a live-numbered 19sp title, the mono tool line, the autopsy paragraph with bold runs, a wrap-flow
- * grid of the 12 node pills, a hairline, the mono NATS warning, then the full-width emerald map CTA.
+ * grid of the 14 node pills (same roster as Topology), a hairline, the mono NATS warning, then the CTA.
  */
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -1262,21 +1307,61 @@ private fun OvPendSpec(tool: String, spec: String, served: Boolean) {
         Note("$tool · LIVE — this panel now reads the server value directly, not the client-side stitch.", Tone.GOOD)
         return
     }
+    // The full schema + rules used to sit open in every card — pages of mono the reader never needs. Fold
+    // it behind a tap (default hidden), the same interaction as the Topology PEND rows.
+    var open by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().padding(top = 12.dp)
             .background(AmberSoft, RoundedCornerShape(10.dp))
             .border(1.dp, Amber, RoundedCornerShape(10.dp))
+            .clickable { open = !open }
             .padding(horizontal = 13.dp, vertical = 12.dp),
     ) {
-        Text(
-            "PEND · $tool NOT BUILT — this panel is stitched client-side",
-            color = Amber, fontFamily = EstateMono, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-            letterSpacing = 0.8.sp, lineHeight = 14.sp,
-        )
-        Text(
-            spec, color = Ink2, fontFamily = EstateMono, fontSize = 10.sp, lineHeight = 15.sp,
-            modifier = Modifier.padding(top = 7.dp).horizontalScroll(rememberScrollState()),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "PEND · $tool NOT BUILT — stitched client-side",
+                color = Amber, fontFamily = EstateMono, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp, lineHeight = 14.sp, modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (open) "▾ spec" else "▸ spec", color = Amber, fontFamily = EstateMono,
+                fontSize = 9.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        if (open) {
+            Text(
+                spec, color = Ink2, fontFamily = EstateMono, fontSize = 10.sp, lineHeight = 15.sp,
+                modifier = Modifier.padding(top = 7.dp).horizontalScroll(rememberScrollState()),
+            )
+        }
+    }
+}
+
+/**
+ * One go/no-go gate as a scannable list item — a numbered badge, the gate title, a right-aligned status
+ * tag, and the drill description as a dimmed subline, closed by a hairline. Replaces the flat KvRow + Note
+ * pair that ran every gate's prose into the next, which read as an undifferentiated wall.
+ */
+@Composable
+private fun GateRow(n: Int, title: String, desc: String, status: String, tone: Tone) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(top = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(20.dp).background(Line, CircleShape), contentAlignment = Alignment.Center) {
+                Text("$n", color = Ink, fontFamily = EstateMono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+            Text(
+                title, color = Ink, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, lineHeight = 16.sp,
+                modifier = Modifier.weight(1f).padding(start = 10.dp, end = 8.dp),
+            )
+            Tag(status, tone)
+        }
+        if (desc.isNotEmpty()) {
+            Text(
+                desc, color = Ink2, fontSize = 11.sp, lineHeight = 15.sp,
+                modifier = Modifier.padding(start = 30.dp, top = 3.dp, end = 4.dp),
+            )
+        }
+        Box(Modifier.fillMaxWidth().padding(top = 10.dp).height(1.dp).background(Line))
     }
 }
 
