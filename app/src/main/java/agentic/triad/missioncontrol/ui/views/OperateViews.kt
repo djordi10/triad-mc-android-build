@@ -65,6 +65,8 @@ import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
+import agentic.triad.missioncontrol.ui.components.Verdict
+import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.Tone
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
 import agentic.triad.missioncontrol.ui.components.Tone.GOOD
@@ -92,6 +94,7 @@ import agentic.triad.missioncontrol.ui.theme.Emerald
 import agentic.triad.missioncontrol.ui.theme.EmeraldSoft
 import agentic.triad.missioncontrol.ui.theme.Ink
 import agentic.triad.missioncontrol.ui.theme.Ink2
+import agentic.triad.missioncontrol.ui.theme.EmeraldBright
 import agentic.triad.missioncontrol.ui.theme.Line
 import agentic.triad.missioncontrol.ui.theme.Paper
 import agentic.triad.missioncontrol.ui.theme.Pine
@@ -803,15 +806,24 @@ private fun ExecExitRail(m: ExModel) {
 // ── exec-styled light-card primitives (`.card` / `.ribbon` / `.tag` / `.kv`) ─────────────────────
 @Composable
 private fun ExecCard(title: String, src: String, sev: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    // Header band marks each section's start (matches the shared McCard pine header). A `sev` card gets a
+    // dark-red band instead of pine, so a severe section reads as severe from its header alone.
+    val headerBg = if (sev) Sev else Pine
     Column(
         Modifier.fillMaxWidth().padding(bottom = 12.dp)
-            .background(CardBg, RoundedCornerShape(14.dp))
-            .border(if (sev) 1.5.dp else 1.dp, if (sev) Sev else Line, RoundedCornerShape(14.dp))
-            .padding(horizontal = 16.dp, vertical = 15.dp),
+            .clip(shape)
+            .background(CardBg)
+            .border(if (sev) 1.5.dp else 1.dp, if (sev) Sev else Line, shape),
     ) {
-        Text(title, fontFamily = ExDisp, fontWeight = FontWeight.Bold, color = Ink, fontSize = 15.sp, letterSpacing = (-0.2).sp)
-        Text(src, color = Unk, fontFamily = ExMono, fontSize = 9.sp, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 3.dp))
-        Column(Modifier.padding(top = 11.dp)) { content() }
+        Column(Modifier.fillMaxWidth().background(headerBg).padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(title, fontFamily = ExDisp, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.5.sp, letterSpacing = (-0.2).sp)
+            Text(
+                src, color = if (sev) Color.White.copy(alpha = 0.72f) else EmeraldBright.copy(alpha = 0.85f),
+                fontFamily = ExMono, fontSize = 9.sp, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 3.dp),
+            )
+        }
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) { content() }
     }
 }
 
@@ -958,13 +970,15 @@ private fun ExecGovernorCard(m: ExModel) {
             ExecChkRow(c)
         }
         Spacer(Modifier.height(10.dp))
-        LawBlock(
-            "X-1",
-            "The chain short-circuits on the first failure and runs in spec order. ${m.neverRun} checks have " +
-                "never been reached. A check that has never run has never been tested — it renders hatched, " +
-                "not green. This is the same law as the Overview's coverage rule, applied to a rulebook instead " +
-                "of a probe set.",
-        )
+        WhyBox("THE LAW · X-1") {
+            LawBlock(
+                "X-1",
+                "The chain short-circuits on the first failure and runs in spec order. ${m.neverRun} checks have " +
+                    "never been reached. A check that has never run has never been tested — it renders hatched, " +
+                    "not green. This is the same law as the Overview's coverage rule, applied to a rulebook instead " +
+                    "of a probe set.",
+            )
+        }
         if (!m.chainServed) {
             Note(
                 "get_governor_chain not served — the ladder above is stitched client-side from " +
@@ -1174,10 +1188,12 @@ private fun ExecSizingCard(m: ExModel) {
         ExecHr()
         ExecEyebrow("STOP GEOMETRY — THE DISTRIBUTION BEHIND THE ANECDOTE (§3.2)")
         ExecStopGeometry(m)
-        Note(
-            "X-3: sizing is an identity — size = risk% · equity / stop_distance. The below-floor share is the " +
-                "sizing anecdote, quantified; a null over-cap share stays null, never a fabricated zero.",
-        )
+        WhyBox("THE LAW · X-3") {
+            Note(
+                "X-3: sizing is an identity — size = risk% · equity / stop_distance. The below-floor share is the " +
+                    "sizing anecdote, quantified; a null over-cap share stays null, never a fabricated zero.",
+            )
+        }
     }
 }
 
@@ -1603,11 +1619,13 @@ private fun ExecQualityCard(m: ExModel) {
 private fun ExecProposeCard() {
     val ctx = LocalContext.current
     ExecCard("Propose — the only write on this page", "propose_action · operator-action/1") {
-        Note(
-            "X-5: the Executor is the only service with exchange keys. This GUI has none. There is no cancel, " +
-                "no flatten, no arm, no release here — and there never will be. What you can do is file a " +
-                "proposal that a human runs at triadctl.",
-        )
+        WhyBox("THE LAW · X-5 · read-only wall") {
+            Note(
+                "X-5: the Executor is the only service with exchange keys. This GUI has none. There is no cancel, " +
+                    "no flatten, no arm, no release here — and there never will be. What you can do is file a " +
+                    "proposal that a human runs at triadctl.",
+            )
+        }
         Text(
             "Propose action",
             color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
