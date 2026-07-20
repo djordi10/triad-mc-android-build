@@ -1,6 +1,8 @@
 package agentic.triad.missioncontrol.ui.views
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -848,6 +850,8 @@ private val NcDownBorder = Color(0xFFE2BFBC)   // .nc.down / .txb.dead2 border
 private val PendInk = Color(0xFF6B4308)        // .pend pre ink
 private val LaneHair = Color(0xFFF0EEE8)       // .lane divider
 private val CodeWell = Color(0xFFEFEDE6)       // inline <code> background
+private val Vio = Color(0xFF6D51C0)            // distribution plane — Relay / keyless (the voice)
+private val VioSoft = Color(0xFFEFEAFB)
 
 /** M-1 status vocabulary — a green dot must name its source (ST in the JS, exact texts). */
 private enum class NodeStatus(val label: String, val meaning: String, val tone: Tone) {
@@ -888,6 +892,8 @@ private fun NodeStatus.chipFg(): Color = when (this) {
  * `lab` is the tiny mono eyebrow, `t` the bold name, `s`/`s2` the sublines. `proc` is the OS process
  * (the svc_* target, null for the external exchange), `owns` the M-3 view. `status`/`ev` resolve live.
  */
+private data class Sub(val name: String, val mark: String)   // mark: "✓" ok · "✗" down · "⏳" pend
+private enum class EdgeKind { SIGNAL, MONEY, FORK, LEDGER }
 private data class EstateNode(
     val id: String,
     val x: Float, val y: Float, val w: Float, val h: Float,
@@ -905,6 +911,8 @@ private data class EstateNode(
     val bus: Boolean = false,
     val keyholder: Boolean = false,
     val findings: List<String>,
+    val subs: List<Sub> = emptyList(),
+    val verb: String = "",
     val status: (TopoModel) -> NodeStatus,
     val ev: (TopoModel) -> String,
 )
@@ -929,166 +937,203 @@ private fun laneStatus(m: TopoModel, table: String, okStatus: NodeStatus): NodeS
 
 private val ESTATE_NODES = listOf(
     EstateNode(
-        "sources", 34f, 26f, 196f, 66f, "SOURCES", "Market + Aux feeds", "3 venues · Kronos · FinGPT",
-        plane = "ingest", emits = "raw ticks · klines · aux signals", takes = "—",
-        owns = "Checkup (03)", proc = "triad-feeds", healthSrc = "get_feed_health", ext = true,
-        findings = listOf(
-            "get_feed_health → transport: unavailable (prometheus) — there is no feed observability at all.",
-            "The venue failover audit trail (D5) cannot be produced.",
-        ),
-        status = { if (it.feedErr != null) NodeStatus.UNKNOWN else NodeStatus.MEASURED },
-        ev = { m -> m.feedErr?.let { "get_feed_health → $it" } ?: "live" },
+        "market", 20f, 54f, 164f, 58f, "MARKET", "Binance data", "klines · OI · funding",
+        plane = "source", emits = "raw market", takes = "—",
+        owns = "Checkup (03)", proc = null, healthSrc = "—", ext = true,
+        findings = listOf("The venue's market data — klines, open interest, funding. The tape everything reads."),
+        status = { NodeStatus.UNKNOWN }, ev = { "the tape" },
     ),
     EstateNode(
-        "seam", 262f, 26f, 196f, 66f, "SEAM · UpONLY", "LLM serving", "Ollama :11434 · slot A",
-        plane = "model", emits = "model completions", takes = "rendered prompts",
-        owns = "Intelligence (09)", proc = "ollama", healthSrc = "—", ext = true,
+        "signal", 210f, 30f, 262f, 104f, "TRIADENGINE · RUST", "Signal", "detectors · geometry · floors [45,120]",
+        plane = "hot", emits = "context packets · candidates", takes = "market",
+        owns = "Trade Logs (06)", proc = "triad-signal", healthSrc = "ledger.candidates", verb = "PROPOSES",
+        subs = listOf(Sub("feeds", "✓"), Sub("engine", "✓"), Sub("contracts/", "·")),
         findings = listOf(
-            "The live adjudicator is fingpt-crypto:v5-full-test — the playbook assigns FinGPT to the BIAS role, not adjudication.",
-            "Slot B has never run. get_model_registry has a schema and no entries.",
-            "The gateway loses 1,598 requests to error at 136 ms — a batch failure, not a model failure.",
-        ),
-        status = { NodeStatus.UNKNOWN },
-        ev = { "no health source" },
-    ),
-    EstateNode(
-        "signal", 34f, 158f, 196f, 96f, "TRIADENGINE", "Signal", "features → candidates", "invalidation watchdog",
-        plane = "hot", emits = "context packets · candidates", takes = "market + aux",
-        owns = "Trade Logs (06)", proc = "triad-signal", healthSrc = "ledger.candidates",
-        findings = listOf(
-            "164 duplicate candidates (BTC 86 · ETH 78) — a race under load, because there is no consumer dedupe.",
-            "45,692 context packets exist and have no view. P4 replay is dead at the first hop.",
+            "PROPOSES · detectors → candidates (geometry + filter fields) · sets every rate · 21,890 candidates",
+            "never: touch the model · reach the venue",
         ),
         status = { laneStatus(it, "ledger.candidates", NodeStatus.IDLE) },
-        ev = { "ledger.candidates: ${it.svc["ledger.candidates"] ?: "—"}  (a TABLE)" },
+        ev = { "21,890 candidates" },
     ),
     EstateNode(
-        "gateway", 262f, 158f, 196f, 96f, "TRIADINTELLIGENCE", "Gateway", "LLM judges · no keys", "always-emit DecisionV1",
+        "gateway", 512f, 30f, 270f, 104f, "TRIADINTELLIGENCE · PY", "Gateway", "pinned pt-1.2.0 · verdicts, never edits",
         plane = "hot", emits = "DecisionV1", takes = "candidates + packets",
-        owns = "Intelligence (09)", proc = "triad-intelligence", healthSrc = "ledger.decisions",
+        owns = "Intelligence (11)", proc = "triad-intelligence", healthSrc = "ledger.decisions", verb = "JUDGES",
+        subs = listOf(Sub("gateway", "✓"), Sub("runner §X", "⏳"), Sub("CAG/memo", "·")),
         findings = listOf(
-            "The model proposes a trade on 18.9% of candidates. The validator destroys 689 of 691 and overwrites conviction with 0.",
-            "invalid_output is NOT malformed JSON — it is a rejected trade.",
-            "get_render → render_context_missing. You cannot reproduce a single prompt.",
+            "JUDGES · pinned pt-1.2.0 → v5 verdict + conviction · owns CAG/goldens/shadow-runner · 21,580 decisions",
+            "never: alter a number · produce an order",
         ),
         status = { laneStatus(it, "ledger.decisions", NodeStatus.IDLE) },
-        ev = { "ledger.decisions: ${it.svc["ledger.decisions"] ?: "—"}  (a TABLE)" },
+        ev = { "21,580 decisions" },
     ),
     EstateNode(
-        "executor", 490f, 158f, 196f, 96f, "TRIADEXECUTOR", "Executor", "governor · OMS · PM", "reconciler · kill switch",
-        plane = "hot", emits = "intents · orders", takes = "DecisionV1",
+        "model", 512f, 146f, 270f, 50f, "MODEL · slot A", "fingpt-crypto v5", "a19f4795 · kronos ✓ (K1) · sidecar v4",
+        plane = "model", emits = "verdict", takes = "rendered prompt", ext = true,
+        owns = "Intelligence (11)", proc = "ollama", healthSrc = "—",
+        findings = listOf("The live adjudicator: fingpt-crypto v5, slot A. Kronos is aux (K1 lane); the sidecar shed to v4."),
+        status = { NodeStatus.UNKNOWN }, ev = { "slot A · v5" },
+    ),
+    EstateNode(
+        "executor", 822f, 30f, 268f, 104f, "TRIADEXECUTOR · RUST", "Executor", "governor + live_eligible · caps · breaker · kill",
+        plane = "hot", emits = "intents · orders", takes = "DecisionV1", verb = "ENFORCES",
         owns = "Executor (02)", proc = "triad-executor", healthSrc = "ledger.intents · ledger.orders",
+        subs = listOf(Sub("live_exec", "✓"), Sub("exposure_feed", "✓")),
         findings = listOf(
-            "STALE, not empty — a writer was there and it stopped. That is a different bug from never starting.",
-            "The governor passed 0 intents and refused 18. orders, fills: 0 rows, ever.",
-            "The one ETH take asked for a 9.1 bps stop against a 45 bps floor.",
+            "ENFORCES · governor 14-check → live_eligible → caps/breaker/kill · 13 intents · take 0.50% ≪ 10% · orders crossed, 0 fills back",
+            "never: widen · act on model text · boot live unverified",
         ),
         status = { if (it.svc["ledger.intents"] == "stale" || it.svc["ledger.orders"] == "stale") NodeStatus.IDLE else NodeStatus.UNKNOWN },
-        ev = { "intents: ${it.svc["ledger.intents"] ?: "—"} · orders: ${it.svc["ledger.orders"] ?: "—"}" },
+        ev = { "13 intents · take 0.50%" },
     ),
     EstateNode(
-        "venue", 718f, 158f, 196f, 96f, "EXECUTOR · CCXT", "Venue Gateway", "THE SOLE KEYHOLDER", "maker-only · UDS socket",
+        "venue", 860f, 150f, 236f, 62f, "VGP · venue_gateway", "Keyholder", "handshake-or-no-boot · native HMAC", s2 = "internal · playground",
         plane = "hot", emits = "venue orders", takes = "intents",
-        owns = "Executor (02)", proc = "triad-venue-ccxt", healthSrc = "—", keyholder = true,
+        owns = "Executor (02)", proc = "triad-venue-gateway", healthSrc = "—", keyholder = true,
         findings = listOf(
-            "The only component in the estate that holds exchange credentials — and it has no health check, no heartbeat, and no tool that reports on it.",
-            "Go/no-go gate 2 (key-safety probe) is UNKNOWN for exactly this reason.",
-            "M-5: the sole keyholder must be the most instrumented process in the estate. It is the least.",
+            "VGP = venue_gateway · native HMAC (CCXT off the write path) · clientOrderId TRIAD-owned · the sole keyholder, no health source",
+            "reconciler NEVER RUN · fill recorder MISSING (§1) — the return loop is open · run it once → labels become evidence + P1 F4",
         ),
-        status = { NodeStatus.UNKNOWN },
-        ev = { "no health source" },
+        status = { NodeStatus.UNKNOWN }, ev = { "up 5h31m · reconciler never run" },
     ),
     EstateNode(
-        "exchange", 946f, 158f, 196f, 96f, "EXTERNAL", "Exchange", "Binance USD-M", "no cancel-on-disconnect",
-        plane = "external", emits = "fills · positions", takes = "orders",
-        owns = "Executor (02)", proc = null, healthSrc = "—", ext = true,
+        "binance", 860f, 226f, 258f, 74f, "BINANCE · the venue", "Real money", "door ① VGP: TRIAD keys", s2 = "door ② UpONLY: users' own keys",
+        plane = "external", emits = "fills · positions", takes = "orders", ext = true,
+        owns = "Executor (02)", proc = null, healthSrc = "—",
         findings = listOf(
-            "Nothing has ever reached a venue. 0 orders, 0 fills, 0 positions.",
-            "Binance USD-M has no cancel-on-disconnect — go/no-go gate 4 needs a heartbeat-flatten watchdog, and it is unsigned.",
+            "venue crossed · 13 BUY · \$101.18 · 2 positions LIVE — ledger records 0 fills → positions invisible",
+            "No cancel-on-disconnect. Only ~\$100 equity keeps fills rare — an accident of size, not a control.",
         ),
-        status = { NodeStatus.UNKNOWN },
-        ev = { "never contacted" },
+        status = { NodeStatus.UNKNOWN }, ev = { "13 BUY · 2 live · 0 fills recorded" },
     ),
     EstateNode(
-        "bus", 262f, 296f, 652f, 56f, "TRANSPORT", "NATS JetStream — 7 streams", "dedupe by Nats-Msg-Id (120s) · DLQ per stream",
-        plane = "transport", emits = "—", takes = "—",
-        owns = "Ops · Loops (04)", proc = "nats-server", healthSrc = "get_bus_status", bus = true,
+        "relay", 1180f, 30f, 272f, 104f, "TRIADRELAY · PY", "Distributor", "DISPLAYS, keyless · CAN NEVER PLACE",
+        plane = "distribution", emits = "gated setups (keyless)", takes = "approved intents",
+        owns = "Connections (19)", proc = "triad-relay", healthSrc = "—",
+        subs = listOf(Sub("scatter", "✓"), Sub("user-gate", "✓"), Sub("TG cards", "✓")),
         findings = listOf(
-            "NOT PROVISIONED. get_bus_status → { error: \"transport: unavailable\", detail: \"nats\" }.",
-            "This is the root cause the whole audit keeps returning to: no NATS → no consumer dedupe → §7.2 idempotency violated → 164 duplicate candidates → 8 duplicate adjudications → 5,277 duplicate bank rows → INFLATION 2.93×.",
-            "The map draws a bus that does not exist — and omits the three ingest lanes that are actually carrying every byte.",
+            "THE FORK · approved stream copied WITHOUT keys · 2 transforms: HMAC scatter + user-gate · zero keys, by construction",
+            "a Relay row with a venue_order_id = quarantine alarm · voice ≠ hands",
         ),
-        status = { if (it.busErr != null) NodeStatus.DOWN else NodeStatus.MEASURED },
-        ev = { m -> m.busErr?.let { "get_bus_status → $it" } ?: "ok" },
+        status = { NodeStatus.UNKNOWN }, ev = { "keyless · post-governor" },
     ),
     EstateNode(
-        "ledger", 34f, 396f, 250f, 88f, "TRIADLEARNING", "Ledger", "PROVENANCE ROOT", "append-only · DuckDB",
-        plane = "store", emits = "the record of everything", takes = "every message",
-        owns = "Databank (07)", proc = "triad-learning", healthSrc = "ledger.context.packets",
-        findings = listOf(
-            "chain_verified: false — P4 (everything is replayable) is violated, and the spec's own words are: \"the system that produced it is defective.\"",
-            "1,825 decisions carry input_hash = 0×64. refusal_id is 100% null.",
-            "The refusals writer says 115; the view has 18.",
-        ),
-        status = { laneStatus(it, "ledger.context.packets", NodeStatus.IDLE) },
-        ev = { "ledger.context.packets: ${it.svc["ledger.context.packets"] ?: "—"}  (a TABLE)" },
+        "telegram", 1180f, 146f, 190f, 44f, "TELEGRAM · TG-01", "#signals · #lab", "cards: lawful chip · DRYRUN/LIVE",
+        plane = "distribution", emits = "cards", takes = "approved setups", ext = true,
+        owns = "Connections (19)", proc = null, healthSrc = "—",
+        findings = listOf("#signals (post-governor M1) · #lab (SHADOW-EXPERIMENT). Cards carry a lawful chip, a DRYRUN/LIVE tag, and the decision_id."),
+        status = { NodeStatus.UNKNOWN }, ev = { "post-governor cards" },
     ),
     EstateNode(
-        "labeler", 312f, 396f, 200f, 88f, "LEARNING", "Labeler · Outcome", "counterfactual resolve", "triad-cf/1",
-        plane = "learn", emits = "outcomes · pnl_r", takes = "decisions + the tape",
-        owns = "Shadow · Personas (11)", proc = "triad-labeler", healthSrc = "ledger.outcomes",
+        "uponly", 1180f, 202f, 272f, 74f, "UpONLY PLATFORM", "Users' own keys", "{user · venue · env · keys · caps}", s2 = "risk governor · tiers · agentic exec",
+        plane = "client", emits = "user orders", takes = "gated signals", ext = true,
+        owns = "Connections (19)", proc = null, healthSrc = "—",
         findings = listOf(
-            "ledger.outcomes: EMPTY. Zero labelled outcomes in the ledger, ever.",
-            "Three resolvers are writing, and they disagree — one decision booked loss / win / loss, and all three rows were summed.",
-            "loss average pnl_r is exactly −1.0000: no fee, no spread, no slippage.",
+            "thousands of users · gated signals → each user's OWN rules + risk governor · executes with the USER'S OWN keys",
+            "never: hold TRIAD's keys · feed anything upstream into the money path",
         ),
-        status = { if (it.svc["ledger.outcomes"] == "empty") NodeStatus.IDLE else NodeStatus.INFERRED },
-        ev = { "ledger.outcomes: ${it.svc["ledger.outcomes"] ?: "—"}" },
+        status = { NodeStatus.UNKNOWN }, ev = { "users' own keys — TRIAD's never travel" },
     ),
     EstateNode(
-        "calib", 540f, 396f, 200f, 88f, "LEARNING", "Calibration · Books", "B0 · B1 · M1 · K1", "Wilson deciles",
-        plane = "learn", emits = "the threshold", takes = "conviction ⋈ outcome",
-        owns = "Learning Pipeline (13)", proc = "triad-calibration", healthSrc = "get_calibration",
-        findings = listOf(
-            "get_calibration → { status: \"absent\" }. calibration_pin.pinned: false.",
-            "The join does not exist. Conviction lives in DuckDB; outcome lives in a SQLite file on a Mac.",
-            "3 of 4 books have n=0 — and B1 was spec'd as a GBT and shipped as a reflection of M1.",
-        ),
-        status = { if (it.calStatus == "absent") NodeStatus.IDLE else NodeStatus.INFERRED },
-        ev = { "get_calibration → ${it.calStatus ?: "—"}" },
+        "hyperliquid", 1180f, 290f, 272f, 50f, "EXTERNAL", "Hyperliquid · user accts", "TRIAD-fabric: display-only · no HL keys",
+        plane = "external", emits = "user fills", takes = "user orders", ext = true,
+        owns = "Connections (19)", proc = null, healthSrc = "—",
+        findings = listOf("Users execute on their own Hyperliquid accounts. TRIAD-fabric is display-only — no HL keys exist."),
+        status = { NodeStatus.UNKNOWN }, ev = { "display-only · no HL keys" },
     ),
     EstateNode(
-        "dtbnk", 768f, 396f, 374f, 88f, "TRIADDTBNK", "Databank", "SYSTEM OF RECORD · triaddtbnk/1.4", "lane isolation by DB role",
+        "learning", 60f, 380f, 720f, 96f, "TRIADLEARNING · PY", "Measures everything", "cf/2 · twin-ΔEV · EXIST-01 · the read-only MCP window",
+        plane = "learn", emits = "prices · audits", takes = "every message",
+        owns = "Learning Pipeline (15)", proc = "triad-learning", healthSrc = "ledger.outcomes",
+        subs = listOf(Sub("resolver", "✗"), Sub("shadow_sync", "✗"), Sub("mcp :8801", "✗"), Sub("watchdog/boards/corpus", "·")),
+        findings = listOf(
+            "keeper trio (resolver · shadow_sync · mcp :8801) CRASH-LOOP on unapplied W-71 → the triad-mc 502",
+            "read-only by law · never touches money · ledger.outcomes EMPTY · every live number reads from here",
+        ),
+        status = { NodeStatus.DOWN }, ev = { "trio crash-loop · W-71 unapplied" },
+    ),
+    EstateNode(
+        "dtbnk", 820f, 380f, 300f, 96f, "TRIADDTBNK", "Remembers", "system of record · triaddtbnk/1.4",
         plane = "store", emits = "the bank", takes = "3 ingest lanes",
-        owns = "Databank (07)", proc = "triad-dtbnk-bridge", healthSrc = "get_bridge_lag",
+        owns = "Databank (09)", proc = "triad-dtbnk-bridge", healthSrc = "get_bridge_lag",
+        subs = listOf(Sub("postgres (SoR)", "✓"), Sub("ledger", "✓"), Sub("migrations/ W-71", "⏳")),
         findings = listOf(
-            "This is the only node in the estate with a real heartbeat. Three named owners, three fresh ingest-registry ages (W-30).",
-            "And what it holds is 2.93× inflated: 8,008 rows over 2,731 distinct decisions.",
-            "shadow_sync reports no_fingerprint — it cannot identify itself.",
+            "Postgres SoR · ledger · migrations · the only node with a real heartbeat (3 fresh ingest ages, W-30)",
+            "migrations/ holds the W-71 psql, UNAPPLIED — the cure: one command turns the trio green",
         ),
         status = { if (it.lanes.isNotEmpty()) NodeStatus.MEASURED else NodeStatus.UNKNOWN },
         ev = {
             val newest = it.lanes.mapNotNull { l -> l.ageS }.minOrNull()
-            "${it.lanes.size} lanes · newest heartbeat ${if (newest != null) fmtAge(newest) else "—"}"
+            "${it.lanes.size} lanes · newest ${if (newest != null) fmtAge(newest) else "—"}"
         },
+    ),
+    EstateNode(
+        "gui", 60f, 496f, 300f, 48f, "OPS · AUX", "shadow-ops GUI :8802", "arm/disarm · reload gateway · services panel",
+        plane = "ops", emits = "control", takes = "operator", 
+        owns = "Governance (18)", proc = "triad-gui", healthSrc = "—",
+        findings = listOf("The control panel: arm/disarm, reload gateway, services panel. Up on :8802."),
+        status = { NodeStatus.MEASURED }, ev = { "up :8802" },
     ),
 )
 
 /** M-4 · an edge is a claim. If nothing crossed it, draw it dead. (mirrors TPVIEW.EDGES) */
-private data class EstateEdge(val f: String, val t: String, val lbl: String, val ever: Boolean, val back: Boolean = false)
+private data class EstateEdge(val f: String, val t: String, val lbl: String, val ever: Boolean, val back: Boolean = false, val kind: EdgeKind = EdgeKind.SIGNAL)
 
 private val ESTATE_EDGES = listOf(
-    EstateEdge("sources", "signal", "MARKET", ever = true),
-    EstateEdge("seam", "gateway", "completions", ever = true),
-    EstateEdge("signal", "gateway", "CAND · CTX", ever = true),
-    EstateEdge("gateway", "executor", "DEC", ever = true),
-    EstateEdge("executor", "venue", "INTENT", ever = false),
-    EstateEdge("venue", "exchange", "ORDERS", ever = false),
-    EstateEdge("exchange", "venue", "FILLS", ever = false, back = true),
+    EstateEdge("market", "signal", "", ever = true, kind = EdgeKind.SIGNAL),
+    EstateEdge("signal", "gateway", "candidates", ever = true, kind = EdgeKind.SIGNAL),
+    EstateEdge("gateway", "executor", "packet → verdict · takes", ever = true, kind = EdgeKind.SIGNAL),
+    EstateEdge("executor", "venue", "approved takes", ever = true, kind = EdgeKind.MONEY),
+    EstateEdge("venue", "binance", "orders · TRIAD keys", ever = true, kind = EdgeKind.MONEY),
+    EstateEdge("binance", "learning", "fills · reconciler", ever = false, kind = EdgeKind.MONEY),
+    EstateEdge("executor", "relay", "THE FORK · keyless copy", ever = true, kind = EdgeKind.FORK),
+    EstateEdge("relay", "uponly", "gated signal", ever = true, kind = EdgeKind.FORK),
+    EstateEdge("uponly", "hyperliquid", "user keys", ever = true, kind = EdgeKind.SIGNAL),
+    EstateEdge("signal", "learning", "ledger writes", ever = true, kind = EdgeKind.LEDGER),
+    EstateEdge("learning", "dtbnk", "reads/writes", ever = true, kind = EdgeKind.LEDGER),
 )
 
 /** The ghost lanes — what the bus WOULD carry if it existed (.ed.ghost in the JS). */
 private val GHOST_FEEDERS = listOf("signal", "gateway", "executor")
+
+// ── Stage 2 · the distribution universe (Map doc's 2nd diagram — the voice travels keyless) ──────
+private enum class DistTone { RELAY, TRANSFORM, CLIENT, VENUE, MEASURE }
+private enum class DistKind { KEYLESS, USERKEY, MEASURE }
+private data class DistNode(
+    val id: String, val x: Float, val y: Float, val w: Float, val h: Float,
+    val lab: String, val t: String, val s: String, val s2: String = "",
+    val tone: DistTone, val dash: Boolean = false,
+)
+private data class DistEdge(val f: String, val t: String, val lbl: String, val kind: DistKind)
+
+private fun DistTone.colors(): Pair<Color, Color> = when (this) {
+    DistTone.RELAY -> Vio to VioSoft
+    DistTone.TRANSFORM -> Vio to Card
+    DistTone.CLIENT -> Blue to BlueSoft
+    DistTone.VENUE -> Unk to ExtFill
+    DistTone.MEASURE -> Amber to AmberSoft
+}
+private fun DistKind.color(): Color = when (this) { DistKind.KEYLESS -> Vio; DistKind.USERKEY -> Emerald; DistKind.MEASURE -> Amber }
+
+private val DIST_NODES = listOf(
+    DistNode("relay", 24f, 40f, 232f, 92f, "TRIADRELAY · from above", "Distributor", "post-governor approved intents", "KEYLESS · one-way · two transforms", DistTone.RELAY),
+    DistNode("xform", 300f, 30f, 268f, 112f, "THE TWO PERMITTED TRANSFORMS", "① HMAC scatter", "② the USER GATE — live wallet → yes/no", "per the user's OWN rules · caps · risk", DistTone.TRANSFORM),
+    DistNode("uponly", 612f, 24f, 274f, 128f, "UpONLY PLATFORM", "thousands of users", "{user · venue · env · keys · caps}", "USERS' OWN KEYS — TRIAD's never travel", DistTone.CLIENT),
+    DistNode("ubn", 930f, 26f, 226f, 56f, "Binance", "user accts", "live·binance·uponly-user rows", tone = DistTone.VENUE),
+    DistNode("uhl", 930f, 96f, 226f, 56f, "Hyperliquid", "user accts", "TRIAD-fabric · display-only", tone = DistTone.VENUE),
+    DistNode("tg", 300f, 168f, 268f, 62f, "TELEGRAM · TG-01", "#signals (M1) · #lab (shadow)", "cards · lawful chip · DRYRUN/LIVE · decision_id", tone = DistTone.RELAY),
+    DistNode("bank", 612f, 188f, 274f, 100f, "UpONLY DATABANK + MCP", "12M rows · 45d · multi-engine", "v_pop_* views · setting.bgzr.io/mcp", "XENG-01 board · BF-02 retro-judge", DistTone.MEASURE),
+    DistNode("sidecar", 24f, 240f, 250f, 66f, "FinGPT/Kronos sidecar fleet", "their box", "v3/v4 · kronos predict/score", "other engines' judges — never TRIAD's", DistTone.CLIENT, dash = true),
+)
+private val DIST_EDGES = listOf(
+    DistEdge("relay", "xform", "", DistKind.KEYLESS),
+    DistEdge("xform", "uponly", "gated signal", DistKind.KEYLESS),
+    DistEdge("uponly", "ubn", "user keys", DistKind.USERKEY),
+    DistEdge("uponly", "uhl", "", DistKind.USERKEY),
+    DistEdge("relay", "tg", "", DistKind.KEYLESS),
+    DistEdge("uponly", "bank", "user fills → their bank", DistKind.MEASURE),
+    DistEdge("sidecar", "bank", "", DistKind.MEASURE),
+)
 
 // ── the PEND build specs — verbatim from TPVIEW.PENDING (these tools are NOT on the server) ──────
 private val PEND_EDGE_FLOW = """get_edge_flow  →  wiring §6.3
@@ -1245,7 +1290,7 @@ private fun MapNode(n: EstateNode, st: NodeStatus, u: Dp, onTap: () -> Unit) {
             }
             .clickable(onClick = onTap),
     ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = u * 12f, vertical = u * 5f)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = u * 10f, vertical = u * 6f)) {
             Text(
                 n.lab + if (n.keyholder) " · KEYHOLDER" else "", color = Ink2, fontFamily = TopoMono,
                 fontWeight = FontWeight.Bold, fontSize = 5.sp, lineHeight = 6.5.sp, letterSpacing = 0.3.sp,
@@ -1253,15 +1298,34 @@ private fun MapNode(n: EstateNode, st: NodeStatus, u: Dp, onTap: () -> Unit) {
             )
             Text(
                 n.t, color = Ink, fontFamily = TopoDisp, fontWeight = FontWeight.ExtraBold,
-                fontSize = 7.sp, lineHeight = 8.5.sp, maxLines = 1, overflow = TextOverflow.Clip,
+                fontSize = 7.5.sp, lineHeight = 9.sp, maxLines = 1, overflow = TextOverflow.Clip,
             )
+            if (n.verb.isNotEmpty()) {
+                Text(
+                    n.verb, color = Emerald, fontFamily = TopoMono, fontWeight = FontWeight.Bold,
+                    fontSize = 5.sp, lineHeight = 7.sp, letterSpacing = 0.4.sp, maxLines = 1,
+                    modifier = Modifier.padding(top = u * 1f),
+                )
+            }
+            if (n.subs.isNotEmpty()) {
+                Row(Modifier.padding(top = u * 3f), horizontalArrangement = Arrangement.spacedBy(u * 3f)) {
+                    n.subs.forEach { sub ->
+                        val c = when (sub.mark) { "✓" -> Emerald; "✗" -> Sev; "⏳" -> Amber; else -> Ink2 }
+                        Text(
+                            "${sub.name} ${sub.mark}", color = c, fontFamily = TopoMono, fontWeight = FontWeight.SemiBold,
+                            fontSize = 5.sp, lineHeight = 6.5.sp, maxLines = 1, overflow = TextOverflow.Clip,
+                            modifier = Modifier.background(c.copy(alpha = 0.10f), RoundedCornerShape(u * 3f)).padding(horizontal = u * 4f, vertical = u * 2f),
+                        )
+                    }
+                }
+            }
             Text(
-                n.s, color = Ink2, fontFamily = TopoMono, fontSize = 5.sp, lineHeight = 6.5.sp,
-                maxLines = 1, overflow = TextOverflow.Clip,
+                n.s, color = Ink2, fontFamily = TopoMono, fontSize = 5.sp, lineHeight = 6.8.sp,
+                maxLines = 2, overflow = TextOverflow.Clip, modifier = Modifier.padding(top = u * 2f),
             )
             if (n.s2.isNotEmpty()) {
                 Text(
-                    n.s2, color = Ink2, fontFamily = TopoMono, fontSize = 5.sp, lineHeight = 6.5.sp,
+                    n.s2, color = Ink2, fontFamily = TopoMono, fontSize = 5.sp, lineHeight = 6.8.sp,
                     maxLines = 1, overflow = TextOverflow.Clip,
                 )
             }
@@ -1285,11 +1349,10 @@ private fun MapNode(n: EstateNode, st: NodeStatus, u: Dp, onTap: () -> Unit) {
  */
 @Composable
 private fun EstateMap(nodeStatuses: List<Pair<EstateNode, NodeStatus>>, onTap: (Int) -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(1180f / 500f)) {
-        val u = maxWidth / 1180f
-        val busNode = ESTATE_NODES.first { it.bus }
+    BoxWithConstraints(Modifier.width(1040.dp).aspectRatio(1660f / 560f)) {
+        val u = maxWidth / 1660f
         Canvas(Modifier.fillMaxSize()) {
-            val px = size.width / 1180f
+            val px = size.width / 1660f
             fun byId(id: String) = ESTATE_NODES.first { it.id == id }
             ESTATE_EDGES.forEach { e ->
                 val a = byId(e.f); val b = byId(e.t)
@@ -1298,9 +1361,15 @@ private fun EstateMap(nodeStatuses: List<Pair<EstateNode, NodeStatus>>, onTap: (
                 when {
                     e.back -> { x1 = a.x; y1 = a.y + a.h / 2f + 18f; x2 = b.x + b.w; y2 = b.y + b.h / 2f + 18f }
                     a.y == b.y -> { x1 = a.x + a.w; y1 = a.y + a.h / 2f; x2 = b.x; y2 = b.y + b.h / 2f }
+                    b.y < a.y -> { x1 = a.x + a.w / 2f; y1 = a.y; x2 = b.x + b.w / 2f; y2 = b.y + b.h }
                     else -> { x1 = a.x + a.w / 2f; y1 = a.y + a.h; x2 = b.x + b.w / 2f; y2 = b.y }
                 }
-                val color = if (dead) Unk else Pine
+                val color = if (dead) Unk else when (e.kind) {
+                    EdgeKind.MONEY -> Sev
+                    EdgeKind.FORK -> Vio
+                    EdgeKind.LEDGER -> Amber
+                    EdgeKind.SIGNAL -> Pine
+                }
                 drawLine(
                     color, Offset(x1 * px, y1 * px), Offset(x2 * px, y2 * px),
                     strokeWidth = ((if (dead) 1.4f else 1.7f) * px).coerceAtLeast(1f),
@@ -1323,36 +1392,119 @@ private fun EstateMap(nodeStatuses: List<Pair<EstateNode, NodeStatus>>, onTap: (
                     color,
                 )
             }
-            // the ghost lanes: what the bus WOULD carry if it existed
-            GHOST_FEEDERS.forEach { id ->
-                val a = byId(id)
-                val cx = (a.x + a.w / 2f) * px
-                drawLine(
-                    DownStroke.copy(alpha = 0.75f), Offset(cx, (a.y + a.h) * px), Offset(cx, busNode.y * px),
-                    strokeWidth = (1.4f * px).coerceAtLeast(1f),
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f * px, 4f * px)),
+        }
+        // the nodes, over the wiring
+        nodeStatuses.forEachIndexed { i, (nd, st) -> MapNode(nd, st, u) { onTap(i) } }
+        // edge labels LAST — on top of the nodes, on a paper band, so none are clipped by a box.
+        // For vertical edges the label is offset to the side of the line; horizontal ones sit in the gap.
+        ESTATE_EDGES.forEach { e ->
+            val a = ESTATE_NODES.first { it.id == e.f }; val b = ESTATE_NODES.first { it.id == e.t }
+            val mx: Float; val my: Float; var side = 0f
+            when {
+                e.back -> { mx = (a.x + b.x + b.w) / 2f; my = (a.y + a.h / 2f + 18f + b.y + b.h / 2f + 18f) / 2f }
+                a.y == b.y -> { mx = (a.x + a.w + b.x) / 2f; my = a.y + a.h / 2f - 11f }   // horizontal: lift above the line
+                b.y < a.y -> { mx = (a.x + a.w / 2f + b.x + b.w / 2f) / 2f; my = (a.y + b.y + b.h) / 2f; side = 46f }
+                else -> { mx = (a.x + a.w / 2f + b.x + b.w / 2f) / 2f; my = (a.y + a.h + b.y) / 2f; side = 46f }
+            }
+            val txt = if (e.ever) e.lbl else "${e.lbl} · 0 ever"
+            if (txt.isNotEmpty()) {
+                Text(
+                    txt, color = if (e.ever) Ink2 else Unk, fontFamily = TopoMono, fontSize = 5.sp,
+                    lineHeight = 6.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                    maxLines = 1, overflow = TextOverflow.Visible,
+                    modifier = Modifier.offset(x = u * (mx - 70f + side), y = u * (my - 6f)).width(u * 140f)
+                        .background(MapBg.copy(alpha = 0.92f), RoundedCornerShape(u * 3f)),
                 )
             }
         }
-        // edge labels — tiny mono at each midpoint; dead edges say `· 0 ever`
-        ESTATE_EDGES.forEach { e ->
-            val a = ESTATE_NODES.first { it.id == e.f }; val b = ESTATE_NODES.first { it.id == e.t }
-            val mx: Float; val my: Float
-            when {
-                e.back -> { mx = (a.x + b.x + b.w) / 2f; my = (a.y + a.h / 2f + 18f + b.y + b.h / 2f + 18f) / 2f }
-                a.y == b.y -> { mx = (a.x + a.w + b.x) / 2f; my = a.y + a.h / 2f }
-                else -> { mx = (a.x + a.w / 2f + b.x + b.w / 2f) / 2f; my = (a.y + a.h + b.y) / 2f }
+    }
+}
+
+/** Stage 2 · the distribution universe — Relay → transforms → UpONLY → user venues, keyless. */
+@Composable
+private fun DistributionMap() {
+    BoxWithConstraints(Modifier.width(760.dp).aspectRatio(1180f / 320f)) {
+        val u = maxWidth / 1180f
+        Canvas(Modifier.fillMaxSize()) {
+            val px = size.width / 1180f
+            fun byId(id: String) = DIST_NODES.first { it.id == id }
+            DIST_EDGES.forEach { e ->
+                val a = byId(e.f); val b = byId(e.t)
+                val horiz = b.x >= a.x + a.w - 4f
+                val x1: Float; val y1: Float; val x2: Float; val y2: Float
+                if (horiz) { x1 = a.x + a.w; y1 = a.y + a.h / 2f; x2 = b.x; y2 = b.y + b.h / 2f }
+                else { x1 = a.x + a.w / 2f; y1 = a.y + a.h; x2 = b.x + b.w / 2f; y2 = b.y }
+                val color = e.kind.color()
+                drawLine(
+                    color, Offset(x1 * px, y1 * px), Offset(x2 * px, y2 * px),
+                    strokeWidth = (2f * px).coerceAtLeast(1f),
+                    pathEffect = if (e.kind == DistKind.KEYLESS) PathEffect.dashPathEffect(floatArrayOf(6f * px, 4f * px)) else null,
+                )
+                val dxl = x2 - x1; val dyl = y2 - y1; val len = sqrt(dxl * dxl + dyl * dyl).coerceAtLeast(0.001f)
+                val nx = dxl / len; val ny = dyl / len; val tipX = x2 * px; val tipY = y2 * px
+                val bx = tipX - 7f * px * nx; val by = tipY - 7f * px * ny; val ox = -ny; val oy = nx
+                drawPath(
+                    Path().apply { moveTo(tipX, tipY); lineTo(bx + 3.2f * px * ox, by + 3.2f * px * oy); lineTo(bx - 3.2f * px * ox, by - 3.2f * px * oy); close() },
+                    color,
+                )
             }
-            Text(
-                if (e.ever) e.lbl else "${e.lbl} · 0 ever",
-                color = if (e.ever) Ink2 else Unk, fontFamily = TopoMono, fontSize = 5.sp,
-                lineHeight = 6.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
-                maxLines = 1, overflow = TextOverflow.Clip,
-                modifier = Modifier.offset(x = u * (mx - 70f), y = u * (my - 15f)).width(u * 140f),
-            )
         }
-        // the twelve nodes, over the wiring
-        nodeStatuses.forEachIndexed { i, (nd, st) -> MapNode(nd, st, u) { onTap(i) } }
+        DIST_EDGES.forEach { e ->
+            if (e.lbl.isNotEmpty()) {
+                val a = DIST_NODES.first { it.id == e.f }; val b = DIST_NODES.first { it.id == e.t }
+                val mx = (a.x + a.w / 2f + b.x + b.w / 2f) / 2f; val my = (a.y + a.h / 2f + b.y + b.h / 2f) / 2f
+                Text(
+                    e.lbl, color = e.kind.color(), fontFamily = TopoMono, fontSize = 5.sp, lineHeight = 6.sp,
+                    fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Clip,
+                    modifier = Modifier.offset(x = u * (mx - 60f), y = u * (my - 14f)).width(u * 120f),
+                )
+            }
+        }
+        DIST_NODES.forEach { DistNodeBox(it, u) }
+    }
+}
+
+@Composable
+private fun DistNodeBox(n: DistNode, u: Dp) {
+    val (border, fill) = n.tone.colors()
+    val shape = RoundedCornerShape(u * 8f)
+    Box(
+        Modifier.offset(x = u * n.x, y = u * n.y).size(u * n.w, u * n.h)
+            .clip(shape).background(fill, shape)
+            .drawBehind {
+                val pxu = size.width / n.w
+                drawRoundRect(
+                    border, cornerRadius = CornerRadius(8f * pxu),
+                    style = Stroke(
+                        (1.6f * pxu).coerceAtLeast(1f),
+                        pathEffect = if (n.dash) PathEffect.dashPathEffect(floatArrayOf(5f * pxu * 2f, 4f * pxu * 2f)) else null,
+                    ),
+                )
+            },
+    ) {
+        Column(Modifier.fillMaxSize().padding(horizontal = u * 7f, vertical = u * 5f)) {
+            Text(n.lab, color = border, fontFamily = TopoMono, fontWeight = FontWeight.Bold, fontSize = 5.sp, lineHeight = 6.5.sp, maxLines = 1, overflow = TextOverflow.Clip)
+            Text(n.t, color = Ink, fontFamily = TopoDisp, fontWeight = FontWeight.ExtraBold, fontSize = 7.sp, lineHeight = 8.5.sp, maxLines = 1, overflow = TextOverflow.Clip, modifier = Modifier.padding(top = u * 1f))
+            if (n.s.isNotEmpty()) Text(n.s, color = Ink2, fontFamily = TopoMono, fontSize = 5.sp, lineHeight = 6.5.sp, maxLines = 2, overflow = TextOverflow.Clip, modifier = Modifier.padding(top = u * 1f))
+            if (n.s2.isNotEmpty()) Text(n.s2, color = border, fontFamily = TopoMono, fontSize = 5.sp, lineHeight = 6.5.sp, maxLines = 2, overflow = TextOverflow.Clip, modifier = Modifier.padding(top = u * 1f))
+        }
+    }
+}
+
+@Composable
+private fun DistLegend() {
+    Row(Modifier.fillMaxWidth().padding(top = 9.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        LegendItem(Vio, "keyless (the voice)")
+        LegendItem(Emerald, "users' own keys")
+        LegendItem(Amber, "measurement")
+    }
+}
+
+@Composable
+private fun LegendItem(c: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(width = 16.dp, height = 3.dp).background(c))
+        Text(label, color = Ink2, fontFamily = TopoMono, fontSize = 9.sp, modifier = Modifier.padding(start = 5.dp))
     }
 }
 
@@ -1441,6 +1593,7 @@ private fun EstateNodeRow(
  *  spec as mono pre text. (These tools genuinely are not on the server.) */
 @Composable
 private fun TopoPend(tool: String, spec: String) {
+    var open by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().padding(top = 12.dp)
             .background(AmberSoft, RoundedCornerShape(10.dp))
@@ -1450,13 +1603,22 @@ private fun TopoPend(tool: String, spec: String) {
                     style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx()))),
                 )
             }
+            .clickable { open = !open }
             .padding(11.dp),
     ) {
-        Text(
-            "PEND · $tool NOT BUILT", color = Amber, fontFamily = TopoMono, fontSize = 10.sp,
-            fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
-        )
-        Text(spec, color = PendInk, fontFamily = TopoMono, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 7.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "PEND · $tool NOT BUILT", color = Amber, fontFamily = TopoMono, fontSize = 10.sp,
+                fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (open) "▾ spec" else "▸ spec", color = Amber, fontFamily = TopoMono,
+                fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (open) {
+            Text(spec, color = PendInk, fontFamily = TopoMono, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 7.dp))
+        }
     }
 }
 
@@ -1494,37 +1656,24 @@ private fun TopoStanceRibbon(measured: Int, total: Int, unknown: Int, busErr: St
             "Topology", color = Ink, fontFamily = TopoDisp, fontWeight = FontWeight.ExtraBold,
             fontSize = 28.sp, letterSpacing = (-0.8).sp, modifier = Modifier.padding(top = 4.dp),
         )
-        Text("INFERRED", color = Ink, fontSize = 13.5.sp, modifier = Modifier.padding(top = 8.dp))
         Text(
             buildAnnotatedString {
-                append("Twelve nodes. ")
-                withStyle(bold) { append("Three heartbeats.") }
-                append(" ")
-                withStyle(code) { append("get_service_status") }
-                append(" is named for services and returns ")
-                withStyle(bold) { append("ledger tables") }
-                append("; ")
-                withStyle(code) { append("get_bus_status") }
-                append(" says NATS is unavailable; ")
-                withStyle(code) { append("get_feed_health") }
-                append(" says Prometheus is unavailable. The only genuine process liveness in this estate is ")
-                withStyle(code) { append("get_bridge_lag") }
-                append(" — ")
-                withStyle(bold) { append("three sync workers") }
-                append(". ")
-                withStyle(bold) {
-                    append("Every green dot on a process — Signal, Gateway, Executor, the venue gateway, the LLM server — is inferred from whether a table has rows.")
-                }
-                append(" ")
-                withStyle(bold) { append("That is not health. That is an autopsy.") }
-                append(" And the map draws a NATS bus with seven streams ")
-                withStyle(bold) { append("that does not exist") }
-                append(", while the three ingest lanes actually carrying the data ")
-                withStyle(bold) { append("are not on it at all") }
-                append(".")
+                withStyle(bold) { append("14 nodes · 3 real heartbeats.") }
+                append(" The rest is inferred from a table having rows — not health.")
             },
-            color = Ink, fontSize = 13.5.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 4.dp),
+            color = Ink, fontSize = 13.5.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp),
         )
+        listOf(
+            "service_status returns ledger tables, not services",
+            "NATS + Prometheus down · only bridge_lag is live",
+            "venue crossed: ~\$101 · 13 orders · 2 positions — 0 fills recorded (blind)",
+            "keeper trio crash-loop → W-71 unapplied → 502",
+        ).forEach { line ->
+            Row(Modifier.padding(top = 5.dp)) {
+                Text("▸", color = Emerald, fontFamily = TopoMono, fontSize = 11.sp, modifier = Modifier.padding(end = 6.dp))
+                Text(line, color = Ink, fontFamily = TopoMono, fontSize = 11.sp, lineHeight = 15.sp)
+            }
+        }
         StanceStat("MEASURED", "GREEN", GOOD, "$measured of $total nodes — the databank, via get_bridge_lag")
         StanceStat("NO HEALTH SOURCE", "UNKNOWN", UNK, "$unknown nodes — including the sole keyholder")
         StanceStat(
@@ -1628,19 +1777,9 @@ private fun NatsRootCauseRibbon() {
     ) {
         Text(
             buildAnnotatedString {
-                withStyle(b) { append("NATS was never provisioned. This is the root cause the whole audit keeps returning to:") }
-                append("\n\nno NATS → ")
-                withStyle(b) { append("no consumer dedupe") }
-                append(" → §7.2 idempotency violated → ")
-                withStyle(b) { append("164 duplicate candidates") }
-                append(" → 8 duplicate adjudications → ")
-                withStyle(b) { append("5,277 duplicate bank rows") }
-                append(" → ")
-                withStyle(b) { append("INFLATION 2.93×") }
-                append(" → a counterfeit ")
-                withStyle(SpanStyle(fontFamily = TopoMono, fontSize = 11.sp)) { append("net_pnl_r") }
-                append(" → a poisoned training corpus.\n\n")
-                withStyle(b) { append("One unprovisioned message bus is upstream of every number in this dashboard.") }
+                withStyle(b) { append("NATS was never provisioned — the root cause the whole audit returns to.") }
+                append(" No bus → no consumer dedupe → duplicate rows → inflated aggregates → a poisoned corpus. ")
+                withStyle(b) { append("One unprovisioned bus sits upstream of every number here.") }
             },
             color = Sev, fontSize = 12.sp, lineHeight = 18.sp,
         )
@@ -1684,18 +1823,14 @@ fun TopologyScreen(repo: MissionRepository) {
         // (No nav lambda reaches this screen — TopologyScreen(repo) is the whole call — so a tap
         //  opens the node's drawer here and prints the owning view instead of navigating to it.)
         McCard("The estate — tap any node", "get_service_status × get_bus_status × get_bridge_lag") {
-            Note(
-                "M-3 · every node opens the view that owns it. A map you cannot click is a poster. Tap a node " +
-                    "for its evidence, its findings, and a way straight into the view that owns it.",
-                INFO,
-            )
+            Note("Tap a node → its evidence + the view that owns it.", INFO)
             Column(
                 Modifier.fillMaxWidth().padding(top = 9.dp)
                     .clip(RoundedCornerShape(13.dp))
                     .background(MapBg)
                     .border(1.dp, Line, RoundedCornerShape(13.dp)),
             ) {
-                Box(Modifier.fillMaxWidth().padding(4.dp)) {
+                Box(Modifier.horizontalScroll(rememberScrollState()).padding(4.dp)) {
                     EstateMap(nodeStatuses) { i -> expanded = if (expanded == i) -1 else i }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
@@ -1737,12 +1872,25 @@ fun TopologyScreen(repo: MissionRepository) {
                 }
             }
             LawBlock(
-                "M-1 · A GREEN DOT MUST NAME ITS SOURCE",
-                "Twelve nodes, three heartbeats. Every other green on this map is inferred from a table having " +
-                    "rows. Print the source next to the dot, or do not print the dot.\n\nA dashboard that paints " +
-                    "INFERRED the same green as MEASURED is the false-green machine, drawn at estate scale.",
+                "M-1 · a green dot must name its source",
+                "INFERRED ≠ MEASURED. Print the source next to the dot, or don't print the dot.",
             )
             TopoPend("get_edge_flow", PEND_EDGE_FLOW)
+        }
+
+        // ── pDist · THE DISTRIBUTION UNIVERSE (the fork — the voice travels keyless) ──
+        McCard("The distribution universe — the voice travels", "Relay → UpONLY → the clients") {
+            Note("The fork: approved stream copied keyless. Keys never travel · books never blend.", INFO)
+            Column(
+                Modifier.fillMaxWidth().padding(top = 9.dp)
+                    .clip(RoundedCornerShape(13.dp)).background(MapBg)
+                    .border(1.dp, Line, RoundedCornerShape(13.dp)),
+            ) { Box(Modifier.horizontalScroll(rememberScrollState()).padding(4.dp)) { DistributionMap() } }
+            DistLegend()
+            LawBlock(
+                "the never-blend law · account axis",
+                "uponly-user rows never aggregate with TRIAD-fabric — separate keys, caps, books. Labeled side-by-side views only.",
+            )
         }
 
         // ── pTransport · the map draws a transport that does not exist ──
@@ -1762,9 +1910,8 @@ fun TopologyScreen(repo: MissionRepository) {
             }
             NatsRootCauseRibbon()
             LawBlock(
-                "M-2 · DRAW THE TRANSPORT THAT IS RUNNING, NOT THE ONE THAT WAS DESIGNED",
-                "A map that shows a bus which does not exist, and omits the lanes which do, will send an " +
-                    "engineer to debug the wrong thing at three in the morning.",
+                "M-2 · draw the transport that runs, not the one designed",
+                "A map that shows a bus that doesn't exist and hides the lanes that do sends you debugging the wrong thing.",
             )
             TopoPend("get_transport_actual", PEND_TRANSPORT_ACTUAL)
         }
@@ -1780,30 +1927,32 @@ fun TopologyScreen(repo: MissionRepository) {
             if (m.svc.isEmpty()) {
                 Note("— · get_service_status returned no rows (tool unavailable or empty). Nothing fabricated.", UNK)
             } else {
-                MiniTable(
-                    listOf("what it returns", "status", "what it really means"),
-                    m.svc.entries.map { (svc, st) ->
+                Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                    m.svc.entries.forEach { (svc, st) ->
                         val tone = when (st.lowercase()) {
                             "ok" -> GOOD; "stale" -> WARN; "empty" -> UNK; "no_fingerprint" -> SEV; else -> UNK
                         }
                         val means = when (st.lowercase()) {
-                            "ok" -> "the table got a row recently"
-                            "stale" -> "a writer exists and has gone quiet"
+                            "ok" -> "row recently"
+                            "stale" -> "writer stopped"
                             "empty" -> "never wrote"
-                            "no_fingerprint" -> "it cannot identify itself"
+                            "no_fingerprint" -> "cannot identify itself"
                             else -> "—"
                         }
-                        row(svc to NEUTRAL, st to tone, means to NEUTRAL)
-                    },
-                )
+                        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(svc, color = Ink, fontFamily = TopoMono, fontSize = 11.5.sp, modifier = Modifier.weight(1f))
+                            Text(st, color = tone.fg(), fontFamily = TopoMono, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                            Text("· $means", color = Ink2, fontFamily = TopoMono, fontSize = 9.5.sp, modifier = Modifier.padding(start = 6.dp))
+                        }
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(LaneHair))
+                    }
+                }
             }
-            Note("Read the distinction nobody is reading: intents and orders are STALE, not EMPTY. A writer was there. It stopped. That is a different bug from never starting — and fills and outcomes are EMPTY: they never started.", WARN)
+            Note("intents & orders are STALE (a writer stopped), not EMPTY — fills & outcomes are EMPTY (never started). Different bugs.", WARN)
             KvRow("system overview services_up", (m.servicesUp?.let { "$it / ${m.servicesTotal ?: "?"}" }) ?: "—", if (m.servicesUp == null) UNK else WARN)
             LawBlock(
-                "M-1",
-                "The front page says services_up: $okTables / $tableCount. The number is not wrong — it is answering " +
-                    "a different question than the one everybody reads it as. Six real processes have no health source " +
-                    "at all, and a five-line heartbeat file per process closes it. It is the cheapest fix on this page.",
+                "M-1 · services_up counts tables, not services",
+                "Six real processes have no health source. A 5-line heartbeat file each closes it — the cheapest fix on this page.",
             )
             TopoPend("get_process_status", PEND_PROCESS_STATUS)
         }

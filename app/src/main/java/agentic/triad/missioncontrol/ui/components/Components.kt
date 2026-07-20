@@ -220,14 +220,12 @@ fun McCard(title: String, tool: String = "", content: @Composable ColumnScope.()
             .border(1.dp, Line, RoundedCornerShape(14.dp))
             .padding(horizontal = 16.dp, vertical = 15.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Text(title, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Ink, fontSize = 15.sp, letterSpacing = (-0.2).sp)
-            if (tool.isNotEmpty()) {
-                Text(
-                    "· $tool", color = Unk, fontFamily = Mono, fontSize = 9.sp, letterSpacing = 0.5.sp,
-                    modifier = Modifier.padding(start = 7.dp, bottom = 1.dp),
-                )
-            }
+        Text(title, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Ink, fontSize = 15.sp, letterSpacing = (-0.2).sp)
+        if (tool.isNotEmpty()) {
+            Text(
+                "reads · $tool", color = Unk, fontFamily = Mono, fontSize = 9.sp, letterSpacing = 0.4.sp,
+                lineHeight = 13.sp, modifier = Modifier.padding(top = 3.dp),
+            )
         }
         Column(Modifier.padding(top = 9.dp)) { content() }
     }
