@@ -782,21 +782,31 @@ private fun IntegGrid() {
  *  absent this poll, and always for provision_nats (a mutation that does not exist). */
 @Composable
 private fun RwPendSpec(tool: String, spec: String) {
+    var open by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().padding(top = 12.dp)
             .background(AmberSoft, RoundedCornerShape(10.dp))
             .border(1.dp, Amber, RoundedCornerShape(10.dp))
+            .clickable { open = !open }
             .padding(horizontal = 13.dp, vertical = 12.dp),
     ) {
-        Text(
-            "PEND · $tool NOT BUILT",
-            color = Amber, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp, lineHeight = 14.sp,
-        )
-        Text(
-            spec, color = Ink2, fontFamily = Mono, fontSize = 10.sp, lineHeight = 15.sp,
-            modifier = Modifier.padding(top = 7.dp),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "PEND · $tool NOT BUILT",
+                color = Amber, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp, lineHeight = 14.sp, modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (open) "▾ spec" else "▸ spec", color = Amber, fontFamily = Mono, fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        if (open) {
+            Text(
+                spec, color = Ink2, fontFamily = Mono, fontSize = 10.sp, lineHeight = 15.sp,
+                modifier = Modifier.padding(top = 7.dp),
+            )
+        }
     }
 }
 

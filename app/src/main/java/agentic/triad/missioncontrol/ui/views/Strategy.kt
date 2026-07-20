@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -611,20 +612,30 @@ fun StrategyScreen(repo: MissionRepository) {
  *  Rendered as a prominent preformatted code panel, exactly like the HTML, never a one-line note. */
 @Composable
 private fun PfPendSpec(tool: String, spec: String) {
+    var open by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().padding(top = 12.dp)
             .background(AmberSoft, RoundedCornerShape(10.dp))
             .border(1.dp, Amber, RoundedCornerShape(10.dp))
+            .clickable { open = !open }
             .padding(horizontal = 13.dp, vertical = 12.dp),
     ) {
-        Text(
-            "PEND · $tool NOT BUILT",
-            color = Amber, fontFamily = FontFamily.Monospace, fontSize = 10.sp,
-            fontWeight = FontWeight.Bold, letterSpacing = 1.sp, lineHeight = 14.sp,
-        )
-        Text(
-            spec, color = Ink2, fontFamily = FontFamily.Monospace, fontSize = 10.sp, lineHeight = 15.sp,
-            modifier = Modifier.padding(top = 7.dp),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "PEND · $tool NOT BUILT",
+                color = Amber, fontFamily = FontFamily.Monospace, fontSize = 10.sp,
+                fontWeight = FontWeight.Bold, letterSpacing = 1.sp, lineHeight = 14.sp, modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (open) "▾ spec" else "▸ spec", color = Amber, fontFamily = FontFamily.Monospace, fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        if (open) {
+            Text(
+                spec, color = Ink2, fontFamily = FontFamily.Monospace, fontSize = 10.sp, lineHeight = 15.sp,
+                modifier = Modifier.padding(top = 7.dp),
+            )
+        }
     }
 }

@@ -416,17 +416,27 @@ fun LawBlock(id: String, text: String) {
  */
 @Composable
 fun PendBox(tool: String, spec: String) {
+    var open by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().padding(top = 8.dp)
             .background(AmberSoft, RoundedCornerShape(9.dp))
             .border(1.dp, Amber.copy(alpha = 0.45f), RoundedCornerShape(9.dp))
+            .clickable { open = !open }
             .padding(horizontal = 11.dp, vertical = 9.dp),
     ) {
-        Text(
-            "$tool · read-only", color = Amber, fontFamily = Mono, fontSize = 9.5.sp,
-            fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
-        )
-        Text(spec, color = Ink2, fontFamily = Mono, fontSize = 9.5.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 5.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "$tool · read-only", color = Amber, fontFamily = Mono, fontSize = 9.5.sp,
+                fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (open) "▾ spec" else "▸ spec", color = Amber, fontFamily = Mono, fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        if (open) {
+            Text(spec, color = Ink2, fontFamily = Mono, fontSize = 9.5.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 5.dp))
+        }
     }
 }
 
