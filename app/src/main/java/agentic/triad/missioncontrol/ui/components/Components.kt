@@ -351,12 +351,29 @@ fun LawBlock(id: String, text: String) {
     }
 }
 
-/** PEND boxes are hidden per operator preference — every call site renders nothing. (Previously an
- *  amber "unbuilt server tool" box; kept as a no-op so all views compile unchanged.) */
+/**
+ * A read-only control/spec disclosure row — the web `.pend` / SYSTEM-control block. Renders the tool
+ * name + its spec as a visible, clearly non-interactive amber block (matching the v5.18 HTML, which
+ * shows every control-write tool as a read-only row with its severity + spec). It is NOT a button
+ * and files nothing — the app reads and proposes; these controls apply only via the operator's
+ * `triadctl` ceremony. Used for the mcp/conn/config/gov SYSTEM panels and prompt_set.
+ * (Was a no-op while PEND boxes were suppressed; restored visible for 1:1 fidelity — the content of
+ * those panels is exactly these rows.)
+ */
 @Composable
-@Suppress("UNUSED_PARAMETER")
 fun PendBox(tool: String, spec: String) {
-    // hidden
+    Column(
+        Modifier.fillMaxWidth().padding(top = 8.dp)
+            .background(AmberSoft, RoundedCornerShape(9.dp))
+            .border(1.dp, Amber.copy(alpha = 0.45f), RoundedCornerShape(9.dp))
+            .padding(horizontal = 11.dp, vertical = 9.dp),
+    ) {
+        Text(
+            "$tool · read-only", color = Amber, fontFamily = Mono, fontSize = 9.5.sp,
+            fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
+        )
+        Text(spec, color = Ink2, fontFamily = Mono, fontSize = 9.5.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 5.dp))
+    }
 }
 
 /**
