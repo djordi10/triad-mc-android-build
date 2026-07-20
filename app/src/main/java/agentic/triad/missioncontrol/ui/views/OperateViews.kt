@@ -27,7 +27,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -1937,20 +1939,32 @@ private fun CkopsLawBlock(eyebrow: String, body: AnnotatedString) {
 /** `.pend` — the orange spec block. The dashed border is drawn solid (the ExecChkRow precedent). */
 @Composable
 private fun CkopsPendBlock(title: String, spec: String) {
+    // The schema + RULES used to sit open in every slot — pages of mono. Fold it behind a tap (default
+    // hidden), matching the collapsible PEND rows on Topology + Overview.
+    var open by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().padding(top = 12.dp)
             .background(AmberSoft, RoundedCornerShape(10.dp))
             .border(1.5.dp, Amber, RoundedCornerShape(10.dp))
+            .clickable { open = !open }
             .padding(horizontal = 13.dp, vertical = 12.dp),
     ) {
-        Text(
-            title, color = Amber, fontFamily = ExMono, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp, lineHeight = 14.sp,
-        )
-        Text(
-            spec, color = ExUntrustedInk, fontFamily = ExMono, fontSize = 10.sp, lineHeight = 15.sp,
-            modifier = Modifier.padding(top = 7.dp),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title, color = Amber, fontFamily = ExMono, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp, lineHeight = 14.sp, modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (open) "▾ spec" else "▸ spec", color = Amber, fontFamily = ExMono, fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        if (open) {
+            Text(
+                spec, color = ExUntrustedInk, fontFamily = ExMono, fontSize = 10.sp, lineHeight = 15.sp,
+                modifier = Modifier.padding(top = 7.dp),
+            )
+        }
     }
 }
 
