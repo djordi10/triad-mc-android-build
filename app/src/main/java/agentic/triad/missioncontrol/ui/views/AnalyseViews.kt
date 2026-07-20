@@ -101,6 +101,8 @@ private val DATABANK_TOOLS = listOf(
     "get_bank_rows", "get_table_census", "get_column_census",
     // Wave-3 forensic panels (HOLED stance · mcp_audit D-5 · the hole writer-vs-view · bridge lag).
     "get_bridge_lag", "get_hole_report", "get_mcp_audit_summary",
+    // Wave-4 · the broken-hop ribbon — get_decision_chain traces a decision to its stranded packet (live).
+    "get_decision_chain",
 )
 private val QUERY_CONSOLE_TOOLS = listOf("get_view_catalog", "get_query_catalog")
 
@@ -1260,6 +1262,66 @@ private fun nullKeyTables(colCensus: JsonObject?): String {
     }.joinToString(", ") { it.text("name") }
 }
 
+// ── Databank run_select seams (SELECT-only, the same seam the Query Console uses) ─────────────────────
+// The permanent record (D-4) and the log (D-2) are decisions.body forensics no zero-arg tool serves, so
+// they are read live via run_select. Honest degrade: a rejected query renders its reason + em-dashes.
+private val DBK_ZERO_HASH = "0".repeat(64)
+
+/** SQL.fab — validator.passed=true on error/timeout non-answers (the poisoned rows) + the zero bucket. */
+private val DBK_FAB_SQL =
+    "SELECT sum(CASE WHEN json_extract_string(body,'\$.validator.passed')='true' AND " +
+        "json_extract_string(body,'\$.abstain_reason') IN ('error','timeout') THEN 1 ELSE 0 END) AS poisoned, " +
+        "sum(CASE WHEN input_hash='$DBK_ZERO_HASH' THEN 1 ELSE 0 END) AS zero_hash, count(*) AS n FROM decisions"
+
+/** SQL.log — the ledger, newest first, capped at the 2,500-row limit the web console pulls. */
+private val DBK_LOG_SQL =
+    "SELECT ts_response AS t, decision_id AS d, symbol AS s, verdict AS v, conviction AS c, " +
+        "is_cache AS k, json_extract_string(body,'\$.abstain_reason') AS a, " +
+        "json_extract(body,'\$.latency_ms')::INT AS l, " +
+        "CASE WHEN input_hash='$DBK_ZERO_HASH' THEN 1 ELSE 0 END AS z, " +
+        "json_extract_string(body,'\$.validator.passed') AS p " +
+        "FROM decisions ORDER BY ts_response DESC LIMIT 2500"
+
+/** SQL.health — the writer records_total, for the stranded context.packets counter (NO-VIEW writer). */
+private val DBK_HEALTH_SQL =
+    "SELECT service, max(ts) AS newest, json_extract(body,'\$.records_total') AS records_total, " +
+        "json_extract(body,'\$.synced_seq') AS synced_seq FROM health GROUP BY 1,3,4 ORDER BY 1"
+
+/** null count for a named column in get_column_census, or null when the census did not answer (D-6). */
+private fun colCensusNull(colCensus: JsonObject?, table: String, col: String): Int? = guardDerive(null) {
+    colCensus.field("tables").rows().firstOrNull { it.text("name") == table }
+        ?.field("columns")?.rows()?.firstOrNull { it.text("name") == col }?.int("nulls")
+}
+
+/** row count for a named table in get_column_census (the denominator of the null tally), null when absent. */
+private fun colCensusRows(colCensus: JsonObject?, table: String): Int? = guardDerive(null) {
+    colCensus.field("tables").rows().firstOrNull { it.text("name") == table }?.int("rows")
+}
+
+/** A databank log filter group — a mono key then a horizontally-scrolling row of clickable chips (web .fchip). */
+@Composable
+private fun DbkChipRow(label: String, options: List<String>, selected: String, onSelect: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(label.uppercase(), fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = Color(0xFF7A857F), modifier = Modifier.padding(end = 2.dp, top = 5.dp))
+        options.forEach { opt ->
+            Text(
+                opt,
+                color = if (opt == selected) Color.White else Color(0xFF3A4A44),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                modifier = Modifier
+                    .clickable { onSelect(opt) }
+                    .background(if (opt == selected) Color(0xFF14312A) else Color(0x0D000000), RoundedCornerShape(6.dp))
+                    .border(1.dp, Color(0x22000000), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
 @Composable
 fun DatabankScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, DATABANK_TOOLS))
@@ -1328,6 +1390,53 @@ fun DatabankScreen(repo: MissionRepository) {
             permErr = res.envelope.error ?: data.text("reason", "run_select rejected")
         }
     }
+
+    // The log (D-2), the poisoned tally (D-4), the writer records_total (D-1), and the newest decision's
+    // chain (broken-hop, D-1/P4) — all read live via the same SELECT-only seam. Each degrades on its own.
+    var logRows by remember { mutableStateOf<List<JsonObject>?>(null) }
+    var logErr by remember { mutableStateOf<String?>(null) }
+    var fabRow by remember { mutableStateOf<JsonObject?>(null) }
+    var fabErr by remember { mutableStateOf<String?>(null) }
+    var healthRows by remember { mutableStateOf<List<JsonObject>?>(null) }
+    var chainObj by remember { mutableStateOf<JsonObject?>(null) }
+    // Log client-side filter state (abstain / zero-hash / cache / symbol) — filters the loaded rows in place.
+    var fltAbstain by remember { mutableStateOf("all") }
+    var fltZero by remember { mutableStateOf("all") }
+    var fltCache by remember { mutableStateOf("all") }
+    var fltSym by remember { mutableStateOf("all") }
+    LaunchedEffect(Unit) {
+        run {
+            val res = repo.tool("run_select", buildJsonObject { put("sql", DBK_LOG_SQL) })
+            val data = res.envelope.data as? JsonObject
+            if (res.envelope.ok && data != null) logRows = data.field("rows").rows()
+            else logErr = res.envelope.error ?: data.text("reason", "run_select rejected")
+        }
+        run {
+            val res = repo.tool("run_select", buildJsonObject { put("sql", DBK_FAB_SQL) })
+            val data = res.envelope.data as? JsonObject
+            if (res.envelope.ok && data != null) fabRow = data.field("rows").rows().firstOrNull()
+            else fabErr = res.envelope.error ?: data.text("reason", "run_select rejected")
+        }
+        run {
+            val res = repo.tool("run_select", buildJsonObject { put("sql", DBK_HEALTH_SQL) })
+            val data = res.envelope.data as? JsonObject
+            if (res.envelope.ok && data != null) healthRows = data.field("rows").rows()
+        }
+        // Trace the freshest decision's chain — get_decision_chain is live; the packet hop returns null.
+        val newestId = logRows?.firstOrNull()?.text("d")?.takeIf { it != "—" && it.isNotBlank() }
+        if (newestId != null) {
+            val res = repo.tool("get_decision_chain", buildJsonObject { put("decision_id", newestId) })
+            val data = res.envelope.data as? JsonObject
+            if (res.envelope.ok && data != null) chainObj = data
+        }
+    }
+    // Derived: the stranded context.packets counter, and the broken first hop of the newest chain.
+    val packets = guardDerive(null as Int?) {
+        healthRows?.firstOrNull { it.text("service").contains("context.packets") }
+            .field("records_total").str().takeIf { it != "—" && it != "null" }?.toDoubleOrNull()?.toInt()
+    }
+    val chainHop = guardDerive(null as JsonObject?) { chainObj.field("hops").rows().firstOrNull() }
+    val chainVerified: Boolean? = chainObj?.let { if (it.field("chain_verified") == null) null else it.bool("chain_verified") }
 
     ViewScaffold(
         View.DATABANK,

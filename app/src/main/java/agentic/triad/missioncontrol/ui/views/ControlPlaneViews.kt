@@ -483,6 +483,74 @@ private val MCP_TOOLS = listOf(
     "list_docs", "get_mcp_audit_summary", "get_attestation", "get_config_active", "get_proposals",
 )
 
+/** One MCP server this dashboard knows — the web CTL.DEF_SRV, verbatim: {TriadMCP, on} + {UPONLY MCP, off}.
+ *  The roster is a STATIC two-server registry (the dashboard's OWN connections — the CLIENT plane). Only the
+ *  connected (enabled) server carries a live tool-count; every other field stays honest-null (— · none ·
+ *  never · UNTESTED). The enable/disable · token · add/remove affordances are SYSTEM control-writes
+ *  (mcp_toggle / mcp_token_issue / mcp_token_revoke / mcp_servers) — rendered read-only, NEVER invoked. */
+private data class McpServer(val id: String, val name: String, val url: String, val on: Boolean)
+
+private val MCP_SERVERS = listOf(
+    McpServer("triad", "TriadMCP", "https://triad-mc.bgzr.io/mcp", on = true),
+    McpServer("uponly", "UPONLY MCP", "https://setting.bgzr.io/mcp", on = false),
+)
+
+/** One server tile — the web `.srv`: name (+ · CONNECTED when on) · a CLIENT tier tag · an ENABLED/DISABLED
+ *  badge · the url · the TOOLS/TOKEN/LAST TEST/STATUS grid (the web `.sm2`). Only the connected (enabled)
+ *  server carries [liveToolCount] from the connected-window probe; every other field is honest-null. The
+ *  enable/disable · set-token · remove buttons are CONTROL-WRITES — rendered disabled, carry an operator-
+ *  action note, and are NEVER invoked (this is a read-only mirror). */
+@Composable
+private fun McpServerTile(s: McpServer, liveToolCount: Int?) {
+    val shape = RoundedCornerShape(11.dp)
+    // Only the connected server's window has been probed; a probed-0 is a failed handshake (ERROR).
+    val probed = s.on && liveToolCount != null
+    val live = s.on && (liveToolCount ?: 0) > 0
+    val err = probed && (liveToolCount ?: 0) <= 0
+    val statusLabel = when { err -> "ERROR"; live -> "OK"; else -> "UNTESTED" }
+    val statusTone = when { err -> SEV; live -> GOOD; else -> UNK }
+    Column(
+        Modifier.fillMaxWidth().padding(top = 9.dp)
+            .background(Card, shape)
+            .border(1.dp, Line, shape)
+            .padding(horizontal = 13.dp, vertical = 11.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
+                Text(s.name, fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, color = Ink, fontSize = 13.sp)
+                if (s.on) {
+                    Text(
+                        "· CONNECTED", color = Emerald, fontFamily = FontFamily.Monospace, fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp, modifier = Modifier.padding(start = 6.dp, bottom = 1.dp),
+                    )
+                }
+            }
+            Tag("CLIENT", INFO)
+            Tag(if (s.on) "ENABLED" else "DISABLED", if (s.on) GOOD else UNK)
+        }
+        KvRow("url", s.url, NEUTRAL)
+        // The TOOLS / TOKEN / LAST TEST / STATUS grid — the web `.sm2`, honest-null off the connected window.
+        KvRow("tools", if (live) (liveToolCount ?: 0).toString() else "—", if (live) GOOD else UNK)
+        KvRow("token", "none", UNK)
+        KvRow("last test", if (probed) "live window" else "never", if (probed) NEUTRAL else UNK)
+        KvRow("status", statusLabel, statusTone)
+        // CONTROL-WRITES — the SYSTEM plane. Rendered disabled; NEVER invoked (C-2).
+        Row(Modifier.padding(top = 8.dp)) {
+            Button(onClick = {}, enabled = false, modifier = Modifier.padding(end = 8.dp)) {
+                Text(if (s.on) "Disable" else "Enable")
+            }
+            Button(onClick = {}, enabled = false, modifier = Modifier.padding(end = 8.dp)) { Text("Set / refresh token") }
+            Button(onClick = {}, enabled = false) { Text("Remove") }
+        }
+        Note(
+            "Enable / disable → mcp_toggle · set / refresh token → mcp_token_issue / mcp_token_revoke · remove → " +
+                "mcp_servers — all SYSTEM control-writes that do not exist on the estate. This read-only mirror " +
+                "renders them disabled and NEVER calls them; they are operator actions performed at triadctl.",
+            UNK,
+        )
+    }
+}
+
 @Composable
 fun McpScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, MCP_TOOLS))
@@ -531,16 +599,17 @@ fun McpScreen(repo: MissionRepository) {
             INFO,
         )
 
-        // ── the KPI strip — mirrors MCPVIEW host.strip; server-tools + missing are now real, not faked.
-        // "server tools" is the live tools/list count (— until you probe); "missing" is 16 of 16 SYSTEM
-        // control tools (a read-only estate exposes none), replacing the old fabricated ~77 / missing 4.
+        // ── the KPI strip — mirrors MCPVIEW host.strip 1:1 (6 tiles). "server tools" is the live tools/list
+        // count (— until you probe); "missing" is 16 of 16 SYSTEM control tools (a read-only estate exposes
+        // none); "mcp servers" is the roster size (2) and "enabled" the count that are on (1) — the exact
+        // final two host.strip cells, replacing the old fabricated ~77 / missing 4 / tier·CLIENT.
         StatRow(
             Triple("server tools", toolCount?.toString() ?: "—", if (toolCount == null) UNK else NEUTRAL),
             Triple("writes", "1", BAD),
             Triple("control tools", "0", BAD),
             Triple("missing", "$controlToolsMissing", BAD),
-            Triple("mcp servers", "1", NEUTRAL),
-            Triple("tier", "CLIENT", GOOD),
+            Triple("mcp servers", MCP_SERVERS.size.toString(), NEUTRAL),
+            Triple("enabled", MCP_SERVERS.count { it.on }.toString(), NEUTRAL),
         )
 
         // The connected MCP window — CLIENT-tier, real.
@@ -593,6 +662,96 @@ fun McpScreen(repo: MissionRepository) {
                     "In as many words: this is a CLIENT switch, not a SYSTEM switch.",
                 WARN,
             )
+        }
+
+        // pServers · the per-server roster — the dashboard's OWN connections (CTL.DEF_SRV, verbatim). The
+        // headline CLIENT-plane panel: TriadMCP (connected, live tool-count) + UPONLY MCP (disabled, honest-
+        // null). Placed right after the connected-window card, mirroring MCPVIEW paint() order pStance→pServers.
+        McCard("MCP servers — the dashboard's connections", "CLIENT PLANE · real, works today") {
+            Note(
+                "C-2 · this roster is real — these are the endpoints THIS dashboard knows, and which one it " +
+                    "talks through. The connected server carries a live tools/list count; the rest are honestly " +
+                    "untested (— · never · UNTESTED). But enable / disable, set token, and Add are SYSTEM " +
+                    "control-writes — this read-only mirror renders them disabled and never calls them.",
+                NEUTRAL,
+            )
+            MCP_SERVERS.forEach { srv -> McpServerTile(srv, toolCount) }
+            Row(Modifier.padding(top = 8.dp)) {
+                Button(onClick = {}, enabled = false) { Text("+ Add an MCP server") }
+            }
+            Note(
+                "+ Add an MCP server → mcp_servers, a SYSTEM control-write. Rendered disabled; never invoked (C-2).",
+                UNK,
+            )
+            LawBlock(
+                "C-2 · CLIENT tier",
+                "These are the dashboard's OWN connections — which endpoints it talks to, with which token. " +
+                    "Turning a server off here would stop THIS dashboard calling it — it does NOT stop the " +
+                    "process. That needs mcp_toggle, a SYSTEM control that does not exist. This mirror renders " +
+                    "the switch read-only.",
+            )
+        }
+
+        McCard("SYSTEM controls — the estate's MCP, absent and proposed", "propose_action") {
+            Note("Read-only page; the only tool it calls today is propose_action (AT-C7). Each control below renders its full build spec and files a proposal — EXECUTES NOTHING.", INFO)
+        }
+        PendBox("mcp_servers", "read · the MCP servers the ESTATE runs (not the dashboard's own registry). Absent ⇒ proposes.")
+        PendBox("mcp_token_issue", "CRIT · mint a scoped bearer token. ARMED: 10s + CONFIRM (C-4). Absent ⇒ probes tools/list, then proposes.")
+        PendBox("mcp_token_revoke", "HIGH · revoke a token — refuses to revoke the one you are using. ARMED. Absent ⇒ proposes.")
+        PendBox("mcp_toggle", "HIGH · start / stop an MCP SERVER PROCESS — refuses self-lockout. This, not the CLIENT disable, is what stops the process. ARMED. Absent ⇒ proposes.")
+
+        // pLedger · C-6 — the recorded-actions log, wired to get_proposals (propose_action's real record).
+        McCard("Control ledger", "C-6 · every action, including the refusals · get_proposals") {
+            Note(
+                "Every control action is recorded — executed, armed, refused, or filed as a proposal. A control " +
+                    "plane without an audit trail is not a control plane.",
+                NEUTRAL,
+            )
+            if (proposals.isEmpty()) {
+                Note("no control actions recorded — get_proposals is empty or unavailable (nothing fabricated).", UNK)
+            } else {
+                MiniTable(
+                    listOf("action", "target", "status"),
+                    proposals.take(30).map { p ->
+                        val disp = p.text("disposition", p.text("status", "open"))
+                        val tone = when (disp.lowercase()) {
+                            "pending", "open" -> WARN
+                            "accepted", "applied" -> GOOD
+                            "rejected" -> BAD
+                            else -> NEUTRAL
+                        }
+                        row(
+                            p.text("kind", p.text("proposal_id", p.text("id"))) to NEUTRAL,
+                            p.obj("args").text("target", p.text("severity", "—")) to NEUTRAL,
+                            disp to tone,
+                        )
+                    },
+                )
+            }
+            Note(
+                "The estate exposes no SYSTEM control-writes, so the only real write the app makes is " +
+                    "propose_action (it executes nothing). Filed build-proposals appear here.",
+                NEUTRAL,
+            )
+        }
+
+        LawBlock(
+            "C-1..C-6",
+            "CLIENT vs SYSTEM is never confused — a dashboard disable is not a process stop · absent controls " +
+                "render their build spec · money/lockout controls ARM first · mcp_token_revoke refuses your own " +
+                "token and mcp_toggle refuses self-lockout · every action, including refusals, is logged.",
+        )
+
+        // ── SERVER READS — beyond the page spec: get_mcp_audit_summary has no MCPVIEW counterpart. It renders
+        //    below the 1:1 panels, under a hairline divider (the OperateViews convention), so the page is an
+        //    honest superset of the HTML, not a divergence. ──
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f).height(1.dp).background(Line))
+            Text(
+                "SERVER READS — BEYOND THE PAGE SPEC", color = Unk, fontFamily = FontFamily.Monospace, fontSize = 9.sp,
+                letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 8.dp),
+            )
+            Box(Modifier.weight(1f).height(1.dp).background(Line))
         }
 
         McCard("MCP audit — calls, failures, and who may render green", "get_mcp_audit_summary") {
@@ -650,56 +809,6 @@ fun McpScreen(repo: MissionRepository) {
                 Note("No by-caller split and no deny ledger in this envelope — caller attribution renders — until the server ships it.", UNK)
             }
         }
-
-        McCard("SYSTEM controls — the estate's MCP, absent and proposed", "propose_action") {
-            Note("Read-only page; the only tool it calls today is propose_action (AT-C7). Each control below renders its full build spec and files a proposal — EXECUTES NOTHING.", INFO)
-        }
-        PendBox("mcp_servers", "read · the MCP servers the ESTATE runs (not the dashboard's own registry). Absent ⇒ proposes.")
-        PendBox("mcp_token_issue", "CRIT · mint a scoped bearer token. ARMED: 10s + CONFIRM (C-4). Absent ⇒ probes tools/list, then proposes.")
-        PendBox("mcp_token_revoke", "HIGH · revoke a token — refuses to revoke the one you are using. ARMED. Absent ⇒ proposes.")
-        PendBox("mcp_toggle", "HIGH · start / stop an MCP SERVER PROCESS — refuses self-lockout. This, not the CLIENT disable, is what stops the process. ARMED. Absent ⇒ proposes.")
-
-        // pLedger · C-6 — the recorded-actions log, wired to get_proposals (propose_action's real record).
-        McCard("Control ledger", "C-6 · every action, including the refusals · get_proposals") {
-            Note(
-                "Every control action is recorded — executed, armed, refused, or filed as a proposal. A control " +
-                    "plane without an audit trail is not a control plane.",
-                NEUTRAL,
-            )
-            if (proposals.isEmpty()) {
-                Note("no control actions recorded — get_proposals is empty or unavailable (nothing fabricated).", UNK)
-            } else {
-                MiniTable(
-                    listOf("action", "target", "status"),
-                    proposals.take(30).map { p ->
-                        val disp = p.text("disposition", p.text("status", "open"))
-                        val tone = when (disp.lowercase()) {
-                            "pending", "open" -> WARN
-                            "accepted", "applied" -> GOOD
-                            "rejected" -> BAD
-                            else -> NEUTRAL
-                        }
-                        row(
-                            p.text("kind", p.text("proposal_id", p.text("id"))) to NEUTRAL,
-                            p.obj("args").text("target", p.text("severity", "—")) to NEUTRAL,
-                            disp to tone,
-                        )
-                    },
-                )
-            }
-            Note(
-                "The estate exposes no SYSTEM control-writes, so the only real write the app makes is " +
-                    "propose_action (it executes nothing). Filed build-proposals appear here.",
-                NEUTRAL,
-            )
-        }
-
-        LawBlock(
-            "C-1..C-6",
-            "CLIENT vs SYSTEM is never confused — a dashboard disable is not a process stop · absent controls " +
-                "render their build spec · money/lockout controls ARM first · mcp_token_revoke refuses your own " +
-                "token and mcp_toggle refuses self-lockout · every action, including refusals, is logged.",
-        )
     }
 }
 

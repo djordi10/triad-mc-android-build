@@ -3,6 +3,8 @@ package agentic.triad.missioncontrol.ui.views
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -17,8 +19,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -78,6 +84,8 @@ import agentic.triad.missioncontrol.ui.components.soft
 import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.nav.View
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 private fun row(vararg cells: Pair<String, Tone>) = cells.toList()
 
@@ -918,6 +926,44 @@ private val BOOKS_TOOLS = listOf(
     "get_attribution_ledger", "get_databank", "get_model_registry", "get_limits",
     "get_shadow_bank", "get_bank_join", "get_book_definitions", "get_ladder_status",
 )
+
+// C-5 · the circularity query — run_select(decisions), verbatim from the Books wiring `SQL.conv`.
+// takes flips to 1 exactly at conviction ≥ threshold, so calibrating conviction against verdict is
+// calibrating a number against itself. `$` escaped for the json_extract_string path expression.
+private const val SQL_CONV =
+    "SELECT conviction, count(*) AS n, " +
+        "sum(CASE WHEN verdict='take' THEN 1 ELSE 0 END) AS takes, " +
+        "count(DISTINCT symbol) AS syms FROM decisions " +
+        "WHERE json_extract_string(body,'\$.abstain_reason')='model' OR verdict='take' " +
+        "GROUP BY 1 ORDER BY 1"
+
+// C-4 · the four documents that define B1 — verbatim from explain_id("B1") (BCVIEW B1SPEC). Rendered
+// as side-by-side quote boxes: the source doc labels each verbatim GBT-gate specification.
+private val B1_SPEC = listOf(
+    "MASTER-SPEC §14.4" to "Parallel evaluation tracks over identical candidates: B0 deterministic-all, B1 GBT-gated, M1 LLM-gated.",
+    "PLAN §6.4" to "Three-book runner — B0 deterministic-all, B1 GBT-gated, M1 LLM-gated on identical candidates; per-candidate verdicts ledgered forever (§14.4).",
+    "STATUS-M6" to "Three-book runner (learning/books.py) — B0 (deterministic-all), B1 (GBT gate), M1 (LLM…)",
+    "CHECKLIST" to "GBT baseline (B1) walk-forward, matched take-rate, T0 discipline",
+)
+
+/** The stance block — the HTML `.stance`: a big display verdict word (Disp ExtraBold), the said
+ *  paragraph, and a scrolling row of pill Tags. Mirrors BCVIEW.pStance; leads with the big word so
+ *  DEADLOCKED reads as the display stance, not a sibling of the ribbons under it. */
+@Composable
+private fun StanceWord(word: String, said: String, pills: List<Pair<String, Tone>>, wordTone: Tone) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        Text(
+            word.uppercase(), color = wordTone.fg(), fontFamily = Disp, fontWeight = FontWeight.ExtraBold,
+            fontSize = 30.sp, letterSpacing = (-0.8).sp,
+        )
+        Text(said, color = Ink2, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 9.dp))
+        if (pills.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 11.dp).horizontalScroll(rememberScrollState()),
+            ) { pills.forEach { (label, tone) -> Tag(label, tone) } }
+        }
+    }
+}
 
 @Composable
 fun BooksScreen(repo: MissionRepository) {
