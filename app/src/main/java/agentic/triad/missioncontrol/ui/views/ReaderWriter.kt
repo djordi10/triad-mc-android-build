@@ -36,6 +36,7 @@ import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.Note
+import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.Tag
@@ -518,20 +519,10 @@ private fun StanceBlock(m: RwModel) {
             fontSize = 30.sp, letterSpacing = (-0.8).sp,
             modifier = Modifier.padding(top = 5.dp),
         )
+        // One-line verdict; the two-paragraph autopsy that used to sit open here folds into the WhyBox below.
         Note(
-            "A writer's health is whether it wrote a row. A reader's health is whether it kept up. The two " +
-                "are measured in completely different places, and the seam between them is unwatched. So the " +
-                "estate has links that are quietly severed: ledger.context.packets holds 45,692 rows that no " +
-                "view reads — the largest writer, with zero readers. ledger.refusals has written 115 rows; its " +
-                "view exposes 18 — 97 written-but-unreadable. And the outcomes reader points at an empty DuckDB " +
-                "view while the outcomes are written somewhere else entirely (the SQLite bank).",
-            NEUTRAL,
-        )
-        Note(
-            "Every one of these is invisible on every other page, because no tool compares what a writer wrote " +
-                "to what a reader can see. The only genuine liveness in the whole plane is three sync workers — " +
-                "and NATS, the transport that should dedup between writer and reader, is not provisioned, which " +
-                "is why the bank is ${m.inflation}× inflated.",
+            "Writers and readers are measured in different places, and the seam between them is unwatched — so " +
+                "links sit quietly severed, and the bank runs ${m.inflation}× inflated.",
             NEUTRAL,
         )
         Row(
@@ -541,6 +532,24 @@ private fun StanceBlock(m: RwModel) {
             StancePill("WRITER · NO READER", m.orphans.toString(), "context.packets — 45,692 rows, 0 views", SEV)
             StancePill("WRITTEN ≠ READABLE", m.holeCount.toString(), "refusals — 115 written, 18 readable", SEV)
             StancePill("REAL HEARTBEATS", if (m.lanes.isEmpty()) "—" else m.lanes.size.toString(), "the only live readers in the plane", WARN)
+        }
+        WhyBox("THE SEAM · IN FULL") {
+            Note(
+                "A writer's health is whether it wrote a row. A reader's health is whether it kept up. The two " +
+                    "are measured in completely different places, and the seam between them is unwatched. So the " +
+                    "estate has links that are quietly severed: ledger.context.packets holds 45,692 rows that no " +
+                    "view reads — the largest writer, with zero readers. ledger.refusals has written 115 rows; its " +
+                    "view exposes 18 — 97 written-but-unreadable. And the outcomes reader points at an empty DuckDB " +
+                    "view while the outcomes are written somewhere else entirely (the SQLite bank).",
+                NEUTRAL,
+            )
+            Note(
+                "Every one of these is invisible on every other page, because no tool compares what a writer wrote " +
+                    "to what a reader can see. The only genuine liveness in the whole plane is three sync workers — " +
+                    "and NATS, the transport that should dedup between writer and reader, is not provisioned, which " +
+                    "is why the bank is ${m.inflation}× inflated.",
+                NEUTRAL,
+            )
         }
     }
 }
