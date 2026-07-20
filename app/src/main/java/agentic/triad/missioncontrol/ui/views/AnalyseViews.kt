@@ -1432,8 +1432,8 @@ fun DatabankScreen(repo: MissionRepository) {
     }
     // Derived: the stranded context.packets counter, and the broken first hop of the newest chain.
     val packets = guardDerive(null as Int?) {
-        healthRows?.firstOrNull { it.text("service").contains("context.packets") }
-            .field("records_total").str().takeIf { it != "—" && it != "null" }?.toDoubleOrNull()?.toInt()
+        val pk = healthRows?.firstOrNull { it.text("service").contains("context.packets") }
+        pk.field("records_total").str().takeIf { it != "—" && it != "null" }?.toDoubleOrNull()?.toInt()
     }
     val chainHop = guardDerive(null as JsonObject?) { chainObj.field("hops").rows().firstOrNull() }
     val chainVerified: Boolean? = chainObj?.let { if (it.field("chain_verified") == null) null else it.bool("chain_verified") }
@@ -1531,6 +1531,21 @@ fun DatabankScreen(repo: MissionRepository) {
                     )
                 }
                 Note("D-1 · the counter and the table must agree. Anything the writer counted and the reader cannot see is a hole. A delta inside ±60 rows is in-flight; a large negative delta on a stale table is not. A NO-VIEW writer (stranded packets) cannot even be counted from here.")
+            }
+            // The broken-hop ribbon (D-1 · P4) — the stranded context.packets writer + get_decision_chain
+            // dead at the first hop. Honest-null: absent packets AND chain degrade to UNKNOWN, never a claim.
+            val hopId = guardDerive("—") { chainHop.text("id") }
+            val hopVerified: Boolean? = chainHop?.let { if (it.field("hash_verified") == null) null else it.bool("hash_verified") }
+            if (packets == null && chainObj == null) {
+                Note("The context.packets counter and get_decision_chain did not answer this poll — the stranded-packet / broken-hop read is UNKNOWN, never assumed clean.", UNK)
+            } else {
+                Ribbon(
+                    "${packets?.let { "%,d".format(it) } ?: "—"} context packets, and not one is reachable.",
+                    "ledger.context.packets has a counter and NO VIEW — nothing on this page can count them independently. " +
+                        "get_decision_chain traces the newest decision to { id: ${if (hopId == "—" || hopId == "null") "null" else hopId.take(10)}, " +
+                        "hash_verified: ${hopVerified ?: "—"} } with chain_verified: ${chainVerified ?: "—"}. " +
+                        "P4 (everything replayable bit-for-bit) is not unproven — it is dead at the first hop.",
+                )
             }
         }
         McCard("Lanes & class census (D-4)", "get_databank") {
@@ -1650,6 +1665,64 @@ fun DatabankScreen(repo: MissionRepository) {
                 }
                 Note(bankRows.text("note", "every duplicate row names which row it duplicates (dup_of) — dedup before you count."), INFO)
             }
+        }
+        McCard("The bank — three vocabularies & asserted greens (D-6)", "get_databank · get_shadow_bank") {
+            // THREE VOCABULARIES FOR ONE EVENT — one failure named three incompatible ways: the ledger's
+            // abstain_reason, the bank's capture_top, and the trade-log class. Two vocabularies is a defect.
+            val ledgerVocab = listOf("error", "model", "invalid_output", "timeout")
+            val capPairs = guardDerive(emptyList<Pair<String, Int>>()) {
+                bank.field("capture_top").list().mapNotNull { e ->
+                    val p = e.list(); val name = p.getOrNull(0).str()
+                    val n = p.getOrNull(1).str().toDoubleOrNull()?.toInt() ?: return@mapNotNull null
+                    name to n
+                }
+            }
+            val bankNames = capPairs.map { it.first }
+            val missingFromBank = ledgerVocab.filter { l -> bankNames.none { it.startsWith(l) } }
+            val classVocab = listOf("REAL", "GATED", "MISSED")
+            if (bank == null && capPairs.isEmpty()) {
+                Note("get_databank did not answer — the bank vocabulary is UNKNOWN this poll.", UNK)
+            } else {
+                Note("THREE VOCABULARIES FOR ONE EVENT", INFO)
+                val vrows = (0 until maxOf(ledgerVocab.size, capPairs.size, classVocab.size)).map { i ->
+                    val lg = ledgerVocab.getOrNull(i)
+                    val cp = capPairs.getOrNull(i)
+                    val cl = classVocab.getOrNull(i)
+                    val bankOnly = cp?.let { c -> ledgerVocab.none { l -> c.first.startsWith(l) } } ?: false
+                    row(
+                        (lg ?: "—") to (if (lg != null && lg in missingFromBank) BAD else NEUTRAL),
+                        (cp?.let { "${it.first} ${"%,d".format(it.second)}" } ?: "—") to (if (bankOnly) WARN else NEUTRAL),
+                        (cl ?: "—") to NEUTRAL,
+                    )
+                }
+                MiniTable(listOf("ledger · abstain", "bank · capture_top", "trade log · class"), vrows)
+                Note("`error` — the single largest failure mode in the ledger — ${if ("error" in missingFromBank) "does not appear in the bank's capture_top at all" else "is present in both"}. get_databank admits it: capture_top is proxied by gate_reason; production joins TriadDTBNK's manifest. A proxy for a manifest that does not exist.", WARN)
+            }
+            // D-6 · an asserted green is not a measured green — print the nonulls claim beside the null counts.
+            KvRow("get_databank.nonulls (asserted)", bank.text("nonulls", "—"), if (bank.text("nonulls").contains("green")) WARN else UNK)
+            val nullTally = guardDerive(emptyList<Triple<String, Int?, Int?>>()) {
+                val refRows = colCensusRows(colCensus, "refusals")
+                val byOut = shadow.obj("by_outcome")
+                val gapN = byOut.obj("gap").int("n")
+                val nofillN = byOut.obj("no_fill").int("n")
+                val bankTotal = shadow.int("total")
+                val ingestAgeNull = bank.field("ingest").rows().firstOrNull().field("age_s").str().let { it == "—" || it == "null" }
+                val lagNull = bank.num("lag_min") == null
+                listOf(
+                    Triple("refusals.refusal_id", colCensusNull(colCensus, "refusals", "refusal_id"), refRows),
+                    Triple("refusals.check_id", colCensusNull(colCensus, "refusals", "check_id"), refRows),
+                    Triple("bank avg_pnl_r (gap + no_fill)", if (gapN != null || nofillN != null) (gapN ?: 0) + (nofillN ?: 0) else null, bankTotal),
+                    Triple("get_databank.ingest[0].age_s", if (ingestAgeNull) 1 else 0, 1),
+                    Triple("get_databank.lag_min", if (lagNull) 1 else 0, 1),
+                ).filter { (it.second ?: 0) > 0 }
+            }
+            if (nullTally.isNotEmpty()) {
+                MiniTable(
+                    listOf("…meanwhile, in the same system", "nulls", "of"),
+                    nullTally.map { (f, n, dn) -> row(f to NEUTRAL, "${n ?: "—"}" to BAD, "/ ${dn ?: "—"}" to UNK) },
+                )
+            }
+            Note("AT-DTB11 is green on a bank full of nulls — it is a claim, not a test. This panel prints the claim next to the counts and lets them argue (D-6). And the ingest contradiction: get_databank.ingest[0].age_s null while get_bridge_lag returns live ages — two tools, one registry, two answers.")
         }
         McCard("Table census — counter vs table (D-1)", "get_table_census") {
             if (tableCensus == null) {
@@ -1774,6 +1847,13 @@ fun DatabankScreen(repo: MissionRepository) {
             }
         }
         McCard("The permanent record", "run_select over decisions.body · D-4") {
+            // The poisoned headline (D-4) — validator.passed=true stamped on error/timeout non-answers the
+            // model never produced. A permanent count: you can stop making a fabrication, not unmake one.
+            val poisoned = fabRow.int("poisoned")
+            StatRow(
+                Triple("validator.passed=true on non-answers", poisoned?.let { "%,d".format(it) } ?: "—", if ((poisoned ?: 0) > 0) BAD else if (poisoned == null) UNK else GOOD),
+            )
+            if (fabRow == null && fabErr != null) Note("poisoned count did not answer: $fabErr — rendered UNKNOWN, never a fabricated figure.", UNK)
             val pr = permRow
             when {
                 permErr != null -> Note("run_select over decisions did not answer: $permErr — the permanent-record counts render UNKNOWN, never a fabricated figure.", UNK)
@@ -1798,6 +1878,24 @@ fun DatabankScreen(repo: MissionRepository) {
                 "the zero-hash bucket",
                 "The real hashes are perfectly unique — one row, one hash. The entire collision problem IS the zero bucket, and it too is permanent.",
             )
+            // THE GATEWAY FAILS IN BATCHES, NOT REQUESTS — error rows sharing a ts_response to the µs, derived
+            // from the log (loaded below). The gateway dies per-batch and stamps the whole queue one timestamp.
+            val batches = guardDerive(emptyList<Triple<String, Int, String>>()) {
+                (logRows ?: emptyList()).filter { it.text("a") == "error" }
+                    .groupBy { it.text("t") }
+                    .filter { it.value.size > 1 }
+                    .map { (ts, grp) -> Triple(ts, grp.size, grp.map { it.text("s").removeSuffix("-USDT-PERP") }.distinct().joinToString(" · ")) }
+                    .sortedByDescending { it.second }
+                    .take(6)
+            }
+            if (batches.isNotEmpty()) {
+                Note("THE GATEWAY FAILS IN BATCHES, NOT REQUESTS", BAD)
+                MiniTable(
+                    listOf("ts_response (µs)", "errors", "symbols"),
+                    batches.map { (ts, n, syms) -> row(ts to NEUTRAL, "$n rows" to BAD, syms to NEUTRAL) },
+                )
+                Note("Error rows share an identical ts_response to the microsecond, across different symbols — the gateway does not fail per-request, it fails per-batch. ts_request == ts_response there, so latency is unmeasurable by construction on those rows.")
+            }
         }
         McCard("Book definitions & independence", "get_book_definitions") {
             val books = bookDefs.obj("books")
@@ -1848,6 +1946,57 @@ fun DatabankScreen(repo: MissionRepository) {
                 Note("get_databank.ingest and get_bridge_lag are two tools over one registry — when the ingest age_s reads null while the bridge reports live ages, that disagreement is the finding, not a lag.", INFO)
             } else if (bridgeLag != null) {
                 KvRow("get_bridge_lag", "no lanes reported", UNK)
+            }
+        }
+        McCard("The log — every column, up to 2,500 rows", "run_select · decisions ORDER BY ts_response DESC") {
+            val lrows = logRows
+            when {
+                logErr != null && lrows == null ->
+                    Note("run_select over decisions did not answer: $logErr — the ledger log is not served this poll, rendered UNKNOWN, never padded with synthetic rows.", UNK)
+                lrows == null ->
+                    Note("Reading the decisions ledger (ORDER BY ts_response DESC LIMIT 2,500)…", INFO)
+                lrows.isEmpty() ->
+                    Note("decisions returned no rows.", UNK)
+                else -> {
+                    val abstainOpts = listOf("all") + lrows.mapNotNull { it.text("a").takeIf { r -> r != "—" && r.isNotBlank() } }.distinct().sorted()
+                    val symOpts = listOf("all") + lrows.map { it.text("s").removeSuffix("-USDT-PERP") }.distinct().sorted()
+                    val shown = lrows.filter { r ->
+                        (fltAbstain == "all" || r.text("a") == fltAbstain) &&
+                            (fltZero == "all" || (r.int("z") ?: 0).toString() == fltZero) &&
+                            (fltCache == "all" || (if (r.text("k").let { it == "true" || it == "1" }) "1" else "0") == fltCache) &&
+                            (fltSym == "all" || r.text("s").removeSuffix("-USDT-PERP") == fltSym)
+                    }
+                    DbkChipRow("abstain", abstainOpts, fltAbstain) { fltAbstain = it }
+                    DbkChipRow("zero-hash", listOf("all", "1", "0"), fltZero) { fltZero = it }
+                    DbkChipRow("cache", listOf("all", "1", "0"), fltCache) { fltCache = it }
+                    DbkChipRow("symbol", symOpts, fltSym) { fltSym = it }
+                    Note("${"%,d".format(shown.size)} rows shown · ${"%,d".format(lrows.size)} loaded · cap 2,500 · phone shows the newest 30", INFO)
+                    MiniTable(
+                        listOf("ts (µs)", "decision_id", "symbol", "verdict", "conv", "cache", "abstain", "latency_ms", "hash=0×64", "validator.passed"),
+                        shown.take(30).map { r ->
+                            val a = r.text("a").takeIf { it != "—" && it.isNotBlank() } ?: "take"
+                            val z = r.int("z") ?: 0
+                            val lat = r.int("l")
+                            val vp = r.text("p")
+                            val isCache = r.text("k").let { it == "true" || it == "1" }
+                            val poison = vp == "true" && (a == "error" || a == "timeout")
+                            row(
+                                r.text("t") to NEUTRAL,
+                                r.text("d").take(12) to NEUTRAL,
+                                r.text("s").removeSuffix("-USDT-PERP") to NEUTRAL,
+                                r.text("v") to NEUTRAL,
+                                "${r.int("c") ?: "—"}" to NEUTRAL,
+                                (if (isCache) "cache" else "fresh") to (if (isCache) WARN else NEUTRAL),
+                                a to reasonTone(a),
+                                "${lat ?: "—"}" to (if (lat == 0) BAD else NEUTRAL),
+                                (if (z == 1) "0×64" else "—") to (if (z == 1) BAD else UNK),
+                                vp to (if (poison) BAD else if (vp == "true") GOOD else UNK),
+                            )
+                        },
+                    )
+                    if (shown.size > 30) Note("Showing the newest 30 of ${"%,d".format(shown.size)} filtered rows — the full 2,500 are held in memory.", UNK)
+                    Note("Every column of the decisions envelope that matters, on every row: the full id, the abstain reason, the latency, whether input_hash is the zero bucket, and what the validator claimed. Rows sharing a ts are one batch failure. It does not pad itself with synthetic rows to look impressive.")
+                }
             }
         }
         LawBlock("D-1..D-7", "Counter and table must agree · every column every time · a null primary key is not a row · append-only makes fabrication permanent · the audit log audits the auditor · asserted ≠ measured green · read-only (SELECT-only).")

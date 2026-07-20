@@ -930,7 +930,7 @@ private val BOOKS_TOOLS = listOf(
 // C-5 · the circularity query — run_select(decisions), verbatim from the Books wiring `SQL.conv`.
 // takes flips to 1 exactly at conviction ≥ threshold, so calibrating conviction against verdict is
 // calibrating a number against itself. `$` escaped for the json_extract_string path expression.
-private const val SQL_CONV =
+private val SQL_CONV =
     "SELECT conviction, count(*) AS n, " +
         "sum(CASE WHEN verdict='take' THEN 1 ELSE 0 END) AS takes, " +
         "count(DISTINCT symbol) AS syms FROM decisions " +
@@ -1061,6 +1061,19 @@ fun BooksScreen(repo: MissionRepository) {
         }
     }
 
+    // C-5 · the circularity evidence, wired live via run_select on the decisions ledger. null =
+    // unserved/loading (honest-null); a list (possibly empty) = served. The 11-row conviction table
+    // proves takes=1 exactly when conviction ≥ threshold — a score calibrated against its own verdict.
+    var convRows by remember { mutableStateOf<List<JsonObject>?>(null) }
+    LaunchedEffect(Unit) {
+        convRows = try {
+            val env = repo.tool("run_select", buildJsonObject { put("sql", SQL_CONV) }).envelope
+            if (env.ok) (env.data as? JsonObject).arr("rows").rows() else null
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     ViewScaffold(
         View.BOOKS,
         stance = listOf(
@@ -1071,6 +1084,21 @@ fun BooksScreen(repo: MissionRepository) {
             Stance("books w/ rows", "$booksWithRows / 4", if (booksWithRows <= 1) SEV else WARN),
         ),
     ) {
+        StanceWord(
+            "DEADLOCKED",
+            "GE-5 — the system's own single biggest judgment-side unlock — needs a fresh-decisions curve: conviction " +
+                "joined to outcome. The conviction lives in DuckDB. The outcome lives in a SQLite file on a Mac. No view, no " +
+                "join and no tool connects them — and the bank records only a tier that relabels the abstain reason. Meanwhile the " +
+                "ladder that would promote a model demands a race in slot B against B0, B1 and K1: slot B has never run, B1 was " +
+                "spec'd as a GBT and shipped as a conviction rule, K1 is not wired, and M1 has zero rows because the gate has " +
+                "accepted zero trades. The learning loop is not slow. It is deadlocked.",
+            listOf(
+                "CALIBRATION · UNKNOWN · the join does not exist" to UNK,
+                "THE BOOKS · RED · 3 of 4 have n=0, B1 mirrors M1" to SEV,
+                "THE LADDER · RED · slot B has never run" to SEV,
+            ),
+            SEV,
+        )
         Ribbon(
             "The learning loop is not slow — it is deadlocked (C-7)",
             "go_live needs edge → edge needs M1 rows → M1 needs a trade → a trade needs go_live. A dependency " +
@@ -1136,8 +1164,17 @@ fun BooksScreen(repo: MissionRepository) {
                         labelWidth = 60,
                     )
                 }
+                // C-5 · the per-book "why it is zero" column — three books are zero for three distinct
+                // reasons, and the one book with rows is priced at zero fee (BCVIEW pBooks `why`).
+                fun bookWhy(k: String): String = when (k) {
+                    "B0" -> "only book with rows — fee-free, 2.93× duplicated, first-touch (taker) fills the ruling forbids"
+                    "B1" -> "the wrong book shipped: spec GBT gate, reality a threshold on M1's conviction; no row has reached MED"
+                    "M1" -> "the gate has accepted nothing, ever — by_class REAL ${dbReal ?: 0} / GATED ${dbGated ?: 0}"
+                    "K1" -> "not wired — needs the Kronos-fused decision join; aux_events has 0 rows"
+                    else -> "—"
+                }
                 MiniTable(
-                    listOf("book", "n", "expectancy", "CI≠0"),
+                    listOf("book", "n", "expectancy", "CI≠0", "why it is zero"),
                     listOf("B0", "B1", "M1", "K1").map { k ->
                         val b = book(k)
                         val n = b.int("n") ?: 0
@@ -1153,6 +1190,7 @@ fun BooksScreen(repo: MissionRepository) {
                             n.toString() to tone,
                             (exp?.let { fmt(it, 3) } ?: "—") to tone,
                             (ex0 ?: "—") to (if (ex0 == "true") GOOD else NEUTRAL),
+                            bookWhy(k) to (if (n == 0) SEV else NEUTRAL),
                         )
                     },
                 )
@@ -1160,6 +1198,20 @@ fun BooksScreen(repo: MissionRepository) {
                     "B0 (take-every-candidate) is net-negative over ${book("B0").int("n") ?: "—"} rows — the setups lose before " +
                         "the gate. B1 shipped 'take conviction ≥ MED', NOT the spec's GBT gate (C-4); racing M1 against a reflection " +
                         "of itself measures nothing. M1 = ${book("M1").int("n") ?: 0} rows, K1 not wired. Total ${totalDecisions ?: "—"} decisions.",
+                )
+                Ribbon(
+                    "EDGE-ACTIVATION-RULING, verbatim",
+                    "No backtest evidence for M1, B1, K1, or any aux-calibrated component — the contamination boundary (§0.1) is " +
+                        "not softened by enthusiasm. No T2+ before the T1 gate is green. No simultaneous edge+judgment windows. " +
+                        "No taker entries anywhere including sim. No threshold move without a pin.",
+                    SEV,
+                )
+                Ribbon(
+                    "\"No taker entries anywhere including sim.\"",
+                    "The bank's resolver is triad-cf/1 (first-touch), and a first-touch fill is a taker entry — the ruling's " +
+                        "explicit prohibition is violated ${bankTotal ?: "—"} times, in sim. It is exactly why B0 reads " +
+                        "+${book("B0").num("pnl_r")?.let { fmt(it, 0) } ?: "989"} R at zero cost and −645 R once it pays the 9 bps it would owe.",
+                    SEV,
                 )
             }
         }
@@ -1197,10 +1249,42 @@ fun BooksScreen(repo: MissionRepository) {
             }
             Note("feasible:false — a curve needs conviction dispersion, and with ${mass?.let { "${fmt(it * 100, 0)}%" } ?: "most"} of the mass piled on one value there are not ten deciles to fill (n=${curveN ?: "—"}). You can't calibrate against a verdict you derived (C-5).")
         }
-        McCard("You cannot calibrate a score against a verdict you derived from it (C-5)", "get_calibration · get_limits") {
+        McCard("You cannot calibrate a score against a verdict you derived from it (C-5)", "run_select · decisions · get_limits") {
             KvRow("verdict rule", "verdict := (conviction ≥ ${threshold ?: 60})", SEV)
             KvRow("support points", supportPts?.toString() ?: "—", BAD)
             KvRow("pin", if (calPinned) "pinned" else "unpinned — the threshold cannot move", if (calPinned) GOOD else SEV)
+            // The live conviction/verdict table — run_select(decisions), one row per distinct conviction.
+            // takes flips from 0 to 1 exactly at the threshold: the verdict IS the threshold applied to the score.
+            if (convRows == null) {
+                Note("run_select(decisions) unserved — the conviction↔verdict evidence table is UNKNOWN.", UNK)
+            } else {
+                val thr = threshold ?: 60
+                MiniTable(
+                    listOf("conviction", "n", "syms", "takes", "vs threshold"),
+                    convRows!!.map { r ->
+                        val conv = r.int("conviction") ?: 0
+                        val takes = r.int("takes") ?: 0
+                        val take = takes > 0
+                        row(
+                            conv.toString() to NEUTRAL,
+                            (r.int("n") ?: 0).toString() to NEUTRAL,
+                            (r.int("syms") ?: 0).toString() to NEUTRAL,
+                            takes.toString() to (if (take) GOOD else UNK),
+                            (if (take) "≥ $thr" else "< $thr") to (if (take) GOOD else UNK),
+                        )
+                    },
+                )
+                val circular = guardDerive(false) {
+                    convRows!!.isNotEmpty() && convRows!!.all { r -> ((r.int("takes") ?: 0) > 0) == ((r.int("conviction") ?: 0) >= thr) }
+                }
+                if (circular) {
+                    Note(
+                        "takes = 1 exactly when conviction ≥ $thr — with no exceptions, across all ${convRows!!.size} support " +
+                            "points. Calibrating conviction against verdict reports perfect accuracy forever and means nothing.",
+                        SEV,
+                    )
+                }
+            }
             Ribbon(
                 "takes = 1 exactly when conviction ≥ ${threshold ?: 60}",
                 "The verdict IS the threshold applied to the score. Calibrating conviction against verdict is calibrating a number against itself — it reports perfect accuracy forever and means nothing. The only external signal is the outcome, and the outcome is behind the join that does not exist.",
@@ -1210,6 +1294,10 @@ fun BooksScreen(repo: MissionRepository) {
         }
         McCard("B1 was specified as a GBT. It shipped as a copy of M1. (C-4)", "get_book_definitions × get_books_scoreboard") {
             Note("Four documents (MASTER-SPEC §14.4, PLAN §6.4, STATUS-M6, CHECKLIST) specify B1 as a GBT gate — a gradient-boosted tree on the same features, the honest control that answers 'do we even need the LLM?'.")
+            // C-4 · what four documents say B1 is — the verbatim spec quotes as side-by-side quote boxes
+            // (explain_id("B1")). Each is a GBT-gate specification; what shipped is a threshold on M1.
+            Note("what four documents say B1 is", UNK)
+            B1_SPEC.forEach { (source, quote) -> Ribbon(source, quote, NEUTRAL) }
             KvRow("what shipped", "take conviction ≥ MED", SEV)
             KvRow("independent of M1", when (bdefIndependent) { "true" -> "true"; "false" -> "FALSE — a function of M1's output"; else -> "FALSE — a function of M1's output" }, if (bdefIndependent == "true") GOOD else SEV)
             KvRow("B1 rows, ever", (book("B1").int("n") ?: 0).toString(), if ((book("B1").int("n") ?: 0) == 0) SEV else NEUTRAL)
@@ -1305,13 +1393,15 @@ private val PRINCIPLES = listOf(
 )
 
 // FINE-TUNING-PLAYBOOK §1/§5 — the five rungs, all blocked; the shared GATE (top) + SOURCE (bottom).
-private data class PipeRung(val tier: String, val name: String, val desc: String, val needs: String)
+// [why] is the per-rung reason it is blocked (BCVIEW/LPVIEW rung `why`): the reward is poisoned, the
+// labels are unusable (1,091 / gate · usable 0), render is broken, or the prior rungs do not exist.
+private data class PipeRung(val tier: String, val name: String, val desc: String, val needs: String, val why: String)
 private val LADDER_RUNGS = listOf(
-    PipeRung("T5", "Continual refresh · TIES/DARE", "rolling window + replay buffer", "T1–T3 to exist · replay buffer"),
-    PipeRung("T4", "Rationale distillation", "reverse-reasoning + teacher labels", "teacher access + forward packets"),
-    PipeRung("T3", "GRPO — reinforcement", "RL on the verifiable reward", "simulator ≥ 50 evals/s · the CUDA box"),
-    PipeRung("T2", "KTO / DPO — preference", "prefer the trades that worked", "≥ 2,000 outcome-labeled decisions"),
-    PipeRung("T1", "SFT / LoRA", "teach the format and the rule-book's judgment", "≥ 5,000 labeled candidates"),
+    PipeRung("T5", "Continual refresh · TIES/DARE", "rolling window + replay buffer", "T1–T3 to exist · replay buffer", "needs T1–T3"),
+    PipeRung("T4", "Rationale distillation", "reverse-reasoning + teacher labels", "teacher access + forward packets", "get_render is broken"),
+    PipeRung("T3", "GRPO — reinforcement", "RL on the verifiable reward", "simulator ≥ 50 evals/s · the CUDA box", "the reward is poisoned"),
+    PipeRung("T2", "KTO / DPO — preference", "prefer the trades that worked", "≥ 2,000 outcome-labeled decisions", "1,091 / 2,000 · usable: 0"),
+    PipeRung("T1", "SFT / LoRA", "teach the format and the rule-book's judgment", "≥ 5,000 labeled candidates", "1,091 / 5,000 · usable: 0"),
 )
 private val GATE_BLOCKERS = listOf("slot B never run (only A)", "B1 is a reflection of M1", "K1 not wired (aux 0 rows)", "M1 has 0 rows")
 private val SOURCE_FAULTS = listOf("zero-fee", "first-touch", "three, they disagree", "counted 2.93×")
@@ -1325,6 +1415,28 @@ private val AUDITS = listOf(
     Mitigation("audit TP-distance vs T1", "NO T1", "no T1 checkpoint to compare"),
     Mitigation("LLM-judge rationale-contradiction check", "BLOCKED", "get_render → render_context_missing"),
     Mitigation("SPEC-SHADOW-SIM honesty gates", "VACUOUS", "∅ ⊆ anything — cannot fail"),
+)
+
+// §2 — the reward function, verbatim (FINE-TUNING-PLAYBOOK §2 / LPVIEW pReward). Rendered as a mono
+// code block; the per-term notes below say why three of five terms cannot be computed today.
+private val REWARD_FORMULA = """
+    R(o, x) =
+        w_fmt · [strict-parse ∧ schema ∧ validator pass]   # 0/1 gate
+      + w_pnl · payoff(verdict(o), cf(x))                # THE CORE TERM
+      + w_cal · (1 − Brier(conviction(o)/100, tp1_event(x)))  # honesty term
+      − w_tr  · batch_penalty(|take_rate − band|)        # anti-collapse
+      − w_kl  · KL(π ‖ π_SFT)                            # anchor
+
+    weights: w_pnl 1.0 · w_cal 0.3 · w_fmt 0.2 · w_tr 0.3
+""".trimIndent()
+
+private data class RewardTermNote(val w: String, val status: String, val note: String, val tone: Tone)
+private val REWARD_TERM_NOTES = listOf(
+    RewardTermNote("w_fmt", "COMPUTABLE", "exists — and it rejects 689 of 691 model trades", GOOD),
+    RewardTermNote("w_pnl", "POISONED", "zero-fee · first-touch · 3 resolvers · 2.93× counted", SEV),
+    RewardTermNote("w_cal", "CANNOT COMPUTE", "the join does not exist — conviction in DuckDB, outcome in SQLite", BAD),
+    RewardTermNote("w_tr", "MEASURABLE", "take rate is 0.06%, the band is 10–60%", WARN),
+    RewardTermNote("w_kl", "CANNOT COMPUTE", "there is no T1 — nothing to anchor to", BAD),
 )
 
 @Composable
@@ -1460,7 +1572,7 @@ fun LearningPipelineScreen(repo: MissionRepository) {
         )
         McCard("The ladder — five rungs, one source, one gate", "get_training_readiness · FINE-TUNING-PLAYBOOK §1 · §5") {
             LadderCap("🔒", "THE GATE — identical for all rungs", "LOCKED", "registry → slot B → race vs B0/B1/K1 → CI-positive uplift", GATE_BLOCKERS, SEV)
-            LADDER_RUNGS.forEach { r -> LadderRung(r.tier, r.name, r.desc, r.needs, "BLOCKED", SEV) }
+            LADDER_RUNGS.forEach { r -> LadderRung(r.tier, r.name, r.desc, r.needs, r.why, "BLOCKED", SEV) }
             LadderCap("☠", "THE SOURCE — identical for all rungs", "POISONED", "net_pnl_r from the counterfactual simulator", SOURCE_FAULTS, SEV)
             Ribbon(
                 "This is why the page is short",
@@ -1623,6 +1735,23 @@ fun LearningPipelineScreen(repo: MissionRepository) {
             }
         }
         McCard("The reward function, term by term (§2)", "FINE-TUNING-PLAYBOOK §2 · the live ledger") {
+            // §2 verbatim — the reward is the product of five terms; the mono block keeps the ASCII
+            // alignment (scrolls sideways rather than wrapping). The per-term notes below carry the why.
+            Box(
+                Modifier.fillMaxWidth().padding(top = 6.dp)
+                    .horizontalScroll(rememberScrollState())
+                    .background(Card, RoundedCornerShape(8.dp))
+                    .border(1.dp, Line, RoundedCornerShape(8.dp))
+                    .padding(12.dp),
+            ) {
+                Text(REWARD_FORMULA, color = Ink, fontFamily = Mono, fontSize = 10.sp, lineHeight = 15.sp)
+            }
+            MiniTable(
+                listOf("term", "status", "why"),
+                REWARD_TERM_NOTES.map { t ->
+                    row(t.w to NEUTRAL, t.status to t.tone, t.note to NEUTRAL)
+                },
+            )
             // Reward terms scored by computability — COMPUTABLE=1 / MEASURABLE=0.5 / POISONED /
             // CANNOT COMPUTE=0. Three of five cannot be computed today; the core term is poisoned.
             HBarChart(
@@ -1635,7 +1764,8 @@ fun LearningPipelineScreen(repo: MissionRepository) {
             )
             Note("Three of five reward terms cannot be computed today; the one that can (w_fmt) fails 99.7% of proposals. The reward function is the product (T-1) — and it is poisoned before any RL runs.")
         }
-        McCard("§3 reward-hacks — the live audit (T-4)", "get_reward_audit") {
+        McCard("§3 is not a risk list. It is a diagnosis.", "get_reward_audit · FINE-TUNING-PLAYBOOK §3 × the live ledger") {
+            Note("The playbook names six ways RL will break the model. Five of them are already present — in a model that has never been tuned.")
             if (raHacks.isEmpty()) {
                 Note("get_reward_audit returned no rows — UNKNOWN.", UNK)
             } else {
@@ -1805,9 +1935,10 @@ private fun CycleDeadlockDiagram(nodes: List<Pair<String, String>>) {
 }
 
 /** One promotion-ladder rung — the HTML `.rg dead` row: a big tier badge, name/desc, the "needs"
- *  line, and a BLOCKED chip. [tone] tints the badge and the verdict chip. */
+ *  line, the per-rung "why it is blocked" column ([why], HTML `.rh2`), and a BLOCKED chip. [tone]
+ *  tints the badge, the why text and the verdict chip. */
 @Composable
-private fun LadderRung(tier: String, name: String, desc: String, needs: String, verdict: String, tone: Tone) {
+private fun LadderRung(tier: String, name: String, desc: String, needs: String, why: String, verdict: String, tone: Tone) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 4.dp)
             .background(tone.soft(), RoundedCornerShape(10.dp))
@@ -1821,6 +1952,11 @@ private fun LadderRung(tier: String, name: String, desc: String, needs: String, 
             Text(desc, color = Ink2, fontSize = 10.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 1.dp))
             Text(needs, color = Ink2, fontFamily = Mono, fontSize = 9.sp, lineHeight = 13.sp, modifier = Modifier.padding(top = 4.dp))
         }
+        Text(
+            why, color = tone.fg(), fontFamily = Mono, fontWeight = FontWeight.SemiBold, fontSize = 9.sp,
+            lineHeight = 12.sp, textAlign = TextAlign.End,
+            modifier = Modifier.width(90.dp).padding(end = 8.dp),
+        )
         Tag(verdict, tone)
     }
 }
