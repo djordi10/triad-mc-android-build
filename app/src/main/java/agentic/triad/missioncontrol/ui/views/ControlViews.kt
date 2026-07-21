@@ -24,6 +24,7 @@ import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
+import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
@@ -389,11 +390,13 @@ fun ConfigScreen(repo: MissionRepository) {
         PendBox("llm_swap", "CRIT · load a model into a slot — the one control that would move the system, and the most dangerous. Absent ⇒ proposes.")
         PendBox("mcp_token_issue", "CRIT · mint a scoped bearer token. Absent ⇒ proposes. mcp_token_revoke refuses the token you are using.")
 
-        LawBlock(
-            "R-C1",
-            "Every control edits a draft; one grouped apply = one fingerprint, and the GUI cannot apply. " +
-                "Bounds are laws; the compiler clamps. The read path is never a control path.",
-        )
+        WhyBox("THE LAW · R-C1") {
+            LawBlock(
+                "R-C1",
+                "Every control edits a draft; one grouped apply = one fingerprint, and the GUI cannot apply. " +
+                    "Bounds are laws; the compiler clamps. The read path is never a control path.",
+            )
+        }
     }
 }
 
