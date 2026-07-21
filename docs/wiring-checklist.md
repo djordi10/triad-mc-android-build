@@ -20,6 +20,8 @@ Status column every wiring pass (flip ⬜ → ✅). Source of truth for the wiri
   `get_decision_census`, `get_calibration`, `get_config_active`, `get_lanes`, `get_mcp_audit_summary`,
   `get_system_overview`, `get_service_status`, and most ledger-plane reads.
 - UNAVAILABLE (Fase 2, one root cause): `get_shadow_bank`, `get_databank`, `get_vr_scoreboard`.
+- PARTIAL (Fase 2): `get_books_scoreboard` responds but returns **book NAMES only** (`status: no local shadow bank`)
+  until `TRIAD_DATABANK_DSN` is set — no n/WR/EV/CI, so the Strategy books table stays on its FLEET seed.
 
 **Reference (already 100% live — the "done right" example):** `TradeLogsScreen`, `DatabankScreen`.
 
@@ -87,9 +89,9 @@ Status column every wiring pass (flip ⬜ → ✅). Source of truth for the wiri
 ### 08 Strategy (`ui/views/Strategy.kt`) — **Slice 4**
 | Panel | Status | Tool | Ref |
 |---|---|---|---|
-| Track A/B + books scoreboard (n/ev overlay) | ✅ LIVE (partial) | get_books_scoreboard | :339 |
-| Books table **WR + CI columns** | ⬜ TODO-F1 | get_books_scoreboard.wr/ciLo/ciHi (seed now) | :422 |
-| Detector table | ⬜ TODO-F1 | get_detector_registry (`FLEET_DETECTORS`) | :390 |
+| **Detector registry (emitted counts)** | ✅ LIVE | get_detector_registry (`detectors[].detector_id/emitted_count`; state derived) | :483 |
+| Track A/B + books table (n/ev/WR/CI) | ⏳ DATABANK-F2 | get_books_scoreboard returns **names only** (`["B0","B1","M1","K1"]`, status `no local shadow bank`); overlay null-degrades to the FLEET_BOOKS seed | :339,:422 |
+| Fleet detector table (borrowed WR) | 📄 SPEC | taxonomy; borrows WR from TRIAD-A (get_shadow_bank cannot group by detector_id) | :390 |
 | SMC tracks / combos tables | ⏳ DATABANK-F2 | get_shadow_bank / no combo tool | :406,:454 |
 | Where the bleed is (stop bucket) | ⏳ DATABANK-F2 | get_shadow_bank group_by | :542 |
 | detector_split / track_watch / resolve_stuck | 🔒 PEND | — | :479,:538,:610 |

@@ -491,18 +491,23 @@ fun StrategyScreen(repo: MissionRepository) {
                 )
                 Note("get_detector_registry returned no rows — falling back to the module's two live detectors (fvg_retest control · sweep_reclaim bleeding).", UNK)
             } else {
+                // get_detector_registry payload = { detectors:[{detector_id, emitted_count}], source }.
+                // There is no per-detector recording flag on the ledger plane, so the state is derived
+                // from emitted_count (>0 → EMITTING). The count column reads emitted_count (lifetime emits).
+                val regSource = dr.text("source", "ledger")
                 MiniTable(
-                    listOf("detector", "recording", "candidates"),
+                    listOf("detector", "state", "emitted"),
                     regRows.map { r ->
-                        val rec = r.text("recording", r.text("status"))
+                        val emitted = r.int("emitted_count") ?: r.int("candidates") ?: r.int("cand")
+                        val emitting = (emitted ?: 0) > 0
                         row(
-                            r.text("id", r.text("detector_id")) to NEUTRAL,
-                            rec to (if (rec.equals("live", true) || rec.equals("recording", true)) GOOD else UNK),
-                            nf(r.int("candidates") ?: r.int("cand")) to NEUTRAL,
+                            r.text("detector_id", r.text("id")) to NEUTRAL,
+                            (if (emitting) "EMITTING" else "IDLE") to (if (emitting) GOOD else UNK),
+                            nf(emitted) to NEUTRAL,
                         )
                     },
                 )
-                Note("Only two detectors emit today — the control baseline and the bleeding one. A recording detector with no per-detector outcome split still borrows its win rate from TRIAD-A.", UNK)
+                Note("Live from get_detector_registry (source: $regSource): lifetime emitted counts. Per-detector outcome splits still need get_detector_split (PEND); the ledger carries no recording flag and get_shadow_bank cannot group by detector_id, so these detectors still borrow their win rate from TRIAD-A.", UNK)
             }
         }
 
