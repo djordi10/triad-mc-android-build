@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -56,6 +59,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import agentic.triad.missioncontrol.R
 import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.TriadApp
 import agentic.triad.missioncontrol.ui.ToolsViewModel
@@ -552,7 +556,10 @@ private fun McpServerTile(s: McpServer, liveToolCount: Int?) {
                 Text(if (s.on) "Disable" else "Enable")
             }
             Button(onClick = {}, enabled = false, modifier = Modifier.padding(end = 8.dp)) { Text("Set / refresh token") }
-            Button(onClick = {}, enabled = false) { Text("Remove") }
+            // "Remove" → a trash icon (vector drawable) so all three control buttons fit on one row.
+            Button(onClick = {}, enabled = false, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                Icon(painterResource(R.drawable.ic_trash), contentDescription = "Remove", modifier = Modifier.size(18.dp))
+            }
         }
         Note(
             "Enable / disable → mcp_toggle · set / refresh token → mcp_token_issue / mcp_token_revoke · remove → " +
