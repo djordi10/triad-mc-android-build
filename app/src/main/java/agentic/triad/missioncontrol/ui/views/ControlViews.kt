@@ -23,6 +23,7 @@ import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.GateItem
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -680,9 +681,7 @@ private fun deriveGovGates(
 /** One gate row inside the board — title→verdict, then the spec line and the live evidence. */
 @Composable
 private fun GateBlock(g: GovGate) {
-    KvRow("${g.n} · ${g.title}", g.verdict, g.tone)
-    Note(g.desc, NEUTRAL)
-    Note(g.evidence, g.tone)
+    GateItem(g.n, g.title, g.verdict, g.tone, g.desc, g.evidence)
 }
 
 @Composable
@@ -828,7 +827,7 @@ fun GovernanceScreen(repo: MissionRepository) {
                 )
             }
             Note("§6.2 get_detector_liveness — the tool that would page Sev-1 on a can't-fire gate — is not built; the verdict above is derived honestly from get_sim_gap.", UNK)
-            LawBlock("G-2", "A gate whose detector cannot fire is a clock, not a check. A red stops you; a vacuous green invites you through — and it is sitting on the last gate before real money.")
+            WhyBox("THE LAW · G-2") { LawBlock("G-2", "A gate whose detector cannot fire is a clock, not a check. A red stops you; a vacuous green invites you through — and it is sitting on the last gate before real money.") }
         }
 
         // ── the silence (get_alerts · get_proposals · get_kill_state · get_breaker_state) ──
@@ -846,7 +845,7 @@ fun GovernanceScreen(repo: MissionRepository) {
                 "\"native money-path alert rules over the ledger; a page fires only when money could be unprotected — quiet is correct pre-live (0 real fills).\"",
                 SEV,
             )
-            LawBlock("G-1", "An alert scoped to a plane that does not exist is not an alert. The alert rules only watch the money path — and there is no money path, so none of it can fire.")
+            WhyBox("THE LAW · G-1") { LawBlock("G-1", "An alert scoped to a plane that does not exist is not an alert. The alert rules only watch the money path — and there is no money path, so none of it can fire.") }
         }
 
         // ── what actually works — honest UNKNOWN over a flattering default ──
@@ -864,7 +863,7 @@ fun GovernanceScreen(repo: MissionRepository) {
                     "is missing is sixteen thresholds.",
                 INFO,
             )
-            LawBlock("G-4", "Report UNKNOWN, never a flattering default. get_kill_state → { state: \"unknown\" } is the correct answer, and it is rare — the difference between this tool and get_alerts, which fails 36% and renders green.")
+            WhyBox("THE LAW · G-4") { LawBlock("G-4", "Report UNKNOWN, never a flattering default. get_kill_state → { state: \"unknown\" } is the correct answer, and it is rare — the difference between this tool and get_alerts, which fails 36% and renders green.") }
         }
 
         // ── the pin (get_attestation × get_limits × get_config_active) ──
@@ -893,7 +892,7 @@ fun GovernanceScreen(repo: MissionRepository) {
                 KvRow("unpinned_gating_money", (if (pinned) 0 else 1).toString(), if (pinned) GOOD else BAD)
                 Note("§6.4 get_pin_status (unpinned_gating_money as a release blocker) is not built; the pins above are read from get_limits / get_attestation / get_config_active.", UNK)
             }
-            LawBlock("G-6", "Config is code (P12) — honoured, once. Everything fingerprinted, the manifest the fixed point. unpinned_gating_money > 0 is a release blocker.")
+            WhyBox("THE LAW · G-6") { LawBlock("G-6", "Config is code (P12) — honoured, once. Everything fingerprinted, the manifest the fixed point. unpinned_gating_money > 0 is a release blocker.") }
         }
 
         // ── the sixteen rules that don't exist ──
@@ -909,7 +908,7 @@ fun GovernanceScreen(repo: MissionRepository) {
                     "not one can produce a page — the alert rules are scoped to a money path that has never carried a fill.",
                 SEV,
             )
-            LawBlock("G-7", "Every finding must become a rule. A finding you have to open a browser to see is a finding nobody sees at 3 a.m.")
+            WhyBox("THE LAW · G-7") { LawBlock("G-7", "Every finding must become a rule. A finding you have to open a browser to see is a finding nobody sees at 3 a.m.") }
         }
 
         // ── the governance tools' own reliability (mcp_audit) ──
@@ -927,7 +926,7 @@ fun GovernanceScreen(repo: MissionRepository) {
                     "green. You cannot govern with instruments that are down four times out of ten and lie about it the rest.",
                 SEV,
             )
-            LawBlock("G-3", "A checklist must be answerable. A gate with no evidence field is a wish. get_go_no_go_status ships nine questions, no answers, no verdict — when it ships at all.")
+            WhyBox("THE LAW · G-3") { LawBlock("G-3", "A checklist must be answerable. A gate with no evidence field is a wish. get_go_no_go_status ships nine questions, no answers, no verdict — when it ships at all.") }
         }
 
         McCard("Proposals inbox — replay only, never apply", "get_proposals") {
@@ -956,12 +955,14 @@ fun GovernanceScreen(repo: MissionRepository) {
         // the ONLY write the app makes — propose_action, which executes nothing.
         GovernanceProposeCard(repo)
 
-        LawBlock(
-            "G-1..G-7",
-            "An alert on a plane that doesn't exist isn't an alert · a gate whose detector can't fire is a clock · " +
-                "a checklist must be answerable · report UNKNOWN not a flattering default · the read path is never a " +
-                "control path · config is code · every finding must become a rule.",
-        )
+        WhyBox("THE LAWS · G-1..G-7") {
+            LawBlock(
+                "G-1..G-7",
+                "An alert on a plane that doesn't exist isn't an alert · a gate whose detector can't fire is a clock · " +
+                    "a checklist must be answerable · report UNKNOWN not a flattering default · the read path is never a " +
+                    "control path · config is code · every finding must become a rule.",
+            )
+        }
     }
 }
 

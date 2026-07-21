@@ -539,6 +539,34 @@ fun MiniTable(headers: List<String>, rows: List<List<Pair<String, Tone>>>) {
     }
 }
 
+/**
+ * One gate/check as a scannable list item — a numbered badge, the title, a right-aligned verdict tag,
+ * then the spec + evidence sublines, closed by a hairline. Replaces flat KvRow+Note+Note runs where a
+ * list of gates blurs together (the go/no-go board). Same shape as the Overview GateRow.
+ */
+@Composable
+fun GateItem(n: Int, title: String, verdict: String, tone: Tone, desc: String = "", evidence: String = "") {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(top = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(20.dp).background(Line, CircleShape), contentAlignment = Alignment.Center) {
+                Text("$n", color = Ink, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+            Text(
+                title, color = Ink, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, lineHeight = 16.sp,
+                modifier = Modifier.weight(1f).padding(start = 10.dp, end = 8.dp),
+            )
+            Tag(verdict, tone)
+        }
+        if (desc.isNotEmpty()) {
+            Text(desc, color = Ink2, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 30.dp, top = 3.dp))
+        }
+        if (evidence.isNotEmpty()) {
+            Text(evidence, color = tone.fg(), fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(start = 30.dp, top = 2.dp))
+        }
+        Box(Modifier.fillMaxWidth().padding(top = 10.dp).height(1.dp).background(Line))
+    }
+}
+
 /** Body prose inside a card — the web `.note`: sans 12px in --ink2 (or tone-coloured). */
 @Composable
 fun Note(text: String, tone: Tone = Tone.NEUTRAL) {
