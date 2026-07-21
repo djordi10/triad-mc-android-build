@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
@@ -43,6 +44,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,6 +56,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import agentic.triad.missioncontrol.R
 import agentic.triad.missioncontrol.TriadApp
 import agentic.triad.missioncontrol.ui.connection.ConnectionScreen
 import agentic.triad.missioncontrol.ui.overview.OverviewScreen
@@ -110,13 +113,15 @@ private val LiveOff = Color(0xFFE8A03D)
 private val HamInk = Color(0xFFE9EFEC)
 private val AbactInk = Color(0xFFC8D6CF)
 
-// The web `#tabbar` GLYPH + SHORT maps — one segment per tab, exactly the HTML's four.
-private val Segment.glyph: String
+// The web `#tabbar` ICON + SHORT maps — one segment per tab, exactly the HTML's four. The tab icons are
+// vector drawables (Material speed/bar-chart/science/tune) rather than text glyphs, so they render crisp
+// at any density and tint with the active state.
+private val Segment.iconRes: Int
     get() = when (this) {
-        Segment.OPERATE -> "◉"
-        Segment.ANALYSE -> "▦"
-        Segment.MODEL_LEARN -> "◈"
-        Segment.CONTROL -> "⚿"
+        Segment.OPERATE -> R.drawable.ic_seg_operate
+        Segment.ANALYSE -> R.drawable.ic_seg_analyse
+        Segment.MODEL_LEARN -> R.drawable.ic_seg_model
+        Segment.CONTROL -> R.drawable.ic_seg_control
     }
 private val Segment.shortLabel: String
     get() = when (this) {
@@ -438,9 +443,9 @@ private fun TabBar(active: Segment, onSegment: (Segment) -> Unit) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
                 ) {
-                    Text(
-                        seg.glyph, color = if (on) Pine else Ink2,
-                        fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.24.sp,
+                    Icon(
+                        painterResource(seg.iconRes), contentDescription = seg.shortLabel,
+                        tint = if (on) Pine else Ink2, modifier = Modifier.size(21.dp),
                     )
                     Text(
                         seg.shortLabel, color = if (on) Pine else Ink2, fontFamily = Mono,
