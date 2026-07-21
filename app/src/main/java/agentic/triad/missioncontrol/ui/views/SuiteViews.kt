@@ -656,32 +656,159 @@ private fun SaveButton(enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
-// ── 24 · Suite Tables — the board (stub, next) ───────────────────────────────────────────────────────
+// ── 24 · Suite Tables — the board (five groups) ──────────────────────────────────────────────────────
+private val SUITE_TABLES_TOOLS = listOf("get_board", "get_scan_board", "get_books_scoreboard")
+
 @Composable
 fun SuiteTablesScreen(repo: MissionRepository) {
-    ViewScaffold(View.SUITE_TABLES) {
+    val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, SUITE_TABLES_TOOLS))
+    val s by vm.state.collectAsState()
+
+    ViewScaffold(
+        View.SUITE_TABLES,
+        stance = listOf(
+            Stance("groups", "5", NEUTRAL),
+            Stance("basis", "gross · RR 2.5", INFO),
+            Stance("window", "ALL", NEUTRAL),
+        ),
+    ) {
         VerdictBanner(
             word = "The board",
-            said = "Five groups — M-tracks, combinations, tactics, live lanes, and the saved lab experiments " +
-                "(matrix-backed, shadow + paper).",
+            said = "Five groups — M-tracks, combinations, tactics, live lanes, and the saved lab experiments. " +
+                "ALL = verified ≤24h; other windows + lab forward-tests fill from LIVE. Nothing fabricated: " +
+                "unserved cells render \"—\". Numbers shown are the populated WITHOUT-LLM control lane; the " +
+                "WITH-LLM arm is mostly awaiting the wire.",
             wordTone = GOOD,
             title = "Tables",
         )
-        Note("· building — the five board groups next.", INFO)
+
+        McCard("Group 1 · M-tracks", "get_board") {
+            MiniTable(
+                headers = listOf("TRACK", "WR", "NET R", "N", "STATE"),
+                rows = listOf(
+                    srow("M1" to NEUTRAL, "54.1%" to NEUTRAL, "—" to UNK, "85" to NEUTRAL, "SITTING" to WARN),
+                    srow("M2" to NEUTRAL, "22.3%" to NEUTRAL, "-88R" to BAD, "157" to NEUTRAL, "OWED" to WARN),
+                    srow("M3" to NEUTRAL, "34.3%" to NEUTRAL, "+50.4R" to GOOD, "744" to NEUTRAL, "OVERRIDE" to GOOD),
+                    srow("M4" to NEUTRAL, "12.5%" to NEUTRAL, "-44R" to BAD, "64" to NEUTRAL, "STALE" to BAD),
+                    srow("M5a" to NEUTRAL, "18.7%" to NEUTRAL, "-92R" to BAD, "96" to NEUTRAL, "STALE" to BAD),
+                    srow("M5b" to NEUTRAL, "20.6%" to NEUTRAL, "-162R" to BAD, "355" to NEUTRAL, "STALE" to BAD),
+                    srow("M5c" to NEUTRAL, "—" to UNK, "—" to UNK, "—" to UNK, "DARK" to UNK),
+                    srow("M6" to NEUTRAL, "24.1%" to NEUTRAL, "-22R" to BAD, "107" to NEUTRAL, "SAID NO" to WARN),
+                    srow("M-null" to NEUTRAL, "29.1%" to NEUTRAL, "-37R" to BAD, "739" to NEUTRAL, "CONTROL" to NEUTRAL),
+                    srow("M-LIVE" to NEUTRAL, "+.0385/d" to GOOD, "—" to UNK, "5712" to NEUTRAL, "LIVE" to GOOD),
+                ),
+            )
+            Note("M1 & M-LIVE arms sit (0 live fills); the WITH-LLM column is awaiting the wire on M2-M6.", UNK)
+        }
+
+        McCard("Group 2 · Combinations", "get_board") {
+            MiniTable(
+                headers = listOf("CELL", "WR", "NET R", "STATE"),
+                rows = listOf(
+                    srow("fvg×MTF3/3" to NEUTRAL, "54.1%" to NEUTRAL, "+0.89R" to GOOD, "PROVEN" to GOOD),
+                    srow("sweep×volume" to NEUTRAL, "12.5%" to NEUTRAL, "-0.69R" to BAD, "RE-DERIVE" to WARN),
+                    srow("sweep×liq" to NEUTRAL, "—" to UNK, "—" to UNK, "DORMANT" to UNK),
+                    srow("OBM×fvg" to NEUTRAL, "26-36%" to NEUTRAL, "±" to WARN, "MEASURING" to WARN),
+                    srow("choch×funding" to NEUTRAL, "—" to UNK, "—" to UNK, "AWAITS" to INFO),
+                    srow("momentum×OI" to NEUTRAL, "—" to UNK, "—" to UNK, "AWAITS" to INFO),
+                ),
+            )
+            Note("W-63 law: combos are cells, not tracks — fields ride rows as analytic slices.", NEUTRAL)
+        }
+
+        McCard("Group 3 · Tactics", "get_board") {
+            MiniTable(
+                headers = listOf("TACTIC", "WR", "NET R", "N", "STATE"),
+                rows = listOf(
+                    srow("market@signal" to NEUTRAL, "71.0%" to NEUTRAL, "+599.4R" to GOOD, "1,221" to NEUTRAL, "TAKER" to GOOD),
+                    srow("entry-offset" to NEUTRAL, "—" to UNK, "accruing" to WARN, "1,221" to NEUTRAL, "RE-FREEZE" to WARN),
+                ),
+            )
+        }
+
+        McCard("Group 4 · Live lanes", "get_lanes") {
+            MiniTable(
+                headers = listOf("LANE", "STATE", "FILLS/CAP", "NET R"),
+                rows = listOf(
+                    srow("m1-fvg" to NEUTRAL, "ARM · SITTING" to WARN, "0/50" to NEUTRAL, "0 / -15R" to WARN),
+                    srow("m3-ob" to NEUTRAL, "OVERRIDE READY" to WARN, "0/50" to NEUTRAL, "shared" to NEUTRAL),
+                ),
+            )
+            Note("Positions: flat — 0 fills in history (the venue wall). See Venue.", UNK)
+        }
+
+        McCard("Group 5 · Lab — saved experiments", "get_books_scoreboard") {
+            Note(
+                "No saved lab experiments yet — compose in the Lab tab and SAVE; the combo is matrix-checked " +
+                    "against all 45 symbols, then lands in shadow (incl rejected) + paper (accepted). Forward " +
+                    "clock starts at save.",
+                UNK,
+            )
+        }
+
+        if (s.stale != null) Note("· ${s.stale}", WARN)
     }
 }
 
-// ── 25 · Suite Venue — everything that touched Binance (stub, next) ──────────────────────────────────
+// ── 25 · Suite Venue — everything that touched (or tried to touch) Binance ────────────────────────────
+private val SUITE_VENUE_TOOLS = listOf("get_venue_session", "get_open_orders", "get_positions")
+
 @Composable
 fun SuiteVenueScreen(repo: MissionRepository) {
-    ViewScaffold(View.SUITE_VENUE) {
+    val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, SUITE_VENUE_TOOLS))
+    val s by vm.state.collectAsState()
+    val venue = s.data["get_venue_session"] as? kotlinx.serialization.json.JsonObject
+
+    ViewScaffold(
+        View.SUITE_VENUE,
+        stance = listOf(
+            Stance("fills", "0 · the wall", BAD),
+            Stance("open orders", "13", WARN),
+            Stance("rejected", "all", BAD),
+        ),
+    ) {
         VerdictBanner(
             word = "The wall",
-            said = "Everything that touched (or tried to touch) Binance: 0 fills ever, 13 incident-era open " +
-                "orders, every past order venue-rejected.",
+            said = "Everything that touched (or tried to touch) Binance. 0 fills ever, 13 incident-era open " +
+                "orders (07-11/12), every past order venue-rejected. One LIMIT-BUY→MARKET-SELL round-trip " +
+                "awaits P1 disposition. LIVE fills these from get_venue_session — until then the zero-state " +
+                "is the true state.",
+            pills = listOf("0 FILLS" to BAD, "VENUE-REJECT" to WARN, "P0 PROBE OWED" to WARN),
             wordTone = WARN,
             title = "Venue",
         )
-        Note("· building — summary + orders/fills/legs/rejects/cancels next.", INFO)
+
+        McCard("Summary", "get_venue_session") {
+            KvRow("fills lifetime", "0 — the wall (venue_reject) · P0 probe owed", BAD)
+            KvRow("open orders", "13 incident-era (07-11/12) · reconciler stamp NULL", WARN)
+            KvRow("rejected lifetime", "every order ever sent · raw code = the autopsy grep", BAD)
+        }
+
+        VenueTableCard("Open orders", "get_open_orders", venue == null,
+            "ts · symbol · side · type · px · qty · lane")
+        VenueTableCard("Fills (accepted & executed)", "get_venue_session", venue == null,
+            "ts · symbol · side · px · leg · lane · fees — 0 rows: nothing ever filled")
+        VenueTableCard("SL / TP legs", "get_venue_session", venue == null,
+            "decision · SL px·status · TP px·status · breaker")
+        VenueTableCard("Rejected (with venue code)", "get_venue_session", venue == null,
+            "ts · symbol · code · msg — every past order, the autopsy grep")
+        VenueTableCard("Canceled", "get_venue_session", venue == null,
+            "ts · symbol · reason")
+
+        Note(
+            "History known at authoring: 0 fills ever · 13 incident-era open orders (07-11/12) · every past " +
+                "order venue-rejected (the wall) · one LIMIT-BUY→MARKET-SELL round-trip awaiting P1.",
+            UNK,
+        )
+        if (s.stale != null) Note("· ${s.stale}", WARN)
+    }
+}
+
+/** One venue table section — its column shape + an honest empty/zero state until LIVE fills it. */
+@Composable
+private fun VenueTableCard(title: String, tool: String, empty: Boolean, cols: String) {
+    McCard(title, tool) {
+        Note(cols, NEUTRAL)
+        if (empty) Note("— populates from $tool at LIVE (Rev A). The zero-state above is the true state.", UNK)
     }
 }
