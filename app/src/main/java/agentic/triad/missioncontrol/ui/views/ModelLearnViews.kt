@@ -53,6 +53,7 @@ import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.Histogram
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
+import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
@@ -537,11 +538,13 @@ fun IntelligenceScreen(repo: MissionRepository) {
                 Note("The model registry has a schema and no rows: nothing certifies which model is allowed to run — and the live model's name ends in -full-test.")
             }
         }
-        LawBlock(
-            "I-1..I-7",
-            "An abstain is not a refusal · never overwrite conviction · an uncalibrated threshold is a guess · " +
-                "limits and strategy must be the same business · a cache missing 99% is overhead · you must see what you asked · read-only.",
-        )
+        WhyBox("THE LAWS · I-1..I-7") {
+            LawBlock(
+                "I-1..I-7",
+                "An abstain is not a refusal · never overwrite conviction · an uncalibrated threshold is a guess · " +
+                    "limits and strategy must be the same business · a cache missing 99% is overhead · you must see what you asked · read-only.",
+            )
+        }
     }
 }
 
