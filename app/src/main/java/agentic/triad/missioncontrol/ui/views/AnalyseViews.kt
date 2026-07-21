@@ -95,7 +95,7 @@ private data class AnaModel(
 private val ANALYTICS_TOOLS = listOf(
     "get_analytics", "get_cag_stats", "get_take_rate", "get_conviction_histogram",
     "get_calibration", "get_attribution_ledger", "get_continuity",
-    "get_governor_refusals", "get_exec_quality",
+    "get_governor_refusals", "get_exec_quality", "get_scan_board",
 )
 private val TRADE_LOGS_TOOLS = listOf(
     "get_trade_logs", "get_row_integrity", "get_decision_census", "get_fabrication_audit",
@@ -246,6 +246,8 @@ fun AnalyticsScreen(repo: MissionRepository) {
     val attr = d["get_attribution_ledger"] as? JsonObject
     val cont = d["get_continuity"] as? JsonObject
     val exec = d["get_exec_quality"] as? JsonObject
+    val scan = d["get_scan_board"] as? JsonObject
+    val scanBoard = scan.field("board").rows()   // per-symbol {symbol, cands_24h, regime, spread_bps, screen_reason}
 
     // Crash-proof derive (blank-screen guard, mirrors the TopologyScreen fix): a malformed live payload
     // degrades to the honest-absent AnaModel() rather than throwing out of composition. The reads below
@@ -447,26 +449,48 @@ fun AnalyticsScreen(repo: MissionRepository) {
 
         // ── 01 · SIGNALS ───────────────────────────────────────────────────────────────────────────
         AnaSection("01 · Signals", "The engine plane")
-        McCard("Emission board", tool = "candidates by symbol", sub = "45 configured / 26 emitting") {
-            HBarChart(
+        val scanSymbols = scan.int("symbols")
+        val scanEmitting = scan.int("emitting")
+        val scanScreened = scan.int("screened")
+        McCard(
+            "Emission board", tool = "get_scan_board",
+            sub = if (scan != null) "${scanSymbols ?: "—"} symbols · ${scanEmitting ?: "—"} emitting" else "candidates by symbol",
+        ) {
+            val bars = guardDerive(emptyList<Bar>()) {
+                scanBoard.map { it.text("symbol").removeSuffix("-USDT-PERP") to (it.int("cands_24h") ?: 0) }
+                    .filter { it.second > 0 }.sortedByDescending { it.second }.take(12)
+                    .map { Bar(it.first, it.second.toDouble()) }
+            }
+            if (bars.isNotEmpty()) HBarChart(bars, labelWidth = 64)
+            else HBarChart(
                 listOf(
                     Bar("ETH", 507.0), Bar("BTC", 428.0), Bar("SOL", 222.0), Bar("LINK", 199.0), Bar("XRP", 192.0),
                     Bar("LTC", 162.0), Bar("AVAX", 158.0), Bar("BNB", 144.0), Bar("SUI", 130.0), Bar("DOGE", 117.0),
                 ),
                 labelWidth = 64,
             )
-            Note("19 SCREENED (DOT-verified: spread 11.7bps + regime gate).")
-            Wire(false, "get_scan_board: packet_age · spread_bps · regime · detectors · cands_24h · screen_reason")
+            Note("Candidates in the last ${scan.int("window_h") ?: 24}h. ${scanScreened ?: "—"} SCREENED (spread + regime gate).")
+            Wire(scan != null, "get_scan_board: cands_24h · regime · spread_bps · screen_reason")
         }
         McCard("Detector split", "candidates GROUP BY detector") {
             HBarChart(listOf(Bar("fvg_retest", 1877.0, GOOD), Bar("sweep_reclaim", 1295.0, BAD)), labelWidth = 110)
             Wire(false, "run_select: candidates GROUP BY detector (interim)")
         }
-        McCard("Regime + screen map", "get_regime + packet.spread_depth") {
-            KvRow("normal (both detectors)", "majors / most hours", NEUTRAL)
-            KvRow("elevated: sweep_reclaim only", "home of the 19 silents", WARN)
-            KvRow("spread screen", "tail alts 8-14bps", NEUTRAL)
-            Wire(false, "get_regime(symbol) + packet.spread_depth.spread_bps")
+        McCard("Regime + screen map", tool = "get_scan_board", sub = "regime + screen_reason per symbol") {
+            val byReason = guardDerive(emptyList<Pair<String, Int>>()) {
+                scanBoard.groupingBy { it.text("screen_reason", "—") }.eachCount()
+                    .toList().sortedByDescending { it.second }
+            }
+            if (byReason.isNotEmpty()) {
+                byReason.forEach { (reason, n) ->
+                    KvRow(reason, "$n symbols", if (reason == "ok" || reason == "—") NEUTRAL else WARN)
+                }
+            } else {
+                KvRow("normal (both detectors)", "majors / most hours", NEUTRAL)
+                KvRow("elevated: sweep_reclaim only", "home of the 19 silents", WARN)
+                KvRow("spread screen", "tail alts 8-14bps", NEUTRAL)
+            }
+            Wire(scan != null, "get_scan_board.board → screen_reason distribution")
         }
 
         // ── 02 · ADJUDICATION ──────────────────────────────────────────────────────────────────────
@@ -583,7 +607,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
                 labelWidth = 120,
             )
             Note("class1 redefined by the 45bps law: stop = max(structure, 45bps, 0.3×ATR), targets scale to gross 2.5+.")
-            Wire(analytics != null, "fail histogram → class map")
+            Wire(false, "fail histogram → class map")
         }
         McCard("Calibration deciles", "get_calibration") {
             KvRow("artifact", calib.text("status", "absent").uppercase(), if (calib.text("status") == "absent") UNK else NEUTRAL)
@@ -599,7 +623,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             KvRow("conviction shape", "bimodal — must spread", WARN)
             KvRow("rationale length", "stable", NEUTRAL)
             KvRow("abstain mix", "96% pre-T1", WARN)
-            Wire(hist != null, "get_conviction_histogram + decisions stats")
+            Wire(false, "get_conviction_histogram + decisions stats")
         }
         McCard("Continuity SLOs", "get_continuity") {
             KvRow("continuity verdict", cont.text("verdict", "—"), continuityTone(cont.text("verdict")))
@@ -617,7 +641,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
         McCard("Skip anatomy", tool = "get_conviction_histogram × bank outcomes", sub = "96% decomposed") {
             HBarChart(listOf(Bar("conviction-0 (invalid era)", 806.0, BAD), Bar("stock-22 skips", 234.0, WARN), Bar("real skips 28-35", 49.0)), labelWidth = 140)
             Note("Model-skips resolved 17.2% vs stream 25.8% — judgment signal exists under the stock-22 era.")
-            Wire(hist != null, "get_conviction_histogram × bank outcomes")
+            Wire(false, "get_conviction_histogram × bank outcomes")
         }
         McCard("MFE / MAE", tool = "get_vr_scoreboard.mfe_hist", sub = "the phases unlock (906 rows live)") {
             KvRow("P(MFE ≥ 1.75R)", "REC-2 numerator", NEUTRAL)
@@ -684,13 +708,13 @@ fun AnalyticsScreen(repo: MissionRepository) {
         McCard("Latency anatomy", "get_analytics.latency + get_latency_budgets") {
             HBarChart(listOf(Bar("p50", 4700.0), Bar("p95", 5008.0, WARN), Bar("cap", 12000.0, UNK)), unit = "ms", labelWidth = 64)
             Note("Headroom 2.4× at p95 — CAG hits land ~0ms and widen it as cluster loads.")
-            Wire(analytics != null, "get_analytics.latency + get_latency_budgets")
+            Wire(false, "get_analytics.latency + get_latency_budgets")
         }
         McCard("Attribution preview", tool = "get_attribution_ledger", sub = "the referee's ledger") {
             KvRow("ΔB0 week-over-week", "edge motion", NEUTRAL)
             KvRow("Δ(M1−B0)", "judgment motion — the only promotable number", NEUTRAL)
             KvRow("first read", "when the four-book race opens", NEUTRAL)
-            Wire(attr != null, "get_attribution_ledger — weekly cadence; attribution_required=true")
+            Wire(false, "get_attribution_ledger — weekly cadence; attribution_required=true")
         }
         WhyBox("THE LAW · A-0") {
             LawBlock("A-0", "Every number carries its exact wire — tool + field — or it renders WIRE PENDING, never a fabricated value.")

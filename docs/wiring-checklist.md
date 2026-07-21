@@ -76,9 +76,11 @@ Status column every wiring pass (flip ⬜ → ✅). Source of truth for the wiri
 | Failure hist / conviction / CAG / attribution / exec quality (top block) | ✅ LIVE | get_analytics, get_conviction_histogram, get_cag_stats, get_attribution_ledger, get_exec_quality | :375+ |
 | **Equity curve** | ⬜ TODO-F1 | get_analytics.equity_curve → LineChart | :317 |
 | **WR / PnL by hour** | ⬜ TODO-F1 | get_analytics.pnl_by_hour | :354 |
-| **Emission board** | ⬜ TODO-F1 | get_scan_board (add to set) | :450 |
+| **Emission board** | ✅ LIVE | get_scan_board (cands_24h per symbol; fixture fallback) | :450 |
+| **Regime + screen map** | ✅ LIVE | get_scan_board.board → screen_reason distribution | :465 |
+| Equity curve / WR-by-hour | ⏳ EMPTY | get_analytics.equity_curve/pnl_by_hour all-zero (no closed trades); kept demo | :317,:354 |
 | Outcome mix / WR-by-symbol / WR-by-stop / WR-by-side / Payoff dist | ⏳ DATABANK-F2 | get_vr_scoreboard (demo now) | :325,:337,:344,:349,:359 |
-| Curriculum mix / Drift / Skip anatomy / Latency / Attribution preview | 🐞 BUG | mislabeled WIRED; bodies hardcoded — set caption honest | :580,:598,:617,:684,:689 |
+| Curriculum mix / Drift / Skip anatomy / Latency / Attribution preview | 📄 SPEC | bodies hardcoded; captions now honest WIRE-PENDING | — |
 | ~14 other §01–05 cards | ⏳/📄 | get_vr_scoreboard / SQL-desc | :514–663 |
 
 ### 07 Trade Logs / 09 Databank — ✅ LIVE throughout (reference)
