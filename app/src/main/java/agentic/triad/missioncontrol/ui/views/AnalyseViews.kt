@@ -1253,7 +1253,9 @@ fun TradeLogsScreen(repo: MissionRepository) {
                 Note("abstain_reason is the most valuable column (T-3): the dominant gate names the kill — validator_reject:context_stale is the staleness veto, not a low conviction.")
             }
         }
-        LawBlock("T-1..T-7", "Dedup before you count · a fill log is survivorship-biased · abstain_reason is the most valuable column · a fabrication is worse than a null · every row reaches its replay · two vocabularies is a defect · read-only.")
+        WhyBox("THE LAW · T-1..T-7") {
+            LawBlock("T-1..T-7", "Dedup before you count · a fill log is survivorship-biased · abstain_reason is the most valuable column · a fabrication is worse than a null · every row reaches its replay · two vocabularies is a defect · read-only.")
+        }
     }
 }
 
