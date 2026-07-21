@@ -63,6 +63,7 @@ import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
+import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
@@ -322,12 +323,14 @@ fun ConnectionsScreen(repo: MissionRepository) {
                 val applied = p.preset != "—" && p.preset == appliedPreset
                 ConnProfileTile(p, blocked = p.danger && !boardClean, applied = applied)
             }
-            LawBlock(
-                "C-5 · the LIVE interlock",
-                "Until the go/no-go board is clean ($evidenced of ${if (gateCount == 0) 9 else gateCount}), the LIVE " +
-                    "profile cannot be armed by any path in this dashboard. Not greyed-out-but-clickable — refused, " +
-                    "logged, and told to your face.",
-            )
+            WhyBox("THE LAW · C-5 · the LIVE interlock") {
+                LawBlock(
+                    "C-5 · the LIVE interlock",
+                    "Until the go/no-go board is clean ($evidenced of ${if (gateCount == 0) 9 else gateCount}), the LIVE " +
+                        "profile cannot be armed by any path in this dashboard. Not greyed-out-but-clickable — refused, " +
+                        "logged, and told to your face.",
+                )
+            }
         }
 
         // pServer · the live-state tiles + the read-only SYSTEM writes (svc_restart / config_apply).
@@ -466,12 +469,14 @@ fun ConnectionsScreen(repo: MissionRepository) {
             )
         }
 
-        LawBlock(
-            "C-1..C-6",
-            "The dashboard never lies about which tier a control is in · absent controls render their full " +
-                "build spec, never a fake button · anything that can lose money must be ARMED (10s + CONFIRM) · " +
-                "LIVE is interlocked to a clean go/no-go board · every action is logged, including the refusals.",
-        )
+        WhyBox("THE LAWS · C-1..C-6") {
+            LawBlock(
+                "C-1..C-6",
+                "The dashboard never lies about which tier a control is in · absent controls render their full " +
+                    "build spec, never a fake button · anything that can lose money must be ARMED (10s + CONFIRM) · " +
+                    "LIVE is interlocked to a clean go/no-go board · every action is logged, including the refusals.",
+            )
+        }
     }
 }
 
@@ -690,13 +695,15 @@ fun McpScreen(repo: MissionRepository) {
                 "+ Add an MCP server → mcp_servers, a SYSTEM control-write. Rendered disabled; never invoked (C-2).",
                 UNK,
             )
-            LawBlock(
-                "C-2 · CLIENT tier",
-                "These are the dashboard's OWN connections — which endpoints it talks to, with which token. " +
-                    "Turning a server off here would stop THIS dashboard calling it — it does NOT stop the " +
-                    "process. That needs mcp_toggle, a SYSTEM control that does not exist. This mirror renders " +
-                    "the switch read-only.",
-            )
+            WhyBox("THE LAW · C-2 · CLIENT tier") {
+                LawBlock(
+                    "C-2 · CLIENT tier",
+                    "These are the dashboard's OWN connections — which endpoints it talks to, with which token. " +
+                        "Turning a server off here would stop THIS dashboard calling it — it does NOT stop the " +
+                        "process. That needs mcp_toggle, a SYSTEM control that does not exist. This mirror renders " +
+                        "the switch read-only.",
+                )
+            }
         }
 
         McCard("SYSTEM controls — the estate's MCP, absent and proposed", "propose_action") {
@@ -742,12 +749,14 @@ fun McpScreen(repo: MissionRepository) {
             )
         }
 
-        LawBlock(
-            "C-1..C-6",
-            "CLIENT vs SYSTEM is never confused — a dashboard disable is not a process stop · absent controls " +
-                "render their build spec · money/lockout controls ARM first · mcp_token_revoke refuses your own " +
-                "token and mcp_toggle refuses self-lockout · every action, including refusals, is logged.",
-        )
+        WhyBox("THE LAWS · C-1..C-6") {
+            LawBlock(
+                "C-1..C-6",
+                "CLIENT vs SYSTEM is never confused — a dashboard disable is not a process stop · absent controls " +
+                    "render their build spec · money/lockout controls ARM first · mcp_token_revoke refuses your own " +
+                    "token and mcp_toggle refuses self-lockout · every action, including refusals, is logged.",
+            )
+        }
 
         // ── SERVER READS — beyond the page spec: get_mcp_audit_summary has no MCPVIEW counterpart. It renders
         //    below the 1:1 panels, under a hairline divider (the OperateViews convention), so the page is an
