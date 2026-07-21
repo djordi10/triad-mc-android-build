@@ -91,6 +91,11 @@ import agentic.triad.missioncontrol.ui.views.QueryConsoleScreen
 import agentic.triad.missioncontrol.ui.views.ReaderWriterScreen
 import agentic.triad.missioncontrol.ui.views.ShadowScreen
 import agentic.triad.missioncontrol.ui.views.StrategyScreen
+import agentic.triad.missioncontrol.ui.views.SuiteLabScreen
+import agentic.triad.missioncontrol.ui.views.SuiteOverviewScreen
+import agentic.triad.missioncontrol.ui.views.SuiteSymbolsScreen
+import agentic.triad.missioncontrol.ui.views.SuiteTablesScreen
+import agentic.triad.missioncontrol.ui.views.SuiteVenueScreen
 import agentic.triad.missioncontrol.ui.views.TopologyScreen
 import agentic.triad.missioncontrol.ui.views.TradeLogsScreen
 import kotlinx.coroutines.launch
@@ -122,6 +127,7 @@ private val Segment.iconRes: Int
         Segment.ANALYSE -> R.drawable.ic_seg_analyse
         Segment.MODEL_LEARN -> R.drawable.ic_seg_model
         Segment.CONTROL -> R.drawable.ic_seg_control
+        Segment.SUITE -> R.drawable.ic_seg_suite
     }
 private val Segment.shortLabel: String
     get() = when (this) {
@@ -129,6 +135,7 @@ private val Segment.shortLabel: String
         Segment.ANALYSE -> "ANALYSE"
         Segment.MODEL_LEARN -> "MODEL"
         Segment.CONTROL -> "CONTROL"
+        Segment.SUITE -> "SUITE"
     }
 
 // `get_system_overview` field reads for the stance strip — honest nulls, never fabricated zeros.
@@ -530,6 +537,12 @@ private fun NavGraphBuilder.graph(app: TriadApp, nav: NavController) {
     composable(View.GOVERNANCE.route) { GovernanceScreen(repo) }
     composable(View.CONNECTIONS.route) { ConnectionsScreen(repo) }
     composable(View.MCP.route) { McpScreen(repo) }
+
+    composable(View.SUITE_OVERVIEW.route) { SuiteOverviewScreen(repo) }
+    composable(View.SUITE_SYMBOLS.route) { SuiteSymbolsScreen(repo) }
+    composable(View.SUITE_LAB.route) { SuiteLabScreen(repo) }
+    composable(View.SUITE_TABLES.route) { SuiteTablesScreen(repo) }
+    composable(View.SUITE_VENUE.route) { SuiteVenueScreen(repo) }
 
     composable(ROUTE_CONNECTION) {
         ConnectionScreen(app = app, onDone = { nav.popBackStack() })
