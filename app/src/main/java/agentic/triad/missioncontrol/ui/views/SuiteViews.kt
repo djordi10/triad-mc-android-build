@@ -10,9 +10,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.util.Locale
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +36,7 @@ import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.Tag
+import agentic.triad.missioncontrol.ui.components.Verdict
 import agentic.triad.missioncontrol.ui.components.Tone
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
 import agentic.triad.missioncontrol.ui.components.Tone.GOOD
@@ -436,9 +440,48 @@ private val LAB_FILS = listOf(
     "F4" to "liq", "F5" to "MTF3/3", "LAWFUL" to "30–60bps",
 )
 
+// ── lab calc helpers — the with-vs-without-LLM aggregation (doc `agg()` + `resolve()`) ──────────────
+// genmap[g] = [label, shadowCohort(incl rejected · WITHOUT LLM), paperCohort(accepted · WITH LLM)?]
+private fun genShadow(g: String?) = g?.let { SuiteMx.genmap[it]?.getOrNull(1) }
+private fun genPaper(g: String?) = g?.let { SuiteMx.genmap[it]?.getOrNull(2) }
+private fun AggS.toAgg() = Agg(n, res, wr, net, ev)
+private fun evStr(ev: Double?) = ev?.let { (if (it > 0) "+" else "") + String.format(Locale.US, "%.3f", it) } ?: "—"
+private fun evTone(ev: Double?): Tone = when { ev == null -> UNK; ev > 0 -> GOOD; ev < 0 -> BAD; else -> NEUTRAL }
+
+/** One arm's row for the calc table — [ARM, WR, EV, NET R, N]; n* means res<50 (grey until n≥50). */
+private fun armRow(arm: String, tone: Tone, a: Agg?): List<Pair<String, Tone>> =
+    if (a == null || a.res == 0)
+        listOf(arm to tone, "—" to UNK, "—" to UNK, (a?.let { "0R" } ?: "—") to UNK, (a?.n?.toString() ?: "0") to NEUTRAL)
+    else
+        listOf(
+            arm to tone,
+            (a.wr?.let { "${fmt1(it)}%" } ?: "—") to NEUTRAL,
+            evStr(a.ev) to evTone(a.ev),
+            netCell(a.net),
+            ("${a.n}" + if (a.res in 1..49) "*" else "") to NEUTRAL,
+        )
+
+/** The with-vs-without-LLM calc table — WITH LLM (paper, accepted) over WITHOUT LLM (shadow, incl rejected). */
+@Composable
+private fun LabCalcTable(paper: Agg?, shadow: Agg?) {
+    MiniTable(
+        headers = listOf("ARM", "WR", "EV", "NET R", "N"),
+        rows = listOf(
+            armRow("WITH LLM", INFO, paper),
+            armRow("WITHOUT", NEUTRAL, shadow),
+        ),
+    )
+}
+
+/** state chip for a saved/previewed combo — matrix-backed once the shadow lens carries resolved rows. */
+private fun labState(shadow: Agg?): Pair<String, Tone> =
+    if (shadow != null && shadow.res > 0) "MATRIX-BACKED · FWD" to GOOD else "REGISTERED · FWD n=0" to WARN
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SuiteLabScreen(repo: MissionRepository) {
+    val ctx = LocalContext.current
+    LaunchedEffect(Unit) { LabStore.load(ctx) }
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, SUITE_LAB_TOOLS))
     val s by vm.state.collectAsState()
 
@@ -458,10 +501,26 @@ fun SuiteLabScreen(repo: MissionRepository) {
         return "$g$f"
     }
 
+    // resolve the combo to its two lenses — computed live on every compose change (the preview).
+    val shadowA = SuiteMx.agg(genShadow(gen))
+    val paperA = SuiteMx.agg(genPaper(gen))
+
     fun save() {
         val g = gen ?: return
         if (saving) return
         saving = true; saveResult = null
+        // 1) local device copy — the doc's LABS/window.storage; feeds the Lab books + Tables at once.
+        val lab = SavedLab(
+            id = "lab_${System.currentTimeMillis()}",
+            composition = compositionName(),
+            savedUtc = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.US)
+                .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                .format(java.util.Date()),
+            known = shadowA != null && shadowA.res > 0,
+            paper = paperA?.toS(),
+            shadow = shadowA?.toS(),
+        )
+        LabStore.add(ctx, lab)
         // The propose inbox governs a fixed kind allowlist (config_change · entries_disable ·
         // phase_change · other). A lab pre-registration has no dedicated kind, so it files under the
         // "other" catch-all with a `type:lab_save` marker + the full composition in args — honest, and
@@ -488,9 +547,10 @@ fun SuiteLabScreen(repo: MissionRepository) {
             saveResult = if (env.ok) {
                 val pid = (env.data as? kotlinx.serialization.json.JsonObject)?.get("proposal_id")
                     ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: "—"
-                true to "FILED · proposal_id $pid · ${compositionName()} — a pre-registration for triadctl; the app applied NOTHING."
+                true to "SAVED to this device + FILED · proposal_id $pid — ${compositionName()} pre-registered for triadctl. Forward clock starts now."
             } else {
-                false to "REFUSED · ${env.error ?: "unknown error"}"
+                // the local book copy still holds it; only the authoritative registry didn't take it.
+                true to "SAVED to this device · authoritative registry pending (${env.error ?: "unavailable"}) — the experiment is in your Lab books + Tables now."
             }
             saving = false
         }
@@ -554,49 +614,102 @@ fun SuiteLabScreen(repo: MissionRepository) {
                 }
             }
 
-            // the result / mapping line
+            // the result / mapping line — the doc `resolve()`: known generator maps to its two cohorts.
             Note(
-                if (gen == null) "Compose something."
-                else "Unknown combo — will register fresh at n=0 across all 45 symbols. Save → lands in " +
-                    "matrix + shadow + paper (forward clock starts at save).",
+                when {
+                    gen == null -> "Compose something."
+                    genPaper(gen) == null ->
+                        "${compositionName()} maps to shadow=${genShadow(gen)} (incl rejected · WITHOUT LLM). " +
+                            "No accepted-paper cohort yet — the WITH-LLM arm registers fresh at n=0."
+                    else ->
+                        "${compositionName()} maps to shadow=${genShadow(gen)} (WITHOUT LLM) + paper=${genPaper(gen)} (WITH LLM). " +
+                            "Save → pre-registers; the forward clock starts at save."
+                },
                 if (gen == null) UNK else INFO,
             )
 
             // SAVE
             SaveButton(enabled = gen != null && !saving) { save() }
-            if (saving) Note("filing pre-registration… the app proposes; it applies nothing.", INFO)
+            if (saving) Note("saving to this device + filing the pre-registration…", INFO)
             saveResult?.let { (ok, msg) ->
-                Ribbon(if (ok) "Saved — a pre-registration for triadctl" else "Save refused", msg, if (ok) GOOD else BAD)
+                Ribbon(if (ok) "Saved" else "Save refused", msg, if (ok) GOOD else BAD)
             }
         }
 
-        // ── matrix preview (frame; per-symbol cells fill live) ──
-        McCard("Matrix preview · all 45 symbols", "get_shadow_bank") {
-            Note(
-                "Shadow arm = the full cf-priced pool INCLUDING rejected (what the model saw). Paper arm = " +
-                    "accepted only, forward-test, never on venue. Known combo → real per-symbol backfill; " +
-                    "unknown combo → registered fresh at n=0.",
-                NEUTRAL,
-            )
+        // ── matrix preview — the with-vs-without-LLM CALCULATION, computed live, NO save needed ──
+        McCard("Preview · the with-vs-without-LLM calc", "get_shadow_bank") {
             if (gen == null) {
-                Note("Compose a generator above to preview its per-symbol matrix.", UNK)
+                Note("Compose a generator above — the aggregate across all 45 symbols computes here, live, before any save.", UNK)
             } else {
-                Note("${compositionName()} — the per-symbol shadow/paper matrix populates live from the lab registry.", INFO)
+                Verdict(
+                    "The LLM gate ${llmDelta(paperA, shadowA)}",
+                    "WITH LLM = paper (accepted only) · WITHOUT LLM = shadow (incl. rejected). Both gross vs the 28.6% breakeven.",
+                    if ((paperA?.net ?: 0.0) >= (shadowA?.net ?: 0.0)) GOOD else WARN,
+                )
+                LabCalcTable(paperA, shadowA)
+                Note(
+                    "Aggregate over all 45 symbols. n* = fewer than 50 resolved (grey until the floor). " +
+                        "Filters ride as analytic slices (W-63) — they don't change the cohort.",
+                    UNK,
+                )
             }
         }
 
-        // ── the two destination books ──
-        McCard("Shadow book — saved experiments (incl. rejected)", "get_shadow_bank") {
-            val n = (s.data["get_shadow_bank"] as? kotlinx.serialization.json.JsonObject)?.size ?: 0
-            if (n == 0) Note("No experiments in the shadow book yet — save one in the composer above.", UNK)
-            else Note("$n cohort(s) live from get_shadow_bank.", GOOD)
+        // ── the two destination books — one shared store (device copy), also shown in Tables ──
+        McCard("Shadow book — WITHOUT LLM (incl. rejected)", "get_shadow_bank") {
+            if (LabStore.saved.isEmpty()) Note("No experiments yet — compose above and SAVE.", UNK)
+            else LabStore.saved.forEach { SavedLabRow(it, showShadow = true) }
         }
-        McCard("Paper book — saved experiments (accepted only, not on venue)", "get_books_scoreboard") {
-            Note("No experiments in the paper book yet — save one in the composer above.", UNK)
+        McCard("Paper book — WITH LLM (accepted only, never on venue)", "get_books_scoreboard") {
+            if (LabStore.saved.isEmpty()) Note("No experiments yet — compose above and SAVE.", UNK)
+            else LabStore.saved.forEach { SavedLabRow(it, showShadow = false) }
         }
 
         if (s.stale != null) Note("· ${s.stale}", WARN)
     }
+}
+
+/** How the LLM gate moved net R vs the raw pool — the headline of the calc. */
+private fun llmDelta(paper: Agg?, shadow: Agg?): String {
+    if (paper == null || paper.res == 0) return "has no accepted rows yet (paper n=0)"
+    val sh = shadow?.net ?: 0.0
+    val d = paper.net - sh
+    return when {
+        d > 0 -> "adds ${fmt1(d)}R (paper ${fmt1(paper.net)}R vs raw ${fmt1(sh)}R)"
+        d < 0 -> "costs ${fmt1(-d)}R (paper ${fmt1(paper.net)}R vs raw ${fmt1(sh)}R)"
+        else -> "is net-neutral (${fmt1(paper.net)}R)"
+    }
+}
+
+/** One saved experiment as a block — composition · saved · state, then its one arm's calc row. */
+@Composable
+private fun SavedLabRow(lab: SavedLab, showShadow: Boolean) {
+    val a = (if (showShadow) lab.shadow else lab.paper)?.toAgg()
+    val (st, stTone) = labState(lab.shadow?.toAgg())
+    androidx.compose.foundation.layout.Row(
+        Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Text(
+            lab.composition, color = agentic.triad.missioncontrol.ui.theme.Ink,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 12.5.sp,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        Tag(st, stTone)
+    }
+    Text(
+        "saved ${lab.savedUtc}", color = agentic.triad.missioncontrol.ui.theme.Unk,
+        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 9.5.sp,
+    )
+    MiniTable(
+        headers = listOf("ARM", "WR", "EV", "NET R", "N"),
+        rows = listOf(armRow(if (showShadow) "WITHOUT" else "WITH LLM", if (showShadow) NEUTRAL else INFO, a)),
+    )
+    androidx.compose.foundation.layout.Box(
+        Modifier.fillMaxWidth().padding(top = 6.dp).height(1.dp)
+            .background(agentic.triad.missioncontrol.ui.theme.Line),
+    )
 }
 
 /** A wrapping row of composer chips — pine fill when selected, light otherwise. */
@@ -658,94 +771,60 @@ private fun SaveButton(enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
-// ── 24 · Suite Tables — the board (five groups) ──────────────────────────────────────────────────────
-private val SUITE_TABLES_TOOLS = listOf("get_board", "get_scan_board", "get_books_scoreboard")
+// ── 24 · Suite Tables — saved lab experiments (matrix-backed · shadow + paper) ────────────────────────
+private val SUITE_TABLES_TOOLS = listOf("get_books_scoreboard")
 
 @Composable
 fun SuiteTablesScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, SUITE_TABLES_TOOLS))
     val s by vm.state.collectAsState()
+    val ctx = LocalContext.current
+    LaunchedEffect(Unit) { LabStore.load(ctx) }
 
     ViewScaffold(
         View.SUITE_TABLES,
         stance = listOf(
-            Stance("groups", "5", NEUTRAL),
+            Stance("saved", LabStore.saved.size.toString(), if (LabStore.saved.isEmpty()) UNK else GOOD),
             Stance("basis", "gross · RR 2.5", INFO),
-            Stance("window", "ALL", NEUTRAL),
+            Stance("arms", "paper + shadow", NEUTRAL),
         ),
     ) {
         VerdictBanner(
-            word = "The board",
-            said = "Five groups — M-tracks, combinations, tactics, live lanes, and the saved lab experiments. " +
-                "ALL = verified ≤24h; other windows + lab forward-tests fill from LIVE. Nothing fabricated: " +
-                "unserved cells render \"—\". Numbers shown are the populated WITHOUT-LLM control lane; the " +
-                "WITH-LLM arm is mostly awaiting the wire.",
+            word = "Saved experiments",
+            said = "Every lab combo you SAVE lands here — matrix-backed, with both lenses: paper (accepted · " +
+                "WITH LLM) + shadow (incl. rejected · WITHOUT LLM). A SAVE is a pre-registration: the forward " +
+                "clock starts at save, before any forward data exists, so it's clean by construction. Cells " +
+                "grey (n*) until n≥50 per arm.",
             wordTone = GOOD,
             title = "Tables",
         )
 
-        McCard("Group 1 · M-tracks", "get_board") {
-            MiniTable(
-                headers = listOf("TRACK", "WR", "NET R", "N", "STATE"),
-                rows = listOf(
-                    srow("M1" to NEUTRAL, "54.1%" to NEUTRAL, "—" to UNK, "85" to NEUTRAL, "SITTING" to WARN),
-                    srow("M2" to NEUTRAL, "22.3%" to NEUTRAL, "-88R" to BAD, "157" to NEUTRAL, "OWED" to WARN),
-                    srow("M3" to NEUTRAL, "34.3%" to NEUTRAL, "+50.4R" to GOOD, "744" to NEUTRAL, "OVERRIDE" to GOOD),
-                    srow("M4" to NEUTRAL, "12.5%" to NEUTRAL, "-44R" to BAD, "64" to NEUTRAL, "STALE" to BAD),
-                    srow("M5a" to NEUTRAL, "18.7%" to NEUTRAL, "-92R" to BAD, "96" to NEUTRAL, "STALE" to BAD),
-                    srow("M5b" to NEUTRAL, "20.6%" to NEUTRAL, "-162R" to BAD, "355" to NEUTRAL, "STALE" to BAD),
-                    srow("M5c" to NEUTRAL, "—" to UNK, "—" to UNK, "—" to UNK, "DARK" to UNK),
-                    srow("M6" to NEUTRAL, "24.1%" to NEUTRAL, "-22R" to BAD, "107" to NEUTRAL, "SAID NO" to WARN),
-                    srow("M-null" to NEUTRAL, "29.1%" to NEUTRAL, "-37R" to BAD, "739" to NEUTRAL, "CONTROL" to NEUTRAL),
-                    srow("M-LIVE" to NEUTRAL, "+.0385/d" to GOOD, "—" to UNK, "5712" to NEUTRAL, "LIVE" to GOOD),
-                ),
-            )
-            Note("M1 & M-LIVE arms sit (0 live fills); the WITH-LLM column is awaiting the wire on M2-M6.", UNK)
-        }
-
-        McCard("Group 2 · Combinations", "get_board") {
-            MiniTable(
-                headers = listOf("CELL", "WR", "NET R", "STATE"),
-                rows = listOf(
-                    srow("fvg×MTF3/3" to NEUTRAL, "54.1%" to NEUTRAL, "+0.89R" to GOOD, "PROVEN" to GOOD),
-                    srow("sweep×volume" to NEUTRAL, "12.5%" to NEUTRAL, "-0.69R" to BAD, "RE-DERIVE" to WARN),
-                    srow("sweep×liq" to NEUTRAL, "—" to UNK, "—" to UNK, "DORMANT" to UNK),
-                    srow("OBM×fvg" to NEUTRAL, "26-36%" to NEUTRAL, "±" to WARN, "MEASURING" to WARN),
-                    srow("choch×funding" to NEUTRAL, "—" to UNK, "—" to UNK, "AWAITS" to INFO),
-                    srow("momentum×OI" to NEUTRAL, "—" to UNK, "—" to UNK, "AWAITS" to INFO),
-                ),
-            )
-            Note("W-63 law: combos are cells, not tracks — fields ride rows as analytic slices.", NEUTRAL)
-        }
-
-        McCard("Group 3 · Tactics", "get_board") {
-            MiniTable(
-                headers = listOf("TACTIC", "WR", "NET R", "N", "STATE"),
-                rows = listOf(
-                    srow("market@signal" to NEUTRAL, "71.0%" to NEUTRAL, "+599.4R" to GOOD, "1,221" to NEUTRAL, "TAKER" to GOOD),
-                    srow("entry-offset" to NEUTRAL, "—" to UNK, "accruing" to WARN, "1,221" to NEUTRAL, "RE-FREEZE" to WARN),
-                ),
-            )
-        }
-
-        McCard("Group 4 · Live lanes", "get_lanes") {
-            MiniTable(
-                headers = listOf("LANE", "STATE", "FILLS/CAP", "NET R"),
-                rows = listOf(
-                    srow("m1-fvg" to NEUTRAL, "ARM · SITTING" to WARN, "0/50" to NEUTRAL, "0 / -15R" to WARN),
-                    srow("m3-ob" to NEUTRAL, "OVERRIDE READY" to WARN, "0/50" to NEUTRAL, "shared" to NEUTRAL),
-                ),
-            )
-            Note("Positions: flat — 0 fills in history (the venue wall). See Venue.", UNK)
-        }
-
-        McCard("Group 5 · Lab — saved experiments", "get_books_scoreboard") {
-            Note(
-                "No saved lab experiments yet — compose in the Lab tab and SAVE; the combo is matrix-checked " +
-                    "against all 45 symbols, then lands in shadow (incl rejected) + paper (accepted). Forward " +
-                    "clock starts at save.",
-                UNK,
-            )
+        if (LabStore.saved.isEmpty()) {
+            McCard("Lab — saved experiments", "get_books_scoreboard") {
+                Note(
+                    "No saved lab experiments yet — go to Lab, compose a generator × filters, preview the " +
+                        "with-vs-without-LLM calc, then SAVE. It appears here with both arms.",
+                    UNK,
+                )
+            }
+        } else {
+            LabStore.saved.forEach { lab ->
+                McCard(lab.composition, "lab · saved ${lab.savedUtc}") {
+                    val (st, stTone) = labState(lab.shadow?.toAgg())
+                    androidx.compose.foundation.layout.Row(
+                        Modifier.fillMaxWidth().padding(bottom = 2.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "both lenses", color = agentic.triad.missioncontrol.ui.theme.Ink2,
+                            fontSize = 11.5.sp, modifier = Modifier.weight(1f),
+                        )
+                        Tag(st, stTone)
+                    }
+                    LabCalcTable(lab.paper?.toAgg(), lab.shadow?.toAgg())
+                    Note("WITH LLM = paper (accepted) · WITHOUT = shadow (incl. rejected). Gross vs 28.6% BE.", UNK)
+                }
+            }
         }
 
         if (s.stale != null) Note("· ${s.stale}", WARN)
