@@ -943,7 +943,9 @@ fun TradeLogsScreen(repo: MissionRepository) {
                         },
                     )
                 }
-                LawBlock("R-INT", integ.text("rule", "no aggregate may be rendered without its inflation factor; if inflation_factor > 1.0 every bank-derived aggregate is UNTRUSTED"))
+                WhyBox("THE LAW · R-INT") {
+                    LawBlock("R-INT", integ.text("rule", "no aggregate may be rendered without its inflation factor; if inflation_factor > 1.0 every bank-derived aggregate is UNTRUSTED"))
+                }
             }
         }
         McCard("Decision census — who actually answered (T-3)", "get_decision_census") {
@@ -1017,12 +1019,14 @@ fun TradeLogsScreen(repo: MissionRepository) {
                         "threshold ${ge60.toInt()} time(s) in ${freshTotal.toInt()} fresh inferences. The void from 36 to 62 " +
                         "is empty — there is nothing to calibrate against.",
                 )
-                LawBlock(
-                    "P6 · P7",
-                    "P6 — a model that rarely abstains is a defect; the take-band (10–60%) operationalises the inverse, that " +
-                        "a model that always abstains is equally a defect. P7 — with ${support ?: "—"} support points, calibration " +
-                        "is not merely absent, it is impossible: there is no reliability curve to fit.",
-                )
+                WhyBox("THE LAW · P6 · P7") {
+                    LawBlock(
+                        "P6 · P7",
+                        "P6 — a model that rarely abstains is a defect; the take-band (10–60%) operationalises the inverse, that " +
+                            "a model that always abstains is equally a defect. P7 — with ${support ?: "—"} support points, calibration " +
+                            "is not merely absent, it is impossible: there is no reliability curve to fit.",
+                    )
+                }
             }
         }
         McCard("Fabrication audit — invented vs honestly absent (T-4)", "get_fabrication_audit") {
@@ -1849,10 +1853,12 @@ fun DatabankScreen(repo: MissionRepository) {
                         },
                     )
                 }
-                LawBlock(
-                    "D-5",
-                    mcpAudit.text("rule", "the audit log audits the auditor — a tool whose fail_rate exceeds 0.05 may not have its output rendered as a green state anywhere in Mission Control. The server enforces it, not every GUI one at a time, from memory."),
-                )
+                WhyBox("THE LAW · D-5") {
+                    LawBlock(
+                        "D-5",
+                        mcpAudit.text("rule", "the audit log audits the auditor — a tool whose fail_rate exceeds 0.05 may not have its output rendered as a green state anywhere in Mission Control. The server enforces it, not every GUI one at a time, from memory."),
+                    )
+                }
             }
         }
         McCard("The permanent record", "run_select over decisions.body · D-4") {
@@ -1883,10 +1889,12 @@ fun DatabankScreen(repo: MissionRepository) {
                 "You can stop making a fabrication. You cannot unmake one. Any dataset built from this ledger — any calibration " +
                     "fitted over it, any fine-tune that samples it — inherits the lie. A 'we fixed it' panel that hides the historical count is itself a fabrication.",
             )
-            LawBlock(
-                "the zero-hash bucket",
-                "The real hashes are perfectly unique — one row, one hash. The entire collision problem IS the zero bucket, and it too is permanent.",
-            )
+            WhyBox("THE LAW · the zero-hash bucket") {
+                LawBlock(
+                    "the zero-hash bucket",
+                    "The real hashes are perfectly unique — one row, one hash. The entire collision problem IS the zero bucket, and it too is permanent.",
+                )
+            }
             // THE GATEWAY FAILS IN BATCHES, NOT REQUESTS — error rows sharing a ts_response to the µs, derived
             // from the log (loaded below). The gateway dies per-batch and stamps the whole queue one timestamp.
             val batches = guardDerive(emptyList<Triple<String, Int, String>>()) {
@@ -2008,7 +2016,9 @@ fun DatabankScreen(repo: MissionRepository) {
                 }
             }
         }
-        LawBlock("D-1..D-7", "Counter and table must agree · every column every time · a null primary key is not a row · append-only makes fabrication permanent · the audit log audits the auditor · asserted ≠ measured green · read-only (SELECT-only).")
+        WhyBox("THE LAWS · D-1..D-7") {
+            LawBlock("D-1..D-7", "Counter and table must agree · every column every time · a null primary key is not a row · append-only makes fabrication permanent · the audit log audits the auditor · asserted ≠ measured green · read-only (SELECT-only).")
+        }
     }
 }
 
