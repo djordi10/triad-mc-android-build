@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -43,6 +44,7 @@ import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
+import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.Tone
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
 import agentic.triad.missioncontrol.ui.components.Tone.GOOD
@@ -191,7 +193,10 @@ private fun Wire(live: Boolean, tool: String) {
 @Composable
 private fun AnaSection(eyebrow: String, title: String) {
     Note(eyebrow.uppercase(), GOOD)
-    Text(title, fontFamily = FontFamily.Default, fontSize = 21.sp, modifier = Modifier.padding(top = 1.dp, bottom = 6.dp))
+    Text(
+        title, fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, fontSize = 21.sp,
+        letterSpacing = (-0.3).sp, modifier = Modifier.padding(top = 1.dp, bottom = 6.dp),
+    )
 }
 
 /** One workbench filter chip — dark pine fill when selected (the .fchip.on state), light otherwise. */
@@ -682,7 +687,9 @@ fun AnalyticsScreen(repo: MissionRepository) {
             KvRow("first read", "when the four-book race opens", NEUTRAL)
             Wire(attr != null, "get_attribution_ledger — weekly cadence; attribution_required=true")
         }
-        LawBlock("A-0", "Every number carries its exact wire — tool + field — or it renders WIRE PENDING, never a fabricated value.")
+        WhyBox("THE LAW · A-0") {
+            LawBlock("A-0", "Every number carries its exact wire — tool + field — or it renders WIRE PENDING, never a fabricated value.")
+        }
     }
 }
 
