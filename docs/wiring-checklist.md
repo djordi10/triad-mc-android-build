@@ -137,14 +137,20 @@ Status column every wiring pass (flip ⬜ → ✅). Source of truth for the wiri
 
 ---
 
+## Global chrome (app-bar, every view — `ui/nav/MissionNav.kt`)
+| Panel | Status | Tool | Ref |
+|---|---|---|---|
+| Stance strip PHASE/ENTRIES/MODE/PNL/POSITIONS/ALERTS/SERVICES | ✅ LIVE | get_system_overview | StanceStrip |
+
 ## SUITE — **Slice 3** (built from doc snapshot; per-symbol stays Fase-2)
 | Panel | Status | Tool | Ref |
 |---|---|---|---|
-| Overview aggregate stance/verdict | ⬜ TODO-F1 | get_bank_priced | :122 |
+| Overview aggregate stance (bank rows / net R) + Priced-bank card | ✅ LIVE | get_bank_priced (overlay; snapshot fallback) | :122 |
 | Overview per-symbol TRIAD-A / M-null tables | ⏳ DATABANK-F2 | get_shadow_bank (`AGG_ROWS` snapshot) | :78,:153 |
 | Symbols directory + per-symbol detail | ⏳ DATABANK-F2 | get_shadow_bank/get_decision_census (`SYM_DIR`/`AGG_ROWS`) | :251 |
 | Lab composer + per-symbol matrix | ⏳ DATABANK-F2 | get_shadow_bank (`SuiteMx`/`MX_JSON` snapshot) | SuiteData.kt |
 | Lab / Tables **books scoreboard** | ⬜ TODO-F1 | get_books_scoreboard | :705,:824 |
 | Lab SAVE → propose | ✅ LIVE (write) | propose_action | :566 |
 | Tables saved experiments | ✅ LIVE (device) | LabStore (SharedPreferences) | — |
-| Venue summary + tables | ⬜ TODO-F1 | get_venue_session + get_open_orders | :887 |
+| Venue stance + verdict + summary | ✅ LIVE | get_venue_session (session/keys/order_id_map/reconciler) | :887 |
+| Venue row tables (open/fills/legs/rejected) | ⬜ TODO-F1 | get_open_orders row rendering (column shape only today) | :917 |

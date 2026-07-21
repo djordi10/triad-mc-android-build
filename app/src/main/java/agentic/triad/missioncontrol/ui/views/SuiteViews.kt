@@ -32,6 +32,11 @@ import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
+import agentic.triad.missioncontrol.ui.components.obj
+import agentic.triad.missioncontrol.ui.components.int
+import agentic.triad.missioncontrol.ui.components.text
+import agentic.triad.missioncontrol.ui.components.bool
+import agentic.triad.missioncontrol.ui.components.num
 import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
@@ -124,13 +129,20 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, SUITE_OVERVIEW_TOOLS))
     val s by vm.state.collectAsState()
 
+    // get_bank_priced — the live priced-bank aggregate (overlays the snapshot bank-rows stance + a card).
+    val bp = s.data["get_bank_priced"] as? kotlinx.serialization.json.JsonObject
+    val bankN = bp.int("n")
+    val netTotalR = bp.num("net_total_r")
+    val netExp = bp.num("net_expectancy")
+    val medStop = bp.num("median_stop_bps")
+
     ViewScaffold(
         View.SUITE_OVERVIEW,
         stance = listOf(
             Stance("candidates", "22,356", NEUTRAL),
             Stance("takes", "109", NEUTRAL),
-            Stance("bank rows", "89,350", NEUTRAL),
-            Stance("dedup", "357 dropped", WARN),
+            Stance("bank rows", bankN?.let { "%,d".format(it) } ?: "89,350", NEUTRAL),
+            Stance("net R", netTotalR?.let { "${fmt1(it)}R" } ?: "—", if ((netTotalR ?: 0.0) >= 0) GOOD else BAD),
             Stance("gross BE", "28.6%", INFO),
         ),
     ) {
@@ -148,6 +160,28 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
             wordTone = GOOD,
             title = "Overview",
         )
+
+        // ── live priced-bank aggregate (the one card that IS live; the per-symbol tables stay snapshot) ──
+        if (bp != null) {
+            McCard("Priced bank — live aggregate", tool = "get_bank_priced", sub = "the whole bank, cf-priced") {
+                Verdict(
+                    "Net expectancy ${netExp?.let { "${fmt1(it * 1)}" } ?: "—"}R per trade over ${bankN?.let { "%,d".format(it) } ?: "—"} rows",
+                    "Gross ${bp.num("gross_expectancy")?.let { fmt1(it) } ?: "—"}R, cost ${bp.num("cost_r_per_trade")?.let { fmt1(it) } ?: "—"}R/trade (roundtrip ${bp.obj("cost_model").num("roundtrip_bps")?.let { fmt1(it) } ?: "—"}bps).",
+                    if ((netExp ?: -1.0) >= 0) GOOD else BAD,
+                )
+                MiniTable(
+                    headers = listOf("METRIC", "VALUE"),
+                    rows = listOf(
+                        srow("bank rows (n)" to NEUTRAL, (bankN?.let { "%,d".format(it) } ?: "—") to NEUTRAL),
+                        srow("net total R" to NEUTRAL, netCell(netTotalR)),
+                        srow("net expectancy" to NEUTRAL, netCell(netExp)),
+                        srow("median stop" to NEUTRAL, (medStop?.let { "${fmt1(it)}bps" } ?: "—") to NEUTRAL),
+                        srow("breakeven roundtrip" to NEUTRAL, (bp.num("breakeven_roundtrip_bps")?.let { "${fmt1(it)}bps" } ?: "—") to NEUTRAL),
+                    ),
+                )
+                Note("S-1: breakeven_roundtrip_bps decides whether the business exists — gross edge is worthless below the venue's real roundtrip cost.", UNK)
+            }
+        }
 
         // ── TRIAD-A — the gated / rejected pool (LLM said NO) ──
         McCard("Symbol profitability · TRIAD-A", tool = "get_bank_priced", sub = "the rejected pool · LLM said no") {
@@ -889,29 +923,67 @@ fun SuiteVenueScreen(repo: MissionRepository) {
     val s by vm.state.collectAsState()
     val venue = s.data["get_venue_session"] as? kotlinx.serialization.json.JsonObject
 
+    // Live venue session (when it answers) — the venue is actually live now, not "the wall".
+    val sess = venue.obj("session")
+    val keys = venue.obj("keys")
+    val oim = venue.obj("order_id_map")
+    val recon = venue.obj("reconciler")
+    val live = venue != null
+    val state = sess.text("state").ifBlank { "—" }
+    val fills = oim.int("live_fills")
+    val orders = oim.int("entries")
+    val phantoms = oim.int("phantoms")
+    val keysOk = keys.bool("present")
+
     ViewScaffold(
         View.SUITE_VENUE,
-        stance = listOf(
-            Stance("fills", "0 · the wall", BAD),
-            Stance("open orders", "13", WARN),
-            Stance("rejected", "all", BAD),
+        stance = if (live) listOf(
+            Stance("venue", "${sess.text("venue")} · $state", if (state == "live") GOOD else WARN),
+            Stance("fills", fills?.toString() ?: "—", if ((fills ?: 0) > 0) GOOD else UNK),
+            Stance("orders", orders?.toString() ?: "—", NEUTRAL),
+            Stance("keys", if (keysOk) "proven" else "—", if (keysOk) GOOD else UNK),
+            Stance("phantoms", phantoms?.toString() ?: "—", if ((phantoms ?: 0) > 0) BAD else NEUTRAL),
+        ) else listOf(
+            Stance("venue", "—", UNK),
+            Stance("fills", "—", UNK),
+            Stance("keys", "—", UNK),
         ),
     ) {
-        VerdictBanner(
-            word = "The wall",
-            said = "Everything that touched (or tried to touch) Binance. 0 fills ever, 13 incident-era open " +
-                "orders (07-11/12), every past order venue-rejected. One LIMIT-BUY→MARKET-SELL round-trip " +
-                "awaits P1 disposition. LIVE fills these from get_venue_session; until then the zero-state " +
-                "is the true state.",
-            pills = listOf("0 FILLS" to BAD, "VENUE-REJECT" to WARN, "P0 PROBE OWED" to WARN),
-            wordTone = WARN,
-            title = "Venue",
-        )
-
-        McCard("Summary", "get_venue_session") {
-            KvRow("fills lifetime", "0 · the wall (venue_reject) · P0 probe owed", BAD)
-            KvRow("open orders", "13 incident-era (07-11/12) · reconciler stamp NULL", WARN)
-            KvRow("rejected lifetime", "every order ever sent · raw code = the autopsy grep", BAD)
+        if (live) {
+            VerdictBanner(
+                word = "Live · ${sess.text("venue")}",
+                said = "The venue lane is ${state.uppercase()}. Keys ${if (keysOk) "PROVEN by an authenticated " +
+                    "equity read (${keys.text("equity_quote")} quote)" else "absent"}; " +
+                    "${orders ?: 0} venue order(s), ${fills ?: 0} live fill(s), ${phantoms ?: 0} phantom(s). " +
+                    "Reconciler last ran ${recon.text("last_reconcile_ts").take(19)} (every ${recon.int("interval_s") ?: "—"}s).",
+                pills = listOf(
+                    "${state.uppercase()}" to (if (state == "live") GOOD else WARN),
+                    (if (keysOk) "KEYS PROVEN" else "NO KEYS") to (if (keysOk) GOOD else UNK),
+                    "${fills ?: 0} FILLS" to (if ((fills ?: 0) > 0) GOOD else UNK),
+                ),
+                wordTone = if (state == "live") GOOD else WARN,
+                title = "Venue",
+            )
+            McCard("Summary", tool = "get_venue_session", sub = "live venue session") {
+                KvRow("session", "${sess.text("venue")} · $state · lane ${sess.text("lane")}", if (state == "live") GOOD else WARN)
+                KvRow("keys", if (keysOk) "PROVEN · ${keys.text("proof")}" else "absent", if (keysOk) GOOD else UNK)
+                KvRow("equity (venue read)", keys.text("equity_quote"), NEUTRAL)
+                KvRow("venue orders", "${orders ?: 0} (${oim.text("id_format")})", NEUTRAL)
+                KvRow("live fills · phantoms", "${fills ?: 0} · ${phantoms ?: 0}", if ((phantoms ?: 0) > 0) BAD else GOOD)
+                KvRow("reconciler", "${recon.text("last_reconcile_ts").take(19)} · every ${recon.int("interval_s") ?: "—"}s", NEUTRAL)
+            }
+        } else {
+            VerdictBanner(
+                word = "The wall",
+                said = "get_venue_session has not answered this poll — the authoring-time zero-state below is " +
+                    "the last-known shape. Tap ↻ to pull the live session.",
+                pills = listOf("SESSION —" to UNK),
+                wordTone = WARN,
+                title = "Venue",
+            )
+            McCard("Summary", "get_venue_session") {
+                KvRow("session", "— (tap ↻ to pull)", UNK)
+            }
         }
 
         VenueTableCard("Open orders", "get_open_orders", venue == null,
