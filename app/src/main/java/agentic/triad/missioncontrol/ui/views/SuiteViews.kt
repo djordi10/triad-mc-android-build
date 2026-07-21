@@ -444,16 +444,18 @@ fun SuiteLabScreen(repo: MissionRepository) {
 
     var gen by remember { mutableStateOf<String?>(null) }
     val fils = remember { androidx.compose.runtime.mutableStateListOf<String>() }
-    var gated by remember { mutableStateOf(false) }
 
     val proposeScope = androidx.compose.runtime.rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
     var saveResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
 
+    // No arm selector: a lab experiment is ALWAYS evaluated on both arms — shadow (incl. rejected, the
+    // WITHOUT-LLM lens) + paper (accepted only, the WITH-LLM lens). The composition is just generator ×
+    // filters; SAVE registers both arms together so with-vs-without-LLM stays comparable.
     fun compositionName(): String {
         val g = gen ?: return "—"
         val f = if (fils.isNotEmpty()) " × " + fils.joinToString("+") else ""
-        return "$g$f · ${if (gated) "WITH" else "WITHOUT"} LLM"
+        return "$g$f"
     }
 
     fun save() {
@@ -470,7 +472,7 @@ fun SuiteLabScreen(repo: MissionRepository) {
                 put("type", "lab_save")
                 put("generator", g)
                 put("filters", fils.sorted().joinToString(","))
-                put("arm", if (gated) "gated" else "raw")
+                put("arms", "both") // always shadow (WITHOUT LLM) + paper (WITH LLM)
                 put("composition", compositionName())
             },
             rationale = "Lab pre-registration from Mission Control — forward clock starts at save; " +
@@ -499,7 +501,7 @@ fun SuiteLabScreen(repo: MissionRepository) {
         stance = listOf(
             Stance("generator", gen ?: "—", if (gen != null) GOOD else UNK),
             Stance("filters", if (fils.isEmpty()) "none" else fils.size.toString(), NEUTRAL),
-            Stance("arm", if (gated) "WITH LLM" else "WITHOUT LLM", if (gated) INFO else NEUTRAL),
+            Stance("arms", "both", INFO),
         ),
     ) {
         VerdictBanner(
@@ -519,11 +521,11 @@ fun SuiteLabScreen(repo: MissionRepository) {
             LabChipFlow(LAB_FILS, selected = { fils.contains(it) }) { id ->
                 if (fils.contains(id)) fils.remove(id) else fils.add(id)
             }
-            Note("ARM", GOOD)
-            LabChipFlow(
-                listOf("raw" to "WITHOUT LLM", "gated" to "WITH LLM"),
-                selected = { (it == "gated") == gated },
-            ) { id -> gated = id == "gated" }
+            Note(
+                "Both arms are always tested — shadow (incl. rejected · WITHOUT LLM) + paper (accepted · " +
+                    "WITH LLM) — so the with-vs-without-LLM read stays comparable. No arm to pick.",
+                UNK,
+            )
 
             // canvas — the current composition
             androidx.compose.foundation.layout.Box(
