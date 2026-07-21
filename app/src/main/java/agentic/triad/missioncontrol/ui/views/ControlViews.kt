@@ -533,7 +533,7 @@ private val GOVERNANCE_TOOLS = listOf(
     "get_go_no_go_status", "get_proposals",
     "get_alerts", "get_kill_state", "get_breaker_state", "get_attestation",
     "get_config_active", "get_limits", "get_sim_gap", "get_attribution_ledger",
-    "get_take_rate", "get_databank",
+    "get_take_rate", "get_databank", "get_mcp_audit_summary",
 )
 
 /** One §16.6 gate with a verdict COMPUTED live (NO/FAIL/UNKNOWN/VACUOUS/PARTIAL/MISSING/PASS). */
@@ -709,6 +709,12 @@ fun GovernanceScreen(repo: MissionRepository) {
     val ab = d["get_attribution_ledger"] as? JsonObject
     val tr = d["get_take_rate"] as? JsonObject
     val al = d["get_alerts"] as? JsonObject
+
+    // mcp_audit reliability overlay — per-tool live calls/failures/fail_rate (get_mcp_audit_summary.by_tool),
+    // keyed by tool name. The GOV_TOOL_RELIABILITY seed stands for any tool the audit does not list.
+    val auditByTool = guardDerive(emptyMap<String, JsonObject>()) {
+        (d["get_mcp_audit_summary"] as? JsonObject).field("by_tool").rows().associateBy { it.text("tool") }
+    }
 
     val gates = deriveGovGates(sg, db, ks, at, ca, lim, ab, tr, gngListed)
     val passing = gates.count { it.verdict == "PASS" }
@@ -911,19 +917,31 @@ fun GovernanceScreen(repo: MissionRepository) {
             WhyBox("THE LAW · G-7") { LawBlock("G-7", "Every finding must become a rule. A finding you have to open a browser to see is a finding nobody sees at 3 a.m.") }
         }
 
-        // ── the governance tools' own reliability (mcp_audit) ──
-        McCard("The governance tools cannot be relied upon to report on governance", "mcp_audit · 11,628 calls") {
+        // ── the governance tools' own reliability (get_mcp_audit_summary, live overlay) ──
+        val auditTotalCalls = guardDerive(0) { auditByTool.values.sumOf { it.int("calls") ?: 0 } }
+        McCard(
+            "The governance tools cannot be relied upon to report on governance",
+            tool = "get_mcp_audit_summary",
+            sub = if (auditTotalCalls > 0) "%,d calls audited".format(auditTotalCalls) else "per-tool call reliability",
+        ) {
             MiniTable(
                 listOf("tool", "calls", "fail rate"),
-                GOV_TOOL_RELIABILITY.map { (t, c, f) ->
-                    val r = f.toDouble() / c
-                    row(t to NEUTRAL, c.toString() to UNK, govPct(r) to (if (r > 0.3) BAD else if (r > 0.1) WARN else NEUTRAL))
+                GOV_TOOL_RELIABILITY.map { (t, seedC, seedF) ->
+                    // overlay live calls/failures where the audit lists this tool, else the seed stands.
+                    val live = auditByTool[t]
+                    val c = live?.int("calls") ?: seedC
+                    val f = live?.int("failures") ?: seedF
+                    val r = live?.num("fail_rate") ?: (if (c > 0) f.toDouble() / c else 0.0)
+                    row(t to NEUTRAL, "%,d".format(c) to UNK, govPct(r) to (if (r > 0.3) BAD else if (r > 0.1) WARN else NEUTRAL))
                 },
             )
+            // the two headline fail rates, live: the interlock read and the alert read.
+            val gngFail = auditByTool["get_go_no_go_status"]?.num("fail_rate") ?: (143.0 / 145)
+            val alFail = auditByTool["get_alerts"]?.num("fail_rate") ?: 0.36
             Ribbon(
-                "The tool that says whether real money may flow fails ${govPct(143.0 / 145)} of the time",
-                "The tool that tells you something is wrong fails 36% — and when it fails, the dashboard renders it " +
-                    "green. You cannot govern with instruments that are down four times out of ten and lie about it the rest.",
+                "The tool that says whether real money may flow fails ${govPct(gngFail)} of the time",
+                "The tool that tells you something is wrong fails ${govPct(alFail)}, and when it fails, the dashboard " +
+                    "renders it green. You cannot govern with instruments that are down this often and report clean the rest.",
                 SEV,
             )
             WhyBox("THE LAW · G-3") { LawBlock("G-3", "A checklist must be answerable. A gate with no evidence field is a wish. get_go_no_go_status ships nine questions, no answers, no verdict — when it ships at all.") }

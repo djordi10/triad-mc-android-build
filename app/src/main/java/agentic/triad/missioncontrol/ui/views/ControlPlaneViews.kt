@@ -278,8 +278,10 @@ fun ConnectionsScreen(repo: MissionRepository) {
     val killState = kl.text("state", "unknown")
     val controlPath = (kl?.get("control_path")).str("undefined")
     val breakerState = brk.text("state", "unknown")
-    val posCount = guardDerive<Int?>(null) { (d["get_positions"] as? JsonArray)?.size }
-    val ordCount = guardDerive<Int?>(null) { (d["get_open_orders"] as? JsonArray)?.size }
+    // get_positions / get_open_orders wrap their arrays in an envelope object ({positions:[…]} /
+    // {open_orders:[…]}), NOT a bare JsonArray — read the array field, else the counts read "—" always.
+    val posCount = guardDerive<Int?>(null) { (d["get_positions"] as? JsonObject)?.let { it.field("positions").rows().size } }
+    val ordCount = guardDerive<Int?>(null) { (d["get_open_orders"] as? JsonObject)?.let { it.field("open_orders").rows().size } }
     // dirty is only "clean"/"DIRTY" when the tool says so explicitly — absent stays an em-dash (C-1).
     val dirtyLabel = if (ca != null && ca["dirty"] != null) { if (ca.bool("dirty")) "DIRTY" else "clean ✓" } else "—"
     val dirtyTone = when (dirtyLabel) { "DIRTY" -> WARN; "clean ✓" -> GOOD; else -> UNK }

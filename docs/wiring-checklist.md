@@ -124,7 +124,7 @@ Status column every wiring pass (flip ⬜ → ✅). Source of truth for the wiri
 | Config domains / draft / gates board / silence / proposals | ✅ LIVE | get_config_preset/active, computed gates | — |
 | Config "Operator actions" | 🔒 PEND | control-write tools | :377 |
 | Governance "Sixteen rules" | 📄 SPEC | GOV_RULES const | :899 |
-| Governance "tool reliability" | ⬜ TODO-F1 | get_mcp_audit_summary (`GOV_TOOL_RELIABILITY`) | :915 |
+| Governance "tool reliability" | ✅ LIVE | get_mcp_audit_summary (`by_tool[].calls/failures/fail_rate` overlay onto GOV_TOOL_RELIABILITY seed; header calls total live) | :915 |
 ### 17 Lanes (`ui/views/Lanes.kt`)
 | Panel | Status | Tool | Ref |
 |---|---|---|---|
@@ -133,7 +133,7 @@ Status column every wiring pass (flip ⬜ → ✅). Source of truth for the wiri
 ### 19 Connections (`ui/views/ControlPlaneViews.kt`) — **Slice 5**
 | Panel | Status | Tool | Ref |
 |---|---|---|---|
-| posCount / ordCount | 🐞 BUG | get_positions/get_open_orders cast as JsonArray (envelope is object) | :281 |
+| posCount / ordCount | ✅ LIVE | get_positions.positions[] / get_open_orders.open_orders[] (was cast as bare JsonArray → always "—"; now reads the envelope's array field) | :281 |
 | Four-profile board / SYSTEM controls | 🔒 PEND | conn_profiles/conn_activate | :169,:453 |
 ### 20 MCP — ✅ LIVE (roster static; audit + proposals live)
 
