@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -41,6 +43,8 @@ import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.Gauge
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
+import agentic.triad.missioncontrol.ui.components.WhyBox
+import agentic.triad.missioncontrol.ui.theme.Line
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
@@ -443,6 +447,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
             // key on `version` so the switch state re-reads after every toggle
             version.let {
                 blocks.forEachIndexed { i, b ->
+                    if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
                     BlockRow(b) { on ->
                         if (!b.core) {
                             blocks[i] = b.copy(enabled = on)
@@ -500,13 +505,15 @@ fun PromptStudioScreen(repo: MissionRepository) {
                     "price the fees. So the fix is not to loosen the validator. The fix is to tell the model the floor.",
                 WARN,
             )
-            LawBlock(
-                "the cheapest experiment in this system",
-                "Switch on the Risk envelope block. It costs 96 tokens on a ~$enabledTokens-token prompt — about " +
-                    "4%. Run it against the same candidates. If the validator kill rate does not collapse, you have " +
-                    "learned something enormous. If it does, you have just recovered 689 trades. Either way it is a " +
-                    "one-afternoon experiment, and nobody has run it, because nobody could see the prompt.",
-            )
+            WhyBox("THE LAW · the cheapest experiment") {
+                LawBlock(
+                    "the cheapest experiment in this system",
+                    "Switch on the Risk envelope block. It costs 96 tokens on a ~$enabledTokens-token prompt — about " +
+                        "4%. Run it against the same candidates. If the validator kill rate does not collapse, you have " +
+                        "learned something enormous. If it does, you have just recovered 689 trades. Either way it is a " +
+                        "one-afternoon experiment, and nobody has run it, because nobody could see the prompt.",
+                )
+            }
         }
 
         // ── P-2 / P-3 — the arming drawer ──
@@ -846,13 +853,15 @@ fun PromptStudioScreen(repo: MissionRepository) {
                 "propose_action (AT-P16).",
         )
 
-        LawBlock(
-            "P-1..P-6",
-            "The prompt is part of the config or the fingerprint is a lie (P-1) · the studio is OFF until " +
-                "armed (P-2) · it talks to the LLM directly, not the MCP (P-3) · every block names the packet " +
-                "field it reads (P-4) · a run is measured, never estimated (P-5) · history is append-only and " +
-                "restore is a new version (P-6).",
-        )
+        WhyBox("THE LAWS · P-1..P-6") {
+            LawBlock(
+                "P-1..P-6",
+                "The prompt is part of the config or the fingerprint is a lie (P-1) · the studio is OFF until " +
+                    "armed (P-2) · it talks to the LLM directly, not the MCP (P-3) · every block names the packet " +
+                    "field it reads (P-4) · a run is measured, never estimated (P-5) · history is append-only and " +
+                    "restore is a new version (P-6).",
+            )
+        }
     }
 }
 
