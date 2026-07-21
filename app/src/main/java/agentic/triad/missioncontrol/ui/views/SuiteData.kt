@@ -39,6 +39,14 @@ object SuiteMx {
         v.jsonArray.map { (it as? JsonPrimitive)?.contentOrNull }
     }
 
+    /** One symbol's raw row in a cohort → [n, res, wr, net, ev] (null if absent). */
+    fun symRow(coh: String?, sym: String): List<Double?>? {
+        if (coh == null) return null
+        val d = cohorts[coh] as? JsonObject ?: return null
+        val a = d[sym] as? JsonArray ?: return null
+        return a.map { (it as? JsonPrimitive)?.doubleOrNull }
+    }
+
     /** Fold a cohort over all symbols → Agg (null if the cohort is absent / paper is null). */
     fun agg(coh: String?): Agg? {
         if (coh == null) return null
@@ -72,6 +80,8 @@ data class SavedLab(
     val known: Boolean,
     val paper: AggS?,   // WITH LLM (accepted)
     val shadow: AggS?,  // WITHOUT LLM (incl rejected)
+    val shadowCoh: String? = null, // cohort names — the per-symbol matrix is recomputed from these
+    val paperCoh: String? = null,
 )
 
 fun Agg.toS() = AggS(n, res, wr, net, ev)

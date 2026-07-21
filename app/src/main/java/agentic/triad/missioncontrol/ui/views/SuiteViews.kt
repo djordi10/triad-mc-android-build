@@ -473,6 +473,40 @@ private fun LabCalcTable(paper: Agg?, shadow: Agg?) {
     )
 }
 
+/** A symbol's three matrix cells for one arm — WR · net R · EV (or "—" when it has no resolved rows). */
+private fun symCells(t: List<Double?>?): List<Pair<String, Tone>> {
+    val res = t?.getOrNull(1)?.toInt() ?: 0
+    if (t == null || res == 0) return listOf("—" to UNK, "—" to UNK, "—" to UNK)
+    return listOf(
+        (t.getOrNull(2)?.let { "${fmt1(it)}%" } ?: "—") to NEUTRAL,
+        netCell(t.getOrNull(3)),
+        (t.getOrNull(4)?.let { evStr(it) } ?: "—") to evTone(t.getOrNull(4)),
+    )
+}
+
+/**
+ * The MATRIX PREVIEW — where a combo lands PER SYMBOL (the doc's `previewMatrix`): each symbol's
+ * SHADOW (incl. rejected · WITHOUT LLM) + PAPER (accepted · WITH LLM) WR / net R / EV. Wide table,
+ * scrolls sideways.
+ */
+@Composable
+private fun MatrixTable(shadowCoh: String?, paperCoh: String?) {
+    val syms = SuiteMx.idx.filter {
+        (SuiteMx.symRow(shadowCoh, it)?.getOrNull(1)?.toInt() ?: 0) > 0 ||
+            (SuiteMx.symRow(paperCoh, it)?.getOrNull(1)?.toInt() ?: 0) > 0
+    }
+    if (syms.isEmpty()) {
+        Note("No resolved per-symbol rows for this combo yet — it registers fresh at n=0.", UNK)
+        return
+    }
+    MiniTable(
+        headers = listOf("SYM", "S·WR", "S·NET", "S·EV", "P·WR", "P·NET", "P·EV"),
+        rows = syms.map { s ->
+            listOf(s to NEUTRAL) + symCells(SuiteMx.symRow(shadowCoh, s)) + symCells(SuiteMx.symRow(paperCoh, s))
+        },
+    )
+}
+
 /** state chip for a saved/previewed combo — matrix-backed once the shadow lens carries resolved rows. */
 private fun labState(shadow: Agg?): Pair<String, Tone> =
     if (shadow != null && shadow.res > 0) "MATRIX-BACKED · FWD" to GOOD else "REGISTERED · FWD n=0" to WARN
@@ -519,6 +553,8 @@ fun SuiteLabScreen(repo: MissionRepository) {
             known = shadowA != null && shadowA.res > 0,
             paper = paperA?.toS(),
             shadow = shadowA?.toS(),
+            shadowCoh = genShadow(g),
+            paperCoh = genPaper(g),
         )
         LabStore.add(ctx, lab)
         // The propose inbox governs a fixed kind allowlist (config_change · entries_disable ·
@@ -652,6 +688,13 @@ fun SuiteLabScreen(repo: MissionRepository) {
                         "Filters ride as analytic slices (W-63) — they don't change the cohort.",
                     UNK,
                 )
+                // ── where this combo LANDS per symbol — the actual matrix (doc previewMatrix) ──
+                Note("WHERE IT LANDS — PER SYMBOL", GOOD)
+                Note(
+                    "S· = shadow (WITHOUT LLM, incl rejected) · P· = paper (WITH LLM, accepted). Scrolls sideways.",
+                    UNK,
+                )
+                MatrixTable(genShadow(gen), genPaper(gen))
             }
         }
 
@@ -823,6 +866,9 @@ fun SuiteTablesScreen(repo: MissionRepository) {
                     }
                     LabCalcTable(lab.paper?.toAgg(), lab.shadow?.toAgg())
                     Note("WITH LLM = paper (accepted) · WITHOUT = shadow (incl. rejected). Gross vs 28.6% BE.", UNK)
+                    WhyBox("PER-SYMBOL MATRIX — where it landed") {
+                        MatrixTable(lab.shadowCoh, lab.paperCoh)
+                    }
                 }
             }
         }
