@@ -37,6 +37,8 @@ import agentic.triad.missioncontrol.ui.components.int
 import agentic.triad.missioncontrol.ui.components.text
 import agentic.triad.missioncontrol.ui.components.bool
 import agentic.triad.missioncontrol.ui.components.num
+import agentic.triad.missioncontrol.ui.components.field
+import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.Stance
@@ -922,6 +924,8 @@ fun SuiteVenueScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, SUITE_VENUE_TOOLS))
     val s by vm.state.collectAsState()
     val venue = s.data["get_venue_session"] as? kotlinx.serialization.json.JsonObject
+    val openOrders = (s.data["get_open_orders"] as? kotlinx.serialization.json.JsonObject).field("open_orders").rows()
+    val positions = (s.data["get_positions"] as? kotlinx.serialization.json.JsonObject).field("positions").rows()
 
     // Live venue session (when it answers) — the venue is actually live now, not "the wall".
     val sess = venue.obj("session")
@@ -986,22 +990,50 @@ fun SuiteVenueScreen(repo: MissionRepository) {
             }
         }
 
-        VenueTableCard("Open orders", "get_open_orders", venue == null,
-            "ts · symbol · side · type · px · qty · lane")
-        VenueTableCard("Fills (accepted & executed)", "get_venue_session", venue == null,
-            "ts · symbol · side · px · leg · lane · fees · 0 rows: nothing ever filled")
-        VenueTableCard("SL / TP legs", "get_venue_session", venue == null,
-            "decision · SL px·status · TP px·status · breaker")
-        VenueTableCard("Rejected (with venue code)", "get_venue_session", venue == null,
-            "ts · symbol · code · msg · every past order, the autopsy grep")
-        VenueTableCard("Canceled", "get_venue_session", venue == null,
-            "ts · symbol · reason")
+        // ── Open orders — LIVE rows from get_open_orders ──
+        McCard("Open orders", tool = "get_open_orders", sub = "${openOrders.size} live") {
+            if (openOrders.isEmpty()) {
+                Note("get_open_orders returned no rows this poll.", UNK)
+            } else {
+                MiniTable(
+                    headers = listOf("SYMBOL", "SIDE", "ORDER ID"),
+                    rows = openOrders.take(20).map { o ->
+                        srow(
+                            o.text("symbol").removeSuffix("-USDT-PERP") to NEUTRAL,
+                            o.text("side").uppercase() to (if (o.text("side") == "buy") GOOD else BAD),
+                            o.text("order_id").takeLast(10) to NEUTRAL,
+                        )
+                    },
+                )
+                if (openOrders.size > 20) Note("+${openOrders.size - 20} more.", UNK)
+            }
+        }
 
-        Note(
-            "History known at authoring: 0 fills ever · 13 incident-era open orders (07-11/12) · every past " +
-                "order venue-rejected (the wall) · one LIMIT-BUY→MARKET-SELL round-trip awaiting P1.",
-            UNK,
-        )
+        // ── Positions — LIVE rows from get_positions (ledger: fills − outcomes) ──
+        McCard("Positions", tool = "get_positions", sub = "${positions.size} · fills − outcomes") {
+            if (positions.isEmpty()) {
+                Note("get_positions returned no rows this poll.", UNK)
+            } else {
+                MiniTable(
+                    headers = listOf("SYMBOL", "NET QTY"),
+                    rows = positions.map { p ->
+                        srow(
+                            p.text("symbol").removeSuffix("-USDT-PERP") to NEUTRAL,
+                            (p.num("net_qty")?.let { fmt1(it) } ?: "—") to (if ((p.num("net_qty") ?: 0.0) >= 0) GOOD else BAD),
+                        )
+                    },
+                )
+            }
+        }
+
+        // These row-tables have no dedicated MCP read yet — column shape only (honest).
+        VenueTableCard("Fills (accepted & executed)", "get_venue_session", true,
+            "ts · symbol · side · px · leg · lane · fees — ${fills ?: 0} live fill(s) counted; per-fill rows PEND")
+        VenueTableCard("SL / TP legs", "get_venue_session", true,
+            "decision · SL px·status · TP px·status · breaker — per-leg rows PEND")
+        VenueTableCard("Rejected / Canceled", "get_venue_session", true,
+            "ts · symbol · code · reason — per-row read PEND")
+
         if (s.stale != null) Note("· ${s.stale}", WARN)
     }
 }

@@ -153,4 +153,5 @@ Status column every wiring pass (flip ⬜ → ✅). Source of truth for the wiri
 | Lab SAVE → propose | ✅ LIVE (write) | propose_action | :566 |
 | Tables saved experiments | ✅ LIVE (device) | LabStore (SharedPreferences) | — |
 | Venue stance + verdict + summary | ✅ LIVE | get_venue_session (session/keys/order_id_map/reconciler) | :887 |
-| Venue row tables (open/fills/legs/rejected) | ⬜ TODO-F1 | get_open_orders row rendering (column shape only today) | :917 |
+| Venue Open orders + Positions rows | ✅ LIVE | get_open_orders / get_positions (live MiniTable rows) | :989 |
+| Venue Fills / SL-TP / Rejected-Canceled rows | 🔒 PEND | no per-row read (column shape + honest PEND) | :1010 |
