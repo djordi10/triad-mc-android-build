@@ -529,10 +529,12 @@ fun SuiteLabScreen(repo: MissionRepository) {
     // No arm selector: a lab experiment is ALWAYS evaluated on both arms — shadow (incl. rejected, the
     // WITHOUT-LLM lens) + paper (accepted only, the WITH-LLM lens). The composition is just generator ×
     // filters; SAVE registers both arms together so with-vs-without-LLM stays comparable.
+    // the recipe = generator × filters + the generator's plain name (the doc "G4 × F2+F3 bos").
     fun compositionName(): String {
         val g = gen ?: return "—"
         val f = if (fils.isNotEmpty()) " × " + fils.joinToString("+") else ""
-        return "$g$f"
+        val label = SuiteMx.genmap[g]?.getOrNull(0)
+        return "$g$f" + (label?.let { " · $it" } ?: "")
     }
 
     // resolve the combo to its two lenses — computed live on every compose change (the preview).
@@ -677,6 +679,7 @@ fun SuiteLabScreen(repo: MissionRepository) {
             if (gen == null) {
                 Note("Compose a generator above — the aggregate across all 45 symbols computes here, live, before any save.", UNK)
             } else {
+                Note("RECIPE · ${compositionName()}", GOOD)
                 Verdict(
                     "The LLM gate ${llmDelta(paperA, shadowA)}",
                     "WITH LLM = paper (accepted only) · WITHOUT LLM = shadow (incl. rejected). Both gross vs the 28.6% breakeven.",
