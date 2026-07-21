@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -31,6 +32,7 @@ import agentic.triad.missioncontrol.mcp.ProposeAction
 import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
+import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
@@ -409,6 +411,7 @@ fun LanesScreen(repo: MissionRepository) {
         McCard("§3 · the lane board — five lanes, one thing to bind to", "get_config_active · get_go_no_go_status") {
             Note("Tap a lane to open its drawer: binding · env · real-money · guard · what it would take.", INFO)
             lanes.forEachIndexed { i, lane ->
+                if (i > 0) Box(Modifier.fillMaxWidth().padding(top = 8.dp).height(1.dp).background(Line))
                 val open = expanded == i
                 val headTone = when {
                     lane.absent -> UNK
@@ -853,6 +856,7 @@ fun LanesScreen(repo: MissionRepository) {
         }
 
         // ── §4 · the laws (L-1..L-7) + the ceremony note (L-7/AT-L10) ──
+        WhyBox("THE LAWS · L-1..L-7") {
         LawBlock(
             "L-1..L-7",
             "L-1 live binds only to applied — today true by accident (an empty room, not enforcement): write and " +
@@ -863,6 +867,7 @@ fun LanesScreen(repo: MissionRepository) {
                 "new row: do not ship a second unverifiable chain, verify on write · L-7 the GUI proposes, triadctl " +
                 "applies (R-C1).",
         )
+        }
         Note(
             "Ceremony (L-7 / AT-L10): the GUI proposes; triadctl applies. Promote and Roll back emit a change-plan " +
                 "with base_fingerprint pinned ($fpShort) and file it as a proposal. The ceremony stays: " +
