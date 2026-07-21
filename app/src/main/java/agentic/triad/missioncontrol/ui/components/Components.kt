@@ -508,10 +508,15 @@ fun MiniTable(headers: List<String>, rows: List<List<Pair<String, Tone>>>) {
         }
         return
     }
-    // NARROW tables (<=5 columns): weighted fill-width columns, top-aligned, graceful wrap — the last
-    // column (usually the wordy "reason / value / action") gets 1.5x so it wraps cleanly. (The old build
-    // used fixed 112dp cells everywhere, which forced these long cells to wrap one word per line.)
-    fun w(i: Int) = if (i == n - 1) 1.5f else 1f
+    // NARROW tables (<=5 columns): weighted fill-width columns, top-aligned, graceful wrap. The first
+    // column is usually the wordy name/label and the last is a wordy reason/value, so both get extra
+    // width; the middle columns are usually short (counts, %, states) and are squeezed, so a long name
+    // like "get_watchdog_stats" stops wrapping while the short numeric columns give up their slack.
+    fun w(i: Int) = when {
+        i == 0 -> 1.7f
+        i == n - 1 -> 1.5f
+        else -> 0.8f
+    }
     Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
             headers.forEachIndexed { i, h ->
