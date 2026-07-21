@@ -1,12 +1,18 @@
 package agentic.triad.missioncontrol.ui.views
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -417,18 +423,236 @@ private fun SymbolDetail(sym: String, onBack: () -> Unit) {
     }
 }
 
-// ── 23 · Suite Lab — compose → matrix + shadow + paper (stub, next) ──────────────────────────────────
+// ── 23 · Suite Lab — compose → matrix + shadow + paper (interactive · SAVE via propose_action) ────────
+private val SUITE_LAB_TOOLS = listOf("get_shadow_bank", "get_books_scoreboard", "get_book_definitions")
+
+// the composer palette (the doc's GENS / FILS / ARMS)
+private val LAB_GENS = listOf(
+    "G1" to "fvg", "G2" to "sweep", "G3" to "order_block",
+    "G4" to "bos", "G5" to "choch", "G6" to "momentum",
+)
+private val LAB_FILS = listOf(
+    "F1" to "volume", "F2" to "OI", "F3" to "funding",
+    "F4" to "liq", "F5" to "MTF3/3", "LAWFUL" to "30–60bps",
+)
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SuiteLabScreen(repo: MissionRepository) {
-    ViewScaffold(View.SUITE_LAB) {
+    val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, SUITE_LAB_TOOLS))
+    val s by vm.state.collectAsState()
+
+    var gen by remember { mutableStateOf<String?>(null) }
+    val fils = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    var gated by remember { mutableStateOf(false) }
+
+    val proposeScope = androidx.compose.runtime.rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) }
+    var saveResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+
+    fun compositionName(): String {
+        val g = gen ?: return "—"
+        val f = if (fils.isNotEmpty()) " × " + fils.joinToString("+") else ""
+        return "$g$f · ${if (gated) "WITH" else "WITHOUT"} LLM"
+    }
+
+    fun save() {
+        val g = gen ?: return
+        if (saving) return
+        saving = true; saveResult = null
+        // The propose inbox governs a fixed kind allowlist (config_change · entries_disable ·
+        // phase_change · other). A lab pre-registration has no dedicated kind, so it files under the
+        // "other" catch-all with a `type:lab_save` marker + the full composition in args — honest, and
+        // the server accepts it (returns a real proposal_id).
+        val action = agentic.triad.missioncontrol.mcp.ProposeAction(
+            kind = "other",
+            args = buildJsonObject {
+                put("type", "lab_save")
+                put("generator", g)
+                put("filters", fils.sorted().joinToString(","))
+                put("arm", if (gated) "gated" else "raw")
+                put("composition", compositionName())
+            },
+            rationale = "Lab pre-registration from Mission Control — forward clock starts at save; " +
+                "the combo is matrix-checked across all 45 symbols, then lands in shadow (incl rejected) " +
+                "+ paper (accepted, never on venue). The app files a plan; triadctl applies nothing.",
+        )
+        proposeScope.launch {
+            val env = try {
+                repo.propose(action)
+            } catch (e: Throwable) {
+                agentic.triad.missioncontrol.mcp.McpEnvelope(ok = false, error = e.message ?: "propose failed")
+            }
+            saveResult = if (env.ok) {
+                val pid = (env.data as? kotlinx.serialization.json.JsonObject)?.get("proposal_id")
+                    ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: "—"
+                true to "FILED · proposal_id $pid · ${compositionName()} — a pre-registration for triadctl; the app applied NOTHING."
+            } else {
+                false to "REFUSED · ${env.error ?: "unknown error"}"
+            }
+            saving = false
+        }
+    }
+
+    ViewScaffold(
+        View.SUITE_LAB,
+        stance = listOf(
+            Stance("generator", gen ?: "—", if (gen != null) GOOD else UNK),
+            Stance("filters", if (fils.isEmpty()) "none" else fils.size.toString(), NEUTRAL),
+            Stance("arm", if (gated) "WITH LLM" else "WITHOUT LLM", if (gated) INFO else NEUTRAL),
+        ),
+    ) {
         VerdictBanner(
             word = "Compose · preview · save",
             said = "Compose a generator × filters, preview where it lands across all 45 symbols, then save " +
-                "it into the shadow book (incl. rejected) and the paper book (accepted only, never on venue).",
+                "it into the shadow book (incl. rejected) and the paper book (accepted only, never on venue). " +
+                "A SAVE files a pre-registration — triadctl applies it, not the app.",
             wordTone = GOOD,
             title = "Lab",
         )
-        Note("· building — composer + matrix preview + books next.", INFO)
+
+        // ── the composer ──
+        McCard("Compose — tap to add", "propose_action · lab_save") {
+            Note("GENERATORS · pick one", GOOD)
+            LabChipFlow(LAB_GENS, selected = { it == gen }) { id -> gen = if (gen == id) null else id }
+            Note("FILTERS · tap to toggle", GOOD)
+            LabChipFlow(LAB_FILS, selected = { fils.contains(it) }) { id ->
+                if (fils.contains(id)) fils.remove(id) else fils.add(id)
+            }
+            Note("ARM", GOOD)
+            LabChipFlow(
+                listOf("raw" to "WITHOUT LLM", "gated" to "WITH LLM"),
+                selected = { (it == "gated") == gated },
+            ) { id -> gated = id == "gated" }
+
+            // canvas — the current composition
+            androidx.compose.foundation.layout.Box(
+                Modifier.fillMaxWidth().padding(top = 12.dp)
+                    .background(
+                        agentic.triad.missioncontrol.ui.theme.Card,
+                        androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    )
+                    .border(
+                        1.dp, agentic.triad.missioncontrol.ui.theme.Line,
+                        androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    )
+                    .padding(horizontal = 12.dp, vertical = 14.dp),
+            ) {
+                if (gen == null && fils.isEmpty()) {
+                    Text(
+                        "compose a generator to begin…", color = agentic.triad.missioncontrol.ui.theme.Unk,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 12.sp,
+                    )
+                } else {
+                    Text(
+                        compositionName(), color = agentic.triad.missioncontrol.ui.theme.Ink,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 13.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    )
+                }
+            }
+
+            // the result / mapping line
+            Note(
+                if (gen == null) "Compose something."
+                else "Unknown combo — will register fresh at n=0 across all 45 symbols. Save → lands in " +
+                    "matrix + shadow + paper (forward clock starts at save).",
+                if (gen == null) UNK else INFO,
+            )
+
+            // SAVE
+            SaveButton(enabled = gen != null && !saving) { save() }
+            if (saving) Note("filing pre-registration… the app proposes; it applies nothing.", INFO)
+            saveResult?.let { (ok, msg) ->
+                Ribbon(if (ok) "Saved — a pre-registration for triadctl" else "Save refused", msg, if (ok) GOOD else BAD)
+            }
+        }
+
+        // ── matrix preview (frame; per-symbol cells fill live) ──
+        McCard("Matrix preview · all 45 symbols", "get_shadow_bank") {
+            Note(
+                "Shadow arm = the full cf-priced pool INCLUDING rejected (what the model saw). Paper arm = " +
+                    "accepted only, forward-test, never on venue. Known combo → real per-symbol backfill; " +
+                    "unknown combo → registered fresh at n=0.",
+                NEUTRAL,
+            )
+            if (gen == null) {
+                Note("Compose a generator above to preview its per-symbol matrix.", UNK)
+            } else {
+                Note("${compositionName()} — the per-symbol shadow/paper matrix populates live from the lab registry.", INFO)
+            }
+        }
+
+        // ── the two destination books ──
+        McCard("Shadow book — saved experiments (incl. rejected)", "get_shadow_bank") {
+            val n = (s.data["get_shadow_bank"] as? kotlinx.serialization.json.JsonObject)?.size ?: 0
+            if (n == 0) Note("No experiments in the shadow book yet — save one in the composer above.", UNK)
+            else Note("$n cohort(s) live from get_shadow_bank.", GOOD)
+        }
+        McCard("Paper book — saved experiments (accepted only, not on venue)", "get_books_scoreboard") {
+            Note("No experiments in the paper book yet — save one in the composer above.", UNK)
+        }
+
+        if (s.stale != null) Note("· ${s.stale}", WARN)
+    }
+}
+
+/** A wrapping row of composer chips — pine fill when selected, light otherwise. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LabChipFlow(
+    items: List<Pair<String, String>>,
+    selected: (String) -> Boolean,
+    onTap: (String) -> Unit,
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(7.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(7.dp),
+    ) {
+        items.forEach { (id, lab) ->
+            val on = selected(id)
+            Text(
+                "$id·$lab",
+                color = if (on) androidx.compose.ui.graphics.Color.White else agentic.triad.missioncontrol.ui.theme.Ink,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 11.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable { onTap(id) }
+                    .background(
+                        if (on) agentic.triad.missioncontrol.ui.theme.Pine else agentic.triad.missioncontrol.ui.theme.Card,
+                        androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    )
+                    .border(
+                        1.dp,
+                        if (on) agentic.triad.missioncontrol.ui.theme.Pine else agentic.triad.missioncontrol.ui.theme.Line,
+                        androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    )
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+            )
+        }
+    }
+}
+
+/** The emerald SAVE button — the only write this view files (propose_action · lab_save). */
+@Composable
+private fun SaveButton(enabled: Boolean, onClick: () -> Unit) {
+    androidx.compose.foundation.layout.Box(
+        Modifier.fillMaxWidth().padding(top = 12.dp)
+            .background(
+                if (enabled) agentic.triad.missioncontrol.ui.theme.Emerald
+                else agentic.triad.missioncontrol.ui.theme.Unk,
+                androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+            )
+            .clickable(enabled = enabled) { onClick() }
+            .padding(vertical = 13.dp),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        Text(
+            "SAVE → MATRIX + SHADOW + PAPER", color = androidx.compose.ui.graphics.Color.White,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 12.sp,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, letterSpacing = 0.5.sp,
+        )
     }
 }
 
