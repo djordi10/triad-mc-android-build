@@ -380,7 +380,7 @@ fun ReaderWriterScreen(repo: MissionRepository) {
         StanceBlock(m)
 
         // ── §1 · THE SEAM BOARD (AT-RW2 / RW6 / RW7 / RW12-14) ──
-        McCard("The seam — writers on the left, who reads them on the right", "get_service_status × get_view_catalog") {
+        McCard("The seam", tool = "get_service_status × get_view_catalog", sub = "writers on the left, who reads them on the right") {
             Note(
                 "Nine ledger writers. get_service_status is named for services and returns these tables. " +
                     "Each row shows the writer's state and the reader that consumes it — and flags the seam " +
@@ -416,7 +416,7 @@ fun ReaderWriterScreen(repo: MissionRepository) {
         }
 
         // ── §2 · THE HOLE — rows written vs rows readable (AT-RW4 / RW8) ──
-        McCard("The hole — rows written vs rows readable", "RW-4 · the check that does not exist") {
+        McCard("The hole", tool = "RW-4 · the check that does not exist", sub = "rows written vs rows readable") {
             Note(
                 if (m.holesLive) "LIVE from get_seam_audit — writer-count minus view-count, per table."
                 else "get_seam_audit is not deployed — reconstructed from get_table_census / get_row_integrity / get_view_catalog and the known estate (labelled fallback).",
@@ -490,7 +490,7 @@ fun ReaderWriterScreen(repo: MissionRepository) {
         }
 
         // ── per-layer row integrity — rows vs distinct (AT-RW10) ──
-        McCard("Per-layer row integrity — rows vs distinct", "get_row_integrity · the inflation factor") {
+        McCard("Per-layer row integrity", tool = "get_row_integrity · the inflation factor", sub = "rows vs distinct") {
             IntegGrid()
             Ribbon(
                 "The shadow bank is the worst: ${m.inflation}×",

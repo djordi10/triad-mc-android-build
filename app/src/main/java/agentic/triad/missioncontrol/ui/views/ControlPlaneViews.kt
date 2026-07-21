@@ -316,7 +316,7 @@ fun ConnectionsScreen(repo: MissionRepository) {
         )
 
         // pProfiles · the four-profile connection board — demo / paper / live·REAL-MONEY / shadow (CXVIEW).
-        McCard("Connections — the four-profile board", "CLIENT switch is real · SYSTEM switch is absent") {
+        McCard("Connections", tool = "CLIENT switch is real · SYSTEM switch is absent", sub = "the four-profile board") {
             Note(
                 "Two different switches, and the page never confuses them. \"Use for this dashboard\" (the CLIENT " +
                     "card below) repoints THIS dashboard — real, instant. \"Switch the SYSTEM →\" is conn_activate: it " +
@@ -364,7 +364,7 @@ fun ConnectionsScreen(repo: MissionRepository) {
         }
 
         // C-1 · the CLIENT tier — REAL controls that repoint THIS dashboard (AT-C2).
-        McCard("CLIENT tier (C-1) — this dashboard's own connection · real, instant", "goLive · goDemo · listTools") {
+        McCard("CLIENT tier (C-1)", tool = "goLive · goDemo · listTools", sub = "this dashboard's own connection · real, instant") {
             Note("CLIENT — the dashboard's own connection. Real. Works today. Zero server work:", GOOD)
             OutlinedTextField(
                 value = endpoint,
@@ -424,7 +424,7 @@ fun ConnectionsScreen(repo: MissionRepository) {
         }
 
         // C-5 · the LIVE interlock — the most important thing in this build. (AT-C5)
-        McCard("LIVE interlock (C-5) — the toggle is REFUSED, not greyed-out-but-clickable", "get_go_no_go_status") {
+        McCard("LIVE interlock (C-5)", tool = "get_go_no_go_status", sub = "the toggle is REFUSED, not greyed-out-but-clickable") {
             if (gateCount == 0) {
                 Note("— · get_go_no_go_status returned no items (tool unavailable). The board can't be read, so LIVE stays refused — never defaulted to clean.", UNK)
             } else {
@@ -450,7 +450,7 @@ fun ConnectionsScreen(repo: MissionRepository) {
         }
 
         // The SYSTEM control tools — PEND boxes (AT-C3: full build spec on absence).
-        McCard("SYSTEM controls — absent, spec'd, and proposed", "propose_action") {
+        McCard("SYSTEM controls", tool = "propose_action", sub = "absent, spec'd, and proposed") {
             Note("Read-only page. The only tool it calls today is propose_action (AT-C7). Every control below is a build spec that files a proposal — it EXECUTES NOTHING.", INFO)
         }
         PendBox("conn_activate", "CRIT · the single most dangerous tool in the estate — repoints the SYSTEM profile (demo/shadow/paper/live). LIVE hard-refused until the go/no-go board is clean (C-5). ARMED: 10s + visible countdown + CONFIRM (C-4/AT-C8). Absent ⇒ probes tools/list, shows this spec, files propose_action.")
@@ -686,7 +686,7 @@ fun McpScreen(repo: MissionRepository) {
         // pServers · the per-server roster — the dashboard's OWN connections (CTL.DEF_SRV, verbatim). The
         // headline CLIENT-plane panel: TriadMCP (connected, live tool-count) + UPONLY MCP (disabled, honest-
         // null). Placed right after the connected-window card, mirroring MCPVIEW paint() order pStance→pServers.
-        McCard("MCP servers — the dashboard's connections", "CLIENT PLANE · real, works today") {
+        McCard("MCP servers", tool = "CLIENT PLANE · real, works today", sub = "the dashboard's connections") {
             Note(
                 "C-2 · this roster is real — these are the endpoints THIS dashboard knows, and which one it " +
                     "talks through. The connected server carries a live tools/list count; the rest are honestly " +
@@ -713,7 +713,7 @@ fun McpScreen(repo: MissionRepository) {
             }
         }
 
-        McCard("SYSTEM controls — the estate's MCP, absent and proposed", "propose_action") {
+        McCard("SYSTEM controls", tool = "propose_action", sub = "the estate's MCP, absent and proposed") {
             Note("Read-only page; the only tool it calls today is propose_action (AT-C7). Each control below renders its full build spec and files a proposal — EXECUTES NOTHING.", INFO)
         }
         PendBox("mcp_servers", "read · the MCP servers the ESTATE runs (not the dashboard's own registry). Absent ⇒ proposes.")
@@ -777,7 +777,7 @@ fun McpScreen(repo: MissionRepository) {
             Box(Modifier.weight(1f).height(1.dp).background(Line))
         }
 
-        McCard("MCP audit — calls, failures, and who may render green", "get_mcp_audit_summary") {
+        McCard("MCP audit", tool = "get_mcp_audit_summary", sub = "calls, failures, and who may render green") {
             val audit = d["get_mcp_audit_summary"] as? JsonObject
             if (audit == null) {
                 Note("get_mcp_audit_summary not served — the audit is honestly UNKNOWN.", UNK)
@@ -1870,7 +1870,7 @@ fun TopologyScreen(repo: MissionRepository) {
         // ── pMap · THE ARCHITECTURE NODE MAP + legend + the full roster (M-3) ──
         // (No nav lambda reaches this screen — TopologyScreen(repo) is the whole call — so a tap
         //  opens the node's drawer here and prints the owning view instead of navigating to it.)
-        McCard("The estate — tap any node", "get_service_status × get_bus_status × get_bridge_lag") {
+        McCard("The estate", tool = "get_service_status × get_bus_status × get_bridge_lag", sub = "tap any node") {
             Note("Tap a node → its evidence + the view that owns it.", INFO)
             Column(
                 Modifier.fillMaxWidth().padding(top = 9.dp)
@@ -1927,7 +1927,7 @@ fun TopologyScreen(repo: MissionRepository) {
         }
 
         // ── pDist · THE DISTRIBUTION UNIVERSE (the fork — the voice travels keyless) ──
-        McCard("The distribution universe — the voice travels", "Relay → UpONLY → the clients") {
+        McCard("The distribution universe", tool = "Relay → UpONLY → the clients", sub = "the voice travels") {
             Note("The fork: approved stream copied keyless. Keys never travel · books never blend.", INFO)
             Column(
                 Modifier.fillMaxWidth().padding(top = 9.dp)
@@ -1974,7 +1974,7 @@ fun TopologyScreen(repo: MissionRepository) {
         }
 
         // ── pServices · services_up = tables ──
-        McCard("\"services_up: $okTables / $tableCount\" — those $tableCount are TABLES", "get_service_status × get_system_overview") {
+        McCard("\"services_up: $okTables / $tableCount\"", tool = "get_service_status × get_system_overview", sub = "those $tableCount are TABLES") {
             TopoVerdict(
                 "get_service_status returns ledger writers, not the 6 real processes.",
                 "Signal, Gateway, Executor, the venue gateway, Ollama, NATS — none appear. Six processes have no health source.",

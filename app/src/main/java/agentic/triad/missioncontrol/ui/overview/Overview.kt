@@ -518,7 +518,7 @@ fun OverviewScreen(repo: MissionRepository) {
         //    bar, the live narrative with bold runs, then the three RISK/LOOP/TRUTH tiles ──
         OverviewStancePanel(M)
         // the evidence rows behind each pill (kept as a detail card under the band)
-        McCard("Stance — the evidence", "derived · O-1..O-8") {
+        McCard("Stance", tool = "derived · O-1..O-8", sub = "the evidence") {
             KvRow(
                 "RISK — ${if (M.unprotected == 0) "0 unprotected" else if (M.unprotected == null) "not derivable" else "${M.unprotected} unprotected"}",
                 M.risk, verdictTone(M.risk),
@@ -532,8 +532,9 @@ fun OverviewScreen(repo: MissionRepository) {
 
         // ── 1.2 MONEY PATH — the deterministic spine, chokepoint computed at the collapse (O-8) ──────
         McCard(
-            "The money path — the spine",
-            "get_databank · get_take_rate · get_positions · get_loop_status",
+            "The money path",
+            tool = "get_databank · get_take_rate · get_positions · get_loop_status",
+            sub = "the spine",
         ) {
             Note("THE MONEY PATH · DETERMINISTIC CODE PROPOSES AND ENFORCES · THE MODEL ONLY JUDGES ENTRY (P1)")
             val spine = M.stages.mapIndexed { i, st ->
@@ -598,8 +599,9 @@ fun OverviewScreen(repo: MissionRepository) {
 
         // ── 1.3 RISK — is money exposed, and is it protected? (always present · O-4) ──────────────────
         McCard(
-            "Risk — is money exposed, and is it protected?",
-            "get_positions · get_exposure · get_limits · get_breaker_state",
+            "Risk",
+            tool = "get_positions · get_exposure · get_limits · get_breaker_state",
+            sub = "is money exposed, and is it protected?",
         ) {
             Verdict(
                 when {
@@ -681,7 +683,7 @@ fun OverviewScreen(repo: MissionRepository) {
         }
 
         // ── 1.4 TRUTH — how much of this is actually known? (coverage before verdict · O-2) ───────────
-        McCard("Truth — how much of this is actually known?", "get_checkup · get_attestation · get_config_active") {
+        McCard("Truth", tool = "get_checkup · get_attestation · get_config_active", sub = "how much of this is actually known?") {
             Verdict(
                 if (M.total == 0) "Truth coverage unknown — no checkup has run."
                 else "Coverage ${pct(M.coverage, 0)} · ${M.probed} of ${M.total} probed.",
@@ -744,7 +746,7 @@ fun OverviewScreen(repo: MissionRepository) {
         }
 
         // ── 1.5 EDGE — is there anything worth trading? (four books · O-6 no cross-cohort sums) ────────
-        McCard("Edge — is there anything worth trading?", "get_books_scoreboard · get_shadow_bank · get_calibration") {
+        McCard("Edge", tool = "get_books_scoreboard · get_shadow_bank · get_calibration", sub = "is there anything worth trading?") {
             // Bank integrity ribbon (AT-OV5): count(*) vs distinct(decision_id).
             when {
                 M.dup == null -> Ribbon(
@@ -822,7 +824,7 @@ fun OverviewScreen(repo: MissionRepository) {
         }
 
         // ── 1.6 FLOW — is the front of the loop alive? ────────────────────────────────────────────────
-        McCard("Flow — is the front of the loop alive?", "get_continuity · get_take_rate · get_databank · get_detector_registry") {
+        McCard("Flow", tool = "get_continuity · get_take_rate · get_databank · get_detector_registry", sub = "is the front of the loop alive?") {
             Verdict(
                 "Loop continuity: ${M.co.text("verdict", "UNKNOWN")}.",
                 "Worst leg wins across FLOW · CAG · BANK (W-33 watchdog).",
@@ -864,7 +866,7 @@ fun OverviewScreen(repo: MissionRepository) {
         }
 
         // ── 1.7 NEXT — the one thing to do (read-only · propose only · O-5) ───────────────────────────
-        McCard("Next — the one thing to do", "get_go_no_go_status · get_proposals") {
+        McCard("Next", tool = "get_go_no_go_status · get_proposals", sub = "the one thing to do") {
             val blocking = if (M.chokeStage?.k == "takes")
                 "Nothing can be proven forward while the take rate is ${pct(M.takeRate, 2)}. Gate 7 (E-0) cannot accumulate " +
                     "evidence, and gate 6 (calibration in band) is failing by definition — so gates 1–5 are not the binding " +
@@ -902,7 +904,7 @@ fun OverviewScreen(repo: MissionRepository) {
         }
 
         // ── 1.8 LATENCY — declared vs measured (O-1: every live cell is hatched, not green) ───────────
-        McCard("Latency law — declared vs measured", "get_latency_budgets") {
+        McCard("Latency law", tool = "get_latency_budgets", sub = "declared vs measured") {
             KvRow("config version", M.lb.text("config_version"), if (M.lb == null) Tone.UNK else Tone.NEUTRAL)
             val latRows = M.lb.arr("rows").rows()
             if (latRows.isNotEmpty()) {

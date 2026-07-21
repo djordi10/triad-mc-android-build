@@ -155,7 +155,7 @@ fun ConfigScreen(repo: MissionRepository) {
         // A viewer + propose surface: the profile selector + Save/Discard/Import/Export chips are the
         // editor affordances that operate on the CLIENT draft; the working Export change-plan is the
         // live ConfigDraftCard below. Nothing here applies to the running system (R-C1).
-        McCard("The editor — draft over the applied baseline", "config store · R-C1") {
+        McCard("The editor", tool = "config store · R-C1", sub = "draft over the applied baseline") {
             KvRow("mode", "DRAFT EDITOR · READ + PROPOSE · R-C1 (apply only via triadctl)", INFO)
             KvRow("applied profile", if (preset == "—") "—" else preset, NEUTRAL)
             KvRow("fingerprint", fpShort, NEUTRAL)
@@ -171,7 +171,7 @@ fun ConfigScreen(repo: MissionRepository) {
             Note("Full editor over the applied preset. Every control writes a draft; nothing applies from here (R-C1). Save profile / Discard / Import JSON / Export preset act on the client draft; Export change-plan produces the grouped ops for triad-config compile → triadctl config verify → apply — the live change-plan builder is the card below.", NEUTRAL)
         }
 
-        McCard("Applied preset — the served baseline", "get_config_active · get_config_preset") {
+        McCard("Applied preset", tool = "get_config_active · get_config_preset", sub = "the served baseline") {
             KvRow("preset name", preset, NEUTRAL)
             KvRow("state", stateLabel, stateTone)
             KvRow("fingerprint", fpRaw, NEUTRAL)
@@ -189,7 +189,7 @@ fun ConfigScreen(repo: MissionRepository) {
             Note("— · get_config_preset returned no domains (tool unavailable or empty). Nothing fabricated.", UNK)
         } else {
             // ── the domains grid — lever counts per domain (mirrors pPreset's domain chips) ──
-            McCard("The thing that would be promoted — ${domains.size} domains", "get_config_preset · domains.*") {
+            McCard("The thing that would be promoted", tool = "get_config_preset · domains.*", sub = "${domains.size} domains") {
                 val levers = domains.keys.sorted().map { name ->
                     val dom = domains.obj(name)
                     val n = (dom?.size ?: 0).toDouble()
@@ -374,7 +374,7 @@ fun ConfigScreen(repo: MissionRepository) {
         // file it as a proposal. It never applies — there is no config_apply ("NO TOOL WRITES IT").
         ConfigDraftCard(repo, domains, fpRaw)
 
-        McCard("Operator actions — proposals, never commands", "propose_action") {
+        McCard("Operator actions", tool = "propose_action", sub = "proposals, never commands") {
             KvRow("global circuit breaker", "halt new entries immediately; exits keep managing", WARN)
             KvRow("hard kill", "entries + requotes off, convert resting TPs to protective (two-step)", SEV)
             KvRow("cancel all orders", "flatten the resting book (pre-live: none exist — payload still emitted)", WARN)
@@ -466,7 +466,7 @@ private fun ConfigDraftCard(repo: MissionRepository, domains: JsonObject?, baseF
         }
     }
 
-    McCard("Client draft → change-plan → proposal (the safe half — never applies)", "get_config_preset · propose_action") {
+    McCard("Client draft → change-plan → proposal", tool = "get_config_preset · propose_action", sub = "the safe half, never applies") {
         // The design's ceremony note, verbatim.
         Note("proposal → triad-config compile → git → triadctl config verify; NO TOOL WRITES IT", WARN)
         Note("Build the change IN THE APP: pick a lever, set a new value client-side, read the diff, then Export → proposal. The app files a config_change proposal (propose_action); it never applies. config_apply does not exist.", NEUTRAL)
@@ -757,7 +757,7 @@ fun GovernanceScreen(repo: MissionRepository) {
         )
 
         // ── the signature go/no-go board — ten gates, each verdict live from the ledger ──
-        McCard("The ten gates to real money — answered", "get_go_no_go_status × the live ledger") {
+        McCard("The ten gates to real money", tool = "get_go_no_go_status × the live ledger", sub = "answered") {
             Ribbon(
                 "get_go_no_go_status returns the questions and not one answer",
                 "Its own description promises \"the §16.6 go/no-go items each with evidence or its absence\" — it " +
@@ -849,7 +849,7 @@ fun GovernanceScreen(repo: MissionRepository) {
         }
 
         // ── what actually works — honest UNKNOWN over a flattering default ──
-        McCard("What actually works — and it is not nothing", "get_kill_state · get_attestation · get_config_active") {
+        McCard("What actually works", tool = "get_kill_state · get_attestation · get_config_active", sub = "and it is not nothing") {
             Note("Sixteen findings in this series are something broken. This is the panel that can say a few things are genuinely, provably right.")
             KvRow("control_path: false", if (ks != null || bs != null) "kill + breaker cannot act" else "—", if (ks != null || bs != null) GOOD else UNK)
             KvRow("state: \"unknown\" — not \"disarmed\"", killState, if (ks != null) GOOD else UNK)
@@ -929,7 +929,7 @@ fun GovernanceScreen(repo: MissionRepository) {
             WhyBox("THE LAW · G-3") { LawBlock("G-3", "A checklist must be answerable. A gate with no evidence field is a wish. get_go_no_go_status ships nine questions, no answers, no verdict — when it ships at all.") }
         }
 
-        McCard("Proposals inbox — replay only, never apply", "get_proposals") {
+        McCard("Proposals inbox", tool = "get_proposals", sub = "replay only, never apply") {
             if (proposals.isEmpty()) {
                 Note("Inbox empty — no proposals filed. (propose_action would append one; it executes nothing.)", UNK)
             } else {
@@ -991,7 +991,7 @@ private fun GovernanceProposeCard(repo: MissionRepository) {
     val safeSel = sel.coerceIn(0, kinds.size - 1)
     val kind = kinds[safeSel]
 
-    McCard("File a proposal — propose_action (executes nothing)", "propose_action") {
+    McCard("File a proposal", tool = "propose_action", sub = "propose_action (executes nothing)") {
         Note("G-5 · The inbox write is a proposal, not a command: it appends a record; a human runs it at triadctl after its own confirm. A proposal without a rationale is a command — write the why.", WARN)
 
         Row(Modifier.horizontalScroll(rememberScrollState())) {

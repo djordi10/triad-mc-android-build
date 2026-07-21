@@ -241,9 +241,11 @@ fun McCard(
         // Title + descriptive sub on the left; the source-tool provenance sits on the right.
         Row(
             Modifier.fillMaxWidth().background(Pine).padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
         ) {
-            Column(Modifier.weight(1f).padding(end = 10.dp)) {
+            // Both columns are weighted so a long provenance can never starve the title's width (an
+            // unweighted tool text used to claim all the room and wrap the title to one char per line).
+            Column(Modifier.weight(2f).padding(end = 10.dp)) {
                 Text(title, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.5.sp, letterSpacing = (-0.2).sp)
                 if (sub.isNotEmpty()) {
                     Text(
@@ -257,6 +259,7 @@ fun McCard(
                     "${if (writes) "writes" else "reads"} · $tool", color = EmeraldBright.copy(alpha = 0.85f),
                     fontFamily = Mono, fontSize = 9.sp, letterSpacing = 0.4.sp, lineHeight = 13.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(top = 2.dp),
                 )
             }
         }

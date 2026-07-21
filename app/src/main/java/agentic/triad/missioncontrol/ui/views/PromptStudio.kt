@@ -419,7 +419,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
         } else {
             "context_packet/1 · get_packet not served — block table from the spec (fields honest)"
         }
-        McCard("The composer — 14 blocks, from the real packet", packetSrc) {
+        McCard("The composer", tool = packetSrc, sub = "14 blocks, from the real packet") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("token meter", color = Tone.NEUTRAL.fg(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Text(
@@ -517,7 +517,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
         }
 
         // ── P-2 / P-3 — the arming drawer ──
-        McCard("Arm the studio — P-2 · OFF until you turn it on", "no MCP · direct to LLM (P-3)") {
+        McCard("Arm the studio", tool = "no MCP · direct to LLM (P-3)", sub = "P-2 · OFF until you turn it on") {
             KvRow("target", "$OLLAMA_BASE/api/generate", INFO)
             KvRow("model", OLLAMA_MODEL, NEUTRAL)
             KvRow("params", "temperature 0 · seed 7 · num_predict 350", NEUTRAL)
@@ -567,7 +567,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
         }
 
         // ── the run result — measured, or the honest error (P-5 / AT-P13) ──
-        McCard("The bench — measured (P-5)", "POST /api/generate · Ollama") {
+        McCard("The bench", tool = "POST /api/generate · Ollama", sub = "measured (P-5)") {
             if (runError != null) {
                 Note("Run failed — $runError", BAD)
                 Note("No result is fabricated. Fix OLLAMA_ORIGINS + routing, then re-run (AT-P7).", UNK)
@@ -608,7 +608,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
         }
 
         // ── the ledger bench — what 11,528 real adjudications already measured (AT-P9) ──
-        McCard("The ledger bench — 11,528 real adjudications", "the slowest path is the one that trades") {
+        McCard("The ledger bench", tool = "the slowest path is the one that trades", sub = "11,528 real adjudications") {
             MiniTable(
                 listOf("path", "n", "latency", "what it means"),
                 listOf(
@@ -652,7 +652,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
         }
 
         // ── history — append-only, restore appends (P-6 / AT-P14/P15) ──
-        McCard("History — append-only · restore is a new version (P-6)", "client-side · L-6") {
+        McCard("History", tool = "client-side · L-6", sub = "append-only · restore is a new version (P-6)") {
             if (history.isEmpty()) {
                 Note("No versions yet. Save version or Run appends one, carrying its fingerprint, token count, and (for a Run) its MEASURED latency.", UNK)
             } else {
@@ -773,7 +773,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
         }
 
         // ── what this page closes — Lanes L-2 (§6 / AT-P10) ──
-        McCard("What this page closes — Lanes L-2 (§6)", "prompt as a first-class artifact") {
+        McCard("What this page closes", tool = "prompt as a first-class artifact", sub = "Lanes L-2 (§6)") {
             Note(
                 "L-2: the preset does not pin a prompt template, so a promotion built to CSL-1 D2 would " +
                     "graduate the model and the knobs and silently leave the prompt behind. Two presets " +
@@ -790,7 +790,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
         }
 
         // ── §7 · prompt_get is LIVE (server truth); prompt_set stays absent (AT-P16) ──
-        McCard("The applied prompt — server truth", "prompt_get") {
+        McCard("The applied prompt", tool = "prompt_get", sub = "server truth") {
             if (pg == null) {
                 Note("no data — prompt_get not served yet. The studio still composes client-side.", UNK)
             } else {

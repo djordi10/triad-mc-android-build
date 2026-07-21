@@ -314,7 +314,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             )
             Note("Definition law: positive-outcome rate = pnl_r > 0 · full-win = pnl_r ≥ 1.9 · net_r never summed across cohorts · every WR renders with its Wilson CI against BE 28.6% (single-TP).", INFO)
         }
-        McCard("Equity curve — selected cohort", "rowset") {
+        McCard("Equity curve", tool = "rowset", sub = "selected cohort") {
             val eq = guardDerive(emptyList<Double>()) {
                 var acc = 0.0
                 selResolved.map { acc += it.r; acc }
@@ -372,7 +372,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             )
             Note("The ladder signature: mass at +1.05 and +1.95 replaces the single +2.5 spike.")
         }
-        McCard("Failure histogram — validity→semantic (A-adj)", "get_analytics.checks_failed") {
+        McCard("Failure histogram", tool = "get_analytics.checks_failed", sub = "validity→semantic (A-adj)") {
             if (checksFailedList.isEmpty()) {
                 Note("No failing checks in the window — or the ledger has no rows.", UNK)
             } else {
@@ -387,7 +387,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
                 Note("semantic = 1 − econ-fails/decisions; the top check names the dominant kill.")
             }
         }
-        McCard("Conviction histogram — the drift tell", "get_conviction_histogram") {
+        McCard("Conviction histogram", tool = "get_conviction_histogram", sub = "the drift tell") {
             val fresh = hist.obj("fresh")
             val cache = hist.obj("cache")
             val freshMode = fresh?.entries?.maxByOrNull { (it.value.str()).toDoubleOrNull() ?: 0.0 }
@@ -422,7 +422,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             KvRow("continuity verdict", cont.text("verdict", "—"), continuityTone(cont.text("verdict")))
             Note("Attribution is the co-tuning referee (ΔB0 edge vs M1−B0 judgment, ≥4 weeks / ≥300 candidates). Continuity SLOs: FLOW / CAG / BANK.")
         }
-        McCard("Exec quality — honestly empty", "get_exec_quality") {
+        McCard("Exec quality", tool = "get_exec_quality", sub = "honestly empty") {
             if (exec == null || exec.text("status", "") == "") {
                 KvRow("fill / maker / requote", "— · Prometheus unavailable (degrades)", UNK)
                 Note("get_exec_quality is Prometheus-only and reports transport:unavailable pre-live — rendered honestly as UNKNOWN, never a fabricated fill.", UNK)
@@ -447,7 +447,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
 
         // ── 01 · SIGNALS ───────────────────────────────────────────────────────────────────────────
         AnaSection("01 · Signals", "The engine plane")
-        McCard("Emission board — 45 configured / 26 emitting", "candidates by symbol") {
+        McCard("Emission board", tool = "candidates by symbol", sub = "45 configured / 26 emitting") {
             HBarChart(
                 listOf(
                     Bar("ETH", 507.0), Bar("BTC", 428.0), Bar("SOL", 222.0), Bar("LINK", 199.0), Bar("XRP", 192.0),
@@ -471,7 +471,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
 
         // ── 02 · ADJUDICATION ──────────────────────────────────────────────────────────────────────
         AnaSection("02 · Adjudication", "The model plane")
-        McCard("Conviction histogram — the scale is waking", "get_conviction_histogram") {
+        McCard("Conviction histogram", tool = "get_conviction_histogram", sub = "the scale is waking") {
             val f = hist.obj("fresh")
             KvRow("fresh buckets · threshold 60", "${f?.size ?: 0} · first crossings 63 · 65", if ((f?.size ?: 99) < 30) BAD else NEUTRAL)
             Note("A drift monitor: decile occupancy gates the pin. The full histogram is above in the drift-tell card.")
@@ -519,19 +519,19 @@ fun AnalyticsScreen(repo: MissionRepository) {
             Note("Never sum across cohorts as P&L — the +988R aggregate is a cross-book sum. gap = kline gaps, named honestly.")
             Wire(false, "get_shadow_bank.by_outcome + cohort group_by")
         }
-        McCard("Cohort scoreboard — the adoption table", "triad_variant_resolver → get_vr_scoreboard") {
+        McCard("Cohort scoreboard", tool = "triad_variant_resolver → get_vr_scoreboard", sub = "the adoption table") {
             KvRow("VR-BASE vs TRIAD-A agreement", "AT-VR1 gate 95%", NEUTRAL)
             KvRow("paired dEV (P-LADDER − VR-BASE)", "200+ pairs · CI-positive", NEUTRAL)
             KvRow("REC-2 touch ratio", "gate 1.35", NEUTRAL)
             KvRow("REC-1 convertible share", "per widestop", NEUTRAL)
             Wire(false, "get_vr_scoreboard — the single most valuable missing feed")
         }
-        McCard("Win rate — by side (latest window)", "bank slice by side") {
+        McCard("Win rate", tool = "bank slice by side", sub = "by side (latest window)") {
             HBarChart(listOf(anaWrBar("LONG", 16, 48), anaWrBar("SHORT", 7, 41)), unit = "%", labelWidth = 64)
             Note("BE 28.6%.")
             Wire(false, "bank slice by side")
         }
-        McCard("Win rate — by stop width", "bank slice by stop_bps") {
+        McCard("Win rate", tool = "bank slice by stop_bps", sub = "by stop width") {
             HBarChart(listOf(anaWrBar("≤15bps", 15, 63), anaWrBar("15-30", 6, 16), anaWrBar("30-60", 1, 5), anaWrBar(">60", 1, 5)), unit = "%", labelWidth = 64)
             Note("The 45bps floor redraws this chart — sub-floor buckets stop existing. BE 28.6%.")
             Wire(false, "bank slice by stop_bps bucket")
@@ -547,7 +547,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             Note("The 2-minute deaths are the ENTRY_CONFIRM target; P-CONFIRM prices it.")
             Wire(false, "bank closed_at − entry_filled_at")
         }
-        McCard("Fill map — zone placement", "bank fill rate per symbol") {
+        McCard("Fill map", tool = "bank fill rate per symbol", sub = "zone placement") {
             HBarChart(
                 listOf(Bar("AVAX", 47.0), Bar("FIL", 50.0), Bar("ETH", 29.0), Bar("LTC", 27.0), Bar("DOGE", 8.0, WARN), Bar("SUI", 0.0, UNK), Bar("XLM", 0.0, UNK), Bar("NEAR", 0.0, UNK)),
                 unit = "%", labelWidth = 64,
@@ -609,17 +609,17 @@ fun AnalyticsScreen(repo: MissionRepository) {
 
         // ── 05 · DEEP INSIGHTS ────────────────────────────────────────────────────────────────────
         AnaSection("05 · Deep insights", "The second layer — what the first layer means")
-        McCard("Tier vs outcome — pre-calibration truth", "bank slice: conviction_tier × outcome") {
+        McCard("Tier vs outcome", tool = "bank slice: conviction_tier × outcome", sub = "pre-calibration truth") {
             HBarChart(listOf(Bar("VERY_LOW", 30.0, WARN), Bar("LOW", 20.0, WARN)), unit = "%", labelWidth = 88)
             Note("Conviction tier is anti-correlated with outcomes in the window — the head recites, it does not rank. The T1 unlock in one chart.")
             Wire(false, "bank slice: conviction_tier × outcome")
         }
-        McCard("Skip anatomy — 96% decomposed", "get_conviction_histogram × bank outcomes") {
+        McCard("Skip anatomy", tool = "get_conviction_histogram × bank outcomes", sub = "96% decomposed") {
             HBarChart(listOf(Bar("conviction-0 (invalid era)", 806.0, BAD), Bar("stock-22 skips", 234.0, WARN), Bar("real skips 28-35", 49.0)), labelWidth = 140)
             Note("Model-skips resolved 17.2% vs stream 25.8% — judgment signal exists under the stock-22 era.")
             Wire(hist != null, "get_conviction_histogram × bank outcomes")
         }
-        McCard("MFE / MAE — the phases unlock (906 rows live)", "get_vr_scoreboard.mfe_hist") {
+        McCard("MFE / MAE", tool = "get_vr_scoreboard.mfe_hist", sub = "the phases unlock (906 rows live)") {
             KvRow("P(MFE ≥ 1.75R)", "REC-2 numerator", NEUTRAL)
             KvRow("P(MFE ≥ 2.5R)", "REC-2 denominator · gate ≥1.35", NEUTRAL)
             KvRow("near-miss losses (MFE ≥ 1.5R)", "partial-credit targets (LRN-3)", NEUTRAL)
@@ -655,7 +655,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             KvRow("banned (context_stale era)", "excluded — invariant 12", WARN)
             Wire(false, "corpus builder counts per channel — LRN-2/3")
         }
-        McCard("Session heat — where R lives", "bank slice hr-block") {
+        McCard("Session heat", tool = "bank slice hr-block", sub = "where R lives") {
             HBarChart(listOf(Bar("15-17Z", 34.0, GOOD), Bar("18-23Z", 27.0), Bar("00-11Z", 26.0), Bar("12-14Z", 21.0, WARN)), unit = "%", labelWidth = 72)
             Note("WR% by block (window). 12-14Z carries the 0.7 down-weight (unwired); 15-17Z is the harvest window.")
             Wire(false, "bank slice hr-block")
@@ -667,7 +667,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             Note("Funding guard: no entries within 5m of funding.")
             Wire(false, "get_packet.derivatives per active symbol")
         }
-        McCard("Governor scoreboard — all 14 checks", "get_governor_refusals GROUP BY check_id") {
+        McCard("Governor scoreboard", tool = "get_governor_refusals GROUP BY check_id", sub = "all 14 checks") {
             val gov = d["get_governor_refusals"] as? JsonObject
             val byCheck = guardDerive(emptyList<JsonObject>()) { gov.field("by_check").rows().ifEmpty { gov.field("refusals").rows() } }
             if (byCheck.isNotEmpty()) {
@@ -686,7 +686,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             Note("Headroom 2.4× at p95 — CAG hits land ~0ms and widen it as cluster loads.")
             Wire(analytics != null, "get_analytics.latency + get_latency_budgets")
         }
-        McCard("Attribution preview — the referee's ledger", "get_attribution_ledger") {
+        McCard("Attribution preview", tool = "get_attribution_ledger", sub = "the referee's ledger") {
             KvRow("ΔB0 week-over-week", "edge motion", NEUTRAL)
             KvRow("Δ(M1−B0)", "judgment motion — the only promotable number", NEUTRAL)
             KvRow("first read", "when the four-book race opens", NEUTRAL)
@@ -918,7 +918,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
                 ),
             )
         }
-        McCard("Row integrity — duplication by layer", "get_row_integrity") {
+        McCard("Row integrity", tool = "get_row_integrity", sub = "duplication by layer") {
             if (integ == null) {
                 Note("get_row_integrity unavailable — no integrity read this poll.", UNK)
             } else {
@@ -953,7 +953,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
                 }
             }
         }
-        McCard("Decision census — who actually answered (T-3)", "get_decision_census") {
+        McCard("Decision census", tool = "get_decision_census", sub = "who actually answered (T-3)") {
             if (census == null) {
                 Note("get_decision_census unavailable — no census this poll.", UNK)
             } else {
@@ -994,7 +994,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
                 Note(census.text("note", "model_actually_consulted counts take + a real model answer only — a gateway error/timeout is not a model decision (T-3)."), INFO)
             }
         }
-        McCard("Conviction — a mode collapse, not a distribution", "get_conviction_histogram") {
+        McCard("Conviction", tool = "get_conviction_histogram", sub = "a mode collapse, not a distribution") {
             if (convFresh == null || convFresh.isEmpty()) {
                 Note("get_conviction_histogram returned no fresh buckets this poll — the distribution read is UNKNOWN.", UNK)
             } else {
@@ -1034,7 +1034,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
                 }
             }
         }
-        McCard("Fabrication audit — invented vs honestly absent (T-4)", "get_fabrication_audit") {
+        McCard("Fabrication audit", tool = "get_fabrication_audit", sub = "invented vs honestly absent (T-4)") {
             if (fabAudit == null) {
                 Note("get_fabrication_audit unavailable — no audit this poll.", UNK)
             } else {
@@ -1184,7 +1184,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
                 }
             }
         }
-        McCard("Row detail — the full chain (T-5)", "run_select → get_trade_row") {
+        McCard("Row detail", tool = "run_select → get_trade_row", sub = "the full chain (T-5)") {
             val dr = detailRow
             val err = detailErr
             when {
@@ -1490,7 +1490,7 @@ fun DatabankScreen(repo: MissionRepository) {
             "A row is never born resolved — resolved:${resolved ?: "—"} pending:${pending ?: "—"}. The no-nulls law as analytics: every absence tells the current story. ${bank.text("note", "")}",
             INFO,
         )
-        McCard("The hole — the counter and the table disagree", "get_hole_report · health.records_total vs count(*)") {
+        McCard("The hole", tool = "get_hole_report · health.records_total vs count(*)", sub = "the counter and the table disagree") {
             // get_hole_report is sparse in most deployments; the reconciliation is computed from get_table_census
             // (writer counted vs reader can see). A negative delta beyond in-flight tolerance is a HOLE (D-1).
             val hrRows = guardDerive(emptyList<JsonObject>()) {
@@ -1590,7 +1590,7 @@ fun DatabankScreen(repo: MissionRepository) {
             KvRow("resolver lag", bank.num("lag_min")?.let { "${fmt(it, 1)} min" } ?: "— (no lag reported)", if (bank.num("lag_min") == null) UNK else NEUTRAL)
             Note("`nonulls: AT-DTB11 green` is printed beside the real counts — an asserted green is measured only if the class census agrees (D-6). GATED dominating the census is the staleness-veto regime, not a low-signal market.")
         }
-        McCard("Capture manifest — top reasons (D-6)", "get_databank.capture_top") {
+        McCard("Capture manifest", tool = "get_databank.capture_top", sub = "top reasons (D-6)") {
             val capTop = bank.field("capture_top").list()
             if (capTop.isEmpty()) {
                 Note("Capture manifest empty — no captured absences this hour.", UNK)
@@ -1606,7 +1606,7 @@ fun DatabankScreen(repo: MissionRepository) {
                 Note("Each captured absence is a real reason (timeout / model / error / validator_reject) with its n — the manifest is the no-nulls law made countable.")
             }
         }
-        McCard("Shadow bank — outcome funnel (D-1)", "get_shadow_bank") {
+        McCard("Shadow bank", tool = "get_shadow_bank", sub = "outcome funnel (D-1)") {
             val byOutcome = shadow.obj("by_outcome")
             if (byOutcome == null) {
                 Note("Shadow bank unavailable — the deployment has no local bank.", UNK)
@@ -1645,7 +1645,7 @@ fun DatabankScreen(repo: MissionRepository) {
                 Note("net_pnl_r is per-selection over distinct decisions — never a cross-cohort P&L sum (${shadow.text("note", "triad-cf/1")}). ${total ?: "—"} rows, ${byOutcome.entries.size} outcome classes.")
             }
         }
-        McCard("Bank rows — the dup-indexed ledger (D-4)", "get_bank_rows") {
+        McCard("Bank rows", tool = "get_bank_rows", sub = "the dup-indexed ledger (D-4)") {
             if (bankRows == null) {
                 Note("get_bank_rows unavailable — the paged bank endpoint did not answer.", UNK)
             } else {
@@ -1684,7 +1684,7 @@ fun DatabankScreen(repo: MissionRepository) {
                 Note(bankRows.text("note", "every duplicate row names which row it duplicates (dup_of) — dedup before you count."), INFO)
             }
         }
-        McCard("The bank — three vocabularies & asserted greens (D-6)", "get_databank · get_shadow_bank") {
+        McCard("The bank", tool = "get_databank · get_shadow_bank", sub = "three vocabularies & asserted greens (D-6)") {
             // THREE VOCABULARIES FOR ONE EVENT — one failure named three incompatible ways: the ledger's
             // abstain_reason, the bank's capture_top, and the trade-log class. Two vocabularies is a defect.
             val ledgerVocab = listOf("error", "model", "invalid_output", "timeout")
@@ -1742,7 +1742,7 @@ fun DatabankScreen(repo: MissionRepository) {
             }
             Note("AT-DTB11 is green on a bank full of nulls — it is a claim, not a test. This panel prints the claim next to the counts and lets them argue (D-6). And the ingest contradiction: get_databank.ingest[0].age_s null while get_bridge_lag returns live ages — two tools, one registry, two answers.")
         }
-        McCard("Table census — counter vs table (D-1)", "get_table_census") {
+        McCard("Table census", tool = "get_table_census", sub = "counter vs table (D-1)") {
             if (tableCensus == null) {
                 Note("get_table_census unavailable.", UNK)
             } else {
@@ -1781,7 +1781,7 @@ fun DatabankScreen(repo: MissionRepository) {
                 Note(tableCensus.text("rule", "a table whose health counter exceeds its row count is a HOLE, not a lag."), WARN)
             }
         }
-        McCard("Column census — fill vs null, every column", "get_column_census") {
+        McCard("Column census", tool = "get_column_census", sub = "fill vs null, every column") {
             if (colCensus == null) {
                 Note("get_column_census unavailable.", UNK)
             } else {
@@ -1822,7 +1822,7 @@ fun DatabankScreen(repo: MissionRepository) {
                 Note(colCensus.text("note", "every column of every table, always; a named reason for nulls."), INFO)
             }
         }
-        McCard("mcp_audit — the observability of the observability", "get_mcp_audit_summary · D-5") {
+        McCard("mcp_audit", tool = "get_mcp_audit_summary · D-5", sub = "the observability of the observability") {
             if (mcpAudit == null) {
                 Note("get_mcp_audit_summary unavailable — the tool-reliability read is UNKNOWN this poll (never rendered as a green state).", UNK)
             } else {
@@ -1970,7 +1970,7 @@ fun DatabankScreen(repo: MissionRepository) {
                 KvRow("get_bridge_lag", "no lanes reported", UNK)
             }
         }
-        McCard("The log — every column, up to 2,500 rows", "run_select · decisions ORDER BY ts_response DESC") {
+        McCard("The log", tool = "run_select · decisions ORDER BY ts_response DESC", sub = "every column, up to 2,500 rows") {
             val lrows = logRows
             when {
                 logErr != null && lrows == null ->
@@ -2300,7 +2300,7 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                 }
             }
         }
-        McCard("Query catalog — the saved units of knowledge (Q-6)", "get_query_catalog") {
+        McCard("Query catalog", tool = "get_query_catalog", sub = "the saved units of knowledge (Q-6)") {
             if (queryCat == null) {
                 Note("get_query_catalog unavailable — the canned pills fall back to the three built-ins.", UNK)
             } else if (catQueries.isEmpty()) {
@@ -2338,7 +2338,7 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                 Note(queryCat.text("note", "the page chips name which pages depend on the query — the provenance edge. When a finding changes, every page that cites it is stale and should say so (Q-6)."), INFO)
             }
         }
-        McCard("Schema — ${QC_SCHEMA.size} views, $QC_TOTAL_COLS columns (Q-7)", "get_view_catalog · the allowlist") {
+        McCard("Schema", tool = "get_view_catalog · the allowlist", sub = "${QC_SCHEMA.size} views, $QC_TOTAL_COLS columns (Q-7)") {
             Note("Q-7 · the schema is in the room. You cannot write a correct query against a schema you cannot see. Tap a view to expand; tap a column to append it to the editor.", INFO)
             QC_SCHEMA.forEach { view ->
                 val live = catViews.firstOrNull { it.text("name") == view.name }

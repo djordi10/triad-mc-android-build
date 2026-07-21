@@ -336,7 +336,7 @@ fun StrategyScreen(repo: MissionRepository) {
         }
 
         // ── pTrackAB() — the comparison: one candidate stream, evaluated two ways (S-2) ───────────────
-        McCard("Track A vs Track B — the same candidates, one gate", "get_books_scoreboard · S-2") {
+        McCard("Track A vs Track B", tool = "get_books_scoreboard · S-2", sub = "the same candidates, one gate") {
             Note(
                 "This is the comparison you asked for. Not two strategies — one candidate stream, evaluated " +
                     "two ways. Track B is Track A with the FinGPT gate in front of it.",
@@ -383,7 +383,7 @@ fun StrategyScreen(repo: MissionRepository) {
         }
 
         // ── pTable() — the fleet, grouped: detectors · SMC tracks · books · combos ────────────────────
-        McCard("The fleet — recording status & performance", "get_shadow_bank × get_books_scoreboard") {
+        McCard("The fleet", tool = "get_shadow_bank × get_books_scoreboard", sub = "recording status & performance") {
             Note("detectors — the signal sources", INFO)
             MiniTable(
                 listOf("strategy", "state", "rec", "cand", "WR", "EV", "sig"),
@@ -480,7 +480,7 @@ fun StrategyScreen(repo: MissionRepository) {
         }
 
         // ── detector registry (get_detector_registry — live) ─────────────────────────────────────────
-        McCard("Detector registry — the emitting sources", "get_detector_registry") {
+        McCard("Detector registry", tool = "get_detector_registry", sub = "the emitting sources") {
             val regRows = guardDerive(emptyList<JsonObject>()) { dr.arr("detectors").rows() }
             if (regRows.isEmpty()) {
                 // honest degrade to the taxonomy seed when the tool answers no rows.
@@ -507,7 +507,7 @@ fun StrategyScreen(repo: MissionRepository) {
         }
 
         // ── pRecency() — 24h / 7d / 30d / all; the bank answers ONE window today (S-5) ────────────────
-        McCard("Recency — 24h · 7d · 30d · all", "get_track_watch · the bank answers ONE window today · S-5") {
+        McCard("Recency", tool = "get_track_watch · the bank answers ONE window today · S-5", sub = "24h · 7d · 30d · all") {
             Ribbon(
                 "The bank cannot answer \"the last 24 hours\" — and this page will not pretend it can",
                 "get_shadow_bank has no since/until on the outcome axis; it returns lifetime totals. The track_watch " +
@@ -539,7 +539,7 @@ fun StrategyScreen(repo: MissionRepository) {
         }
 
         // ── pScale() — where the bleed is · the scale law (get_shadow_bank group_by stop_bucket) ──────
-        McCard("Where the bleed is — the scale law", "get_shadow_bank group_by stop_bucket · 9,266 resolved") {
+        McCard("Where the bleed is", tool = "get_shadow_bank group_by stop_bucket · 9,266 resolved", sub = "the scale law") {
             MiniTable(
                 listOf("stop bucket", "resolved", "win rate", "EV / sel", "net"),
                 listOf(

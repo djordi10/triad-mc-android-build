@@ -329,7 +329,7 @@ fun LanesScreen(repo: MissionRepository) {
         if (proposing) Note("filing proposal… the app proposes; it applies nothing.", INFO)
 
         // ── the two identities — one of them is missing (pIdentities) ──
-        McCard("The two identities — one of them is missing", "get_config_preset · D1") {
+        McCard("The two identities", tool = "get_config_preset · D1", sub = "one of them is missing") {
             Row(androidx.compose.ui.Modifier.fillMaxWidth()) {
                 Column(androidx.compose.ui.Modifier.weight(1f).padding(end = 6.dp)) {
                     Tag("APPLIED · promoted", INFO)
@@ -358,7 +358,7 @@ fun LanesScreen(repo: MissionRepository) {
         }
 
         // ── §1 · P0 finding: D2's premise is false (AT-L6) ──
-        McCard("§1 · D2's premise is false — the fingerprint would leave the prompt behind (P0)", "get_config_preset") {
+        McCard("§1 · D2's premise is false", tool = "get_config_preset", sub = "the fingerprint would leave the prompt behind (P0)") {
             KvRow(
                 "intelligence.model_tag",
                 if (modelPinned) "$modelTag — pinned ✅" else "absent ❌",
@@ -408,7 +408,7 @@ fun LanesScreen(repo: MissionRepository) {
         }
 
         // ── §3 · the lane board — five expandable cards (AT-L1/L4/L5/L11/L12) ──
-        McCard("§3 · the lane board — five lanes, one thing to bind to", "get_config_active · get_go_no_go_status") {
+        McCard("§3 · the lane board", tool = "get_config_active · get_go_no_go_status", sub = "five lanes, one thing to bind to") {
             Note("Tap a lane to open its drawer: binding · env · real-money · guard · what it would take.", INFO)
             lanes.forEachIndexed { i, lane ->
                 if (i > 0) Box(Modifier.fillMaxWidth().padding(top = 8.dp).height(1.dp).background(Line))
@@ -498,7 +498,7 @@ fun LanesScreen(repo: MissionRepository) {
         }
 
         // ── §5 · contracts — the three named absences (AT-L3) ──
-        McCard("§5 · contracts — three schemas the lane overhaul needs are NOT VENDORED", "list_contracts") {
+        McCard("§5 · contracts", tool = "list_contracts", sub = "three schemas the lane overhaul needs are NOT VENDORED") {
             KvRow("vendored schemas", "$schemaCount", NEUTRAL)
             MiniTable(
                 listOf("schema", "status"),
@@ -518,7 +518,7 @@ fun LanesScreen(repo: MissionRepository) {
         }
 
         // ── §6 · the applied preset (AT-L9) ──
-        McCard("§6 · the applied preset — its real shape", "get_config_preset") {
+        McCard("§6 · the applied preset", tool = "get_config_preset", sub = "its real shape") {
             KvRow("preset", presetName, NEUTRAL)
             KvRow("schema", doc.text("schema"), NEUTRAL)
             KvRow("real domains", "$domainCount", NEUTRAL)
@@ -598,7 +598,7 @@ fun LanesScreen(repo: MissionRepository) {
         }
 
         // ── §7 · the promotion ledger headline — live numbers, honestly (AT-L8) ──
-        McCard("§7 · promotion ledger — $ledgerCount ENTRIES", "get_promotion_ledger") {
+        McCard("§7 · promotion ledger", tool = "get_promotion_ledger", sub = "$ledgerCount ENTRIES") {
             KvRow("entries", "$ledgerCount", if (ledgerCount == 0) UNK else NEUTRAL)
             KvRow(
                 "chain_verified",
@@ -623,7 +623,7 @@ fun LanesScreen(repo: MissionRepository) {
         )
 
         // ── §5.1 · get_lanes — the lane board, from the store itself (D4) ──
-        McCard("§5.1 · the lane board — live from the store", "get_lanes") {
+        McCard("§5.1 · the lane board", tool = "get_lanes", sub = "live from the store") {
             KvRow("strategy_fp", shortFp(strategyFp), NEUTRAL)
             if (laneRows.isEmpty()) {
                 Note("no data — get_lanes returned no lanes.", UNK)
@@ -660,7 +660,7 @@ fun LanesScreen(repo: MissionRepository) {
         }
 
         // ── §5.2 · get_promotion_ledger — the D5 promoter ledger, chain verdict LOUD ──
-        McCard("§5.2 · the promotion ledger — append-only, hash-chained (D5/L-6)", "get_promotion_ledger") {
+        McCard("§5.2 · the promotion ledger", tool = "get_promotion_ledger", sub = "append-only, hash-chained (D5/L-6)") {
             if (ledgerEnv == null) {
                 Note("no data — get_promotion_ledger not served.", UNK)
             } else {
@@ -711,7 +711,7 @@ fun LanesScreen(repo: MissionRepository) {
         }
 
         // ── §5.3 · get_preset_lineage — versions + the candidate callout ──
-        McCard("§5.3 · preset lineage — versions and the candidate", "get_preset_lineage") {
+        McCard("§5.3 · preset lineage", tool = "get_preset_lineage", sub = "versions and the candidate") {
             KvRow("preset", lineageEnv.text("preset"), NEUTRAL)
             if (versions.isEmpty()) {
                 Note("no versions served — the lineage is empty.", UNK)
@@ -794,7 +794,7 @@ fun LanesScreen(repo: MissionRepository) {
         }
 
         // ── §5.4 · export_config_bundle — the offline-reproducibility manifest ──
-        McCard("§5.4 · the offline bundle — reproduce the config away from the box", "export_config_bundle") {
+        McCard("§5.4 · the offline bundle", tool = "export_config_bundle", sub = "reproduce the config away from the box") {
             if (bundle == null) {
                 Note("no data — export_config_bundle not served.", UNK)
             } else {
