@@ -910,11 +910,13 @@ fun ShadowScreen(repo: MissionRepository) {
             KvRow("45 bps floor → cost", "≈0.20 R (survivable)", GOOD)
             Note("The 45 bps stop floor the validator enforces is the fee model, correctly applied — the 'gate is skipping edge' note is quoted and refuted. Never inherit a lie (S-4): one decision, one resolution.")
         }
-        LawBlock(
-            "S-1..S-7",
-            "A counterfactual must be priced · one decision one resolution · an empty check isn't a passing check · " +
-                "never inherit a lie · a CI over dup rows isn't a CI · the books must disagree with the gate · read-only.",
-        )
+        WhyBox("THE LAWS · S-1..S-7") {
+            LawBlock(
+                "S-1..S-7",
+                "A counterfactual must be priced · one decision one resolution · an empty check isn't a passing check · " +
+                    "never inherit a lie · a CI over dup rows isn't a CI · the books must disagree with the gate · read-only.",
+            )
+        }
     }
 }
 
@@ -952,22 +954,6 @@ private val B1_SPEC = listOf(
 /** The stance block — the HTML `.stance`: a big display verdict word (Disp ExtraBold), the said
  *  paragraph, and a scrolling row of pill Tags. Mirrors BCVIEW.pStance; leads with the big word so
  *  DEADLOCKED reads as the display stance, not a sibling of the ribbons under it. */
-@Composable
-private fun StanceWord(word: String, said: String, pills: List<Pair<String, Tone>>, wordTone: Tone) {
-    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-        Text(
-            word.uppercase(), color = wordTone.fg(), fontFamily = Disp, fontWeight = FontWeight.ExtraBold,
-            fontSize = 30.sp, letterSpacing = (-0.8).sp,
-        )
-        Text(said, color = Ink2, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 9.dp))
-        if (pills.isNotEmpty()) {
-            Row(
-                Modifier.fillMaxWidth().padding(top = 11.dp).horizontalScroll(rememberScrollState()),
-            ) { pills.forEach { (label, tone) -> Tag(label, tone) } }
-        }
-    }
-}
-
 @Composable
 fun BooksScreen(repo: MissionRepository) {
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, BOOKS_TOOLS))
@@ -1087,7 +1073,7 @@ fun BooksScreen(repo: MissionRepository) {
             Stance("books w/ rows", "$booksWithRows / 4", if (booksWithRows <= 1) SEV else WARN),
         ),
     ) {
-        StanceWord(
+        VerdictBanner(
             "DEADLOCKED",
             "GE-5 — the system's own single biggest judgment-side unlock — needs a fresh-decisions curve: conviction " +
                 "joined to outcome. The conviction lives in DuckDB. The outcome lives in a SQLite file on a Mac. No view, no " +
@@ -1359,12 +1345,14 @@ fun BooksScreen(repo: MissionRepository) {
                 Note("C-6 · the ladder never skips the race — so the ladder never starts. Every rung requires slot B, and slot B has never run: $slotsSeenN distinct slot, only A. The whole mechanism by which a challenger earns its way into production has never executed once. Six rungs, six blockers — not one is a tuning problem.")
             }
         }
+        WhyBox("THE LAWS · C-1..C-7") {
         LawBlock(
             "C-1..C-7",
             "A threshold you didn't derive is a design default · calibration needs conviction joined to outcome · " +
                 "a tier is not a score · a baseline must be independent · you can't calibrate against a verdict you derived · " +
                 "the ladder never skips the race · read-only.",
         )
+        }
     }
 }
 
@@ -1845,11 +1833,13 @@ fun LearningPipelineScreen(repo: MissionRepository) {
             KvRow("required at R1", if (alRequired) "true" else "false", if (alRequired) SEV else NEUTRAL)
             Note("Everything foreign enters as a slot-B challenger (T-6). 'enough' = CI-positive ΔB0 AND CI-positive M1−B0 over ≥4 weeks / ≥300 forward candidates — ${slotBForward ?: 0} slot-B forward decisions so far, so the referee has no windows.")
         }
-        LawBlock(
-            "T-1..T-7",
-            "The reward function is the product · cost-adjusted, conservative fills, one simulator · an audit that can't fail isn't an audit · " +
-                "the hacks arrive before the RL · volume isn't the blocker, truth is · everything foreign enters as a slot-B challenger · read-only.",
-        )
+        WhyBox("THE LAWS · T-1..T-7") {
+            LawBlock(
+                "T-1..T-7",
+                "The reward function is the product · cost-adjusted, conservative fills, one simulator · an audit that can't fail isn't an audit · " +
+                    "the hacks arrive before the RL · volume isn't the blocker, truth is · everything foreign enters as a slot-B challenger · read-only.",
+            )
+        }
     }
 }
 
