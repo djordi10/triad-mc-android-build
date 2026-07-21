@@ -30,7 +30,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as TriadApp
-        // Auto-update: ask GitHub for a newer build on launch; if found, download + prompt install.
+        // Auto-update: check GitHub for a newer build on this app's release channel and self-install.
+        // Safe for local dev now — Updater's versionCode<=1 sentinel skips from-source builds, so it no
+        // longer reinstalls the published release over a working build; only CI builds (run_number) update.
         CoroutineScope(Dispatchers.IO).launch {
             Updater.checkAndInstall(this@MainActivity, BuildConfig.VERSION_CODE)
         }

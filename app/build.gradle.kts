@@ -19,6 +19,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // A fresh install is fully usable pre-deployment (DEMO), exactly like the web client.
         buildConfigField("String", "DEFAULT_MODE", "\"DEMO\"")
+        // Which GitHub release channel the in-app updater follows: "dev" (plain vN tags, every push)
+        // or "prod" (vN-prod tags, manual). CI sets UPDATE_CHANNEL per workflow; local builds default
+        // to dev (and are skipped by the updater's versionCode<=1 sentinel anyway).
+        buildConfigField("String", "UPDATE_CHANNEL", "\"${System.getenv("UPDATE_CHANNEL") ?: "dev"}\"")
     }
 
     signingConfigs {
