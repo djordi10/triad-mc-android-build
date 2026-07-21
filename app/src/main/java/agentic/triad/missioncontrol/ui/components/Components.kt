@@ -512,10 +512,13 @@ fun MiniTable(headers: List<String>, rows: List<List<Pair<String, Tone>>>) {
     // column is usually the wordy name/label and the last is a wordy reason/value, so both get extra
     // width; the middle columns are usually short (counts, %, states) and are squeezed, so a long name
     // like "get_watchdog_stats" stops wrapping while the short numeric columns give up their slack.
-    fun w(i: Int) = when {
-        i == 0 -> 1.7f
-        i == n - 1 -> 1.5f
-        else -> 0.8f
+    // Content-aware column widths: weight each column by its longest cell (header or any row), clamped so
+    // short numeric columns (KILLS, STATE, IN PACKET?) don't collapse and one very long reason column
+    // doesn't dominate. Handles a wordy column wherever it lands — first, middle, or last.
+    val colW = FloatArray(n) { i ->
+        var m = headers.getOrNull(i)?.length ?: 1
+        rows.forEach { r -> (r.getOrNull(i)?.first?.length ?: 0).let { if (it > m) m = it } }
+        m.coerceIn(4, 20).toFloat()
     }
     Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
@@ -523,7 +526,7 @@ fun MiniTable(headers: List<String>, rows: List<List<Pair<String, Tone>>>) {
                 Text(
                     h.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.sp, letterSpacing = 0.8.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(w(i)).padding(end = 8.dp),
+                    modifier = Modifier.weight(colW[i]).padding(end = 8.dp),
                 )
             }
         }
@@ -535,7 +538,7 @@ fun MiniTable(headers: List<String>, rows: List<List<Pair<String, Tone>>>) {
                         cell, color = if (tone == Tone.NEUTRAL) Ink else tone.fg(),
                         fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp,
                         fontWeight = if (tone == Tone.NEUTRAL) FontWeight.Normal else FontWeight.SemiBold,
-                        modifier = Modifier.weight(w(i)).padding(end = 8.dp),
+                        modifier = Modifier.weight(colW[i]).padding(end = 8.dp),
                     )
                 }
             }
