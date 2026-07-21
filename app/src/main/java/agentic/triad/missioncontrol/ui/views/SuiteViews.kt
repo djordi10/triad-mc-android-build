@@ -1,11 +1,20 @@
 package agentic.triad.missioncontrol.ui.views
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import agentic.triad.missioncontrol.data.MissionRepository
@@ -221,18 +230,190 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
     }
 }
 
-// ── 22 · Suite Symbols — 45-symbol directory + per-symbol view (stub, next) ──────────────────────────
+// ── 22 · Suite Symbols — 45-symbol directory + per-symbol view (ringkas · grids locked) ──────────────
+private val SUITE_SYMBOLS_TOOLS = listOf(
+    "get_bank_priced", "get_decision_census", "get_detector_registry", "get_validator_rejects",
+)
+
+/** One directory entry (snapshot seed from the doc's symgrid) — candidate volume + tradability class. */
+private data class SymDir(val sym: String, val cands: Int, val cls: Int, val takes: Boolean)
+
+private val SYM_DIR = listOf(
+    SymDir("BTC", 2077, 5, true), SymDir("ETH", 1998, 5, true), SymDir("XRP", 1461, 4, false),
+    SymDir("LINK", 1280, 4, false), SymDir("AVAX", 1252, 4, false), SymDir("SOL", 1078, 5, true),
+    SymDir("SUI", 965, 3, false), SymDir("ETC", 936, 3, false), SymDir("BCH", 926, 5, true),
+    SymDir("ADA", 873, 4, false), SymDir("XLM", 803, 3, false), SymDir("UNI", 796, 4, false),
+    SymDir("AAVE", 745, 3, false), SymDir("NEAR", 743, 4, false), SymDir("ATOM", 715, 4, false),
+    SymDir("FIL", 698, 3, false), SymDir("LTC", 687, 4, false), SymDir("TRX", 673, 4, false),
+    SymDir("DOGE", 648, 4, false), SymDir("WLD", 612, 3, false), SymDir("BNB", 488, 5, true),
+    SymDir("ARB", 429, 4, false), SymDir("ICP", 397, 3, false), SymDir("APT", 366, 4, false),
+    SymDir("HBAR", 219, 3, false), SymDir("INJ", 176, 3, false), SymDir("TIA", 11, 3, false),
+    SymDir("LDO", 4, 3, false), SymDir("SEI", 3, 3, false), SymDir("JUP", 1, 3, false),
+    SymDir("ALGO", 0, 2, false), SymDir("AXS", 0, 2, false), SymDir("DOT", 0, 2, false),
+    SymDir("DYDX", 0, 2, false), SymDir("EOS", 0, 1, false), SymDir("GALA", 0, 2, false),
+    SymDir("GRT", 0, 2, false), SymDir("IMX", 0, 2, false), SymDir("MANA", 0, 2, false),
+    SymDir("OP", 0, 2, false), SymDir("ORDI", 0, 2, false), SymDir("PYTH", 0, 2, false),
+    SymDir("RUNE", 0, 2, false), SymDir("SAND", 0, 2, false), SymDir("VET", 0, 2, false),
+)
+
+private val AGG_BY_SYM: Map<String, AggRow> = AGG_ROWS.associateBy { it.sym }
+
+private fun classTone(cls: Int): Tone = when (cls) {
+    5, 4 -> GOOD; 3, 2 -> WARN; else -> UNK
+}
+
+private fun classLabel(d: SymDir): String =
+    "CLASS ${d.cls}" + if (d.takes) " · TAKES" else ""
+
 @Composable
 fun SuiteSymbolsScreen(repo: MissionRepository) {
-    ViewScaffold(View.SUITE_SYMBOLS) {
-        VerdictBanner(
-            word = "45 symbols",
-            said = "Each opens its own view — census, structures emitted, the split register (with/without " +
-                "LLM), and the hour/date/weekday grids (locked).",
-            wordTone = GOOD,
-            title = "Symbols",
+    val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, SUITE_SYMBOLS_TOOLS))
+    val s by vm.state.collectAsState()
+    var selected by remember { mutableStateOf<String?>(null) }
+
+    val here = selected
+    if (here == null) {
+        // ── the directory — all 45, ordered by candidate volume ──
+        ViewScaffold(
+            View.SUITE_SYMBOLS,
+            stance = listOf(
+                Stance("symbols", "45", NEUTRAL),
+                Stance("with cands", "30", NEUTRAL),
+                Stance("takes", "5 symbols", GOOD),
+                Stance("resolved", "25 symbols", INFO),
+            ),
+        ) {
+            VerdictBanner(
+                word = "45 symbols",
+                said = "Each opens its own view — the aggregate verdict, census, and the split register. " +
+                    "The hour/date/weekday grids read LOCKED (dormant by design). Tap a symbol.",
+                wordTone = GOOD,
+                title = "Symbols",
+            )
+            McCard("Directory — candidate volume & class", "get_decision_census") {
+                Note("Ordered as indexed. Class = tradability tier (5 = takes flowing, 1 = dead feed).", NEUTRAL)
+                SYM_DIR.forEach { d -> SymDirRow(d) { selected = d.sym } }
+            }
+            if (s.stale != null) Note("· ${s.stale}", WARN)
+        }
+    } else {
+        SymbolDetail(here, onBack = { selected = null })
+    }
+}
+
+/** One directory row — clickable: bold symbol, candidate count, a class tag; a hairline closes it. */
+@Composable
+private fun SymDirRow(d: SymDir, onTap: () -> Unit) {
+    androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth()) {
+        androidx.compose.foundation.layout.Row(
+            Modifier.fillMaxWidth()
+                .clickable { onTap() }
+                .padding(vertical = 11.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            Text(
+                d.sym, color = agentic.triad.missioncontrol.ui.theme.Ink,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 14.sp,
+                modifier = Modifier.width(64.dp),
+            )
+            Text(
+                if (d.cands > 0) "${"%,d".format(d.cands)} cands" else "0 cands",
+                color = agentic.triad.missioncontrol.ui.theme.Ink2,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 11.5.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Tag(classLabel(d), classTone(d.cls))
+            Text(
+                "›", color = agentic.triad.missioncontrol.ui.theme.Unk,
+                fontSize = 16.sp, modifier = Modifier.padding(start = 6.dp),
+            )
+        }
+        androidx.compose.foundation.layout.Box(
+            Modifier.fillMaxWidth().height(1.dp)
+                .background(agentic.triad.missioncontrol.ui.theme.Line),
         )
-        Note("· building — directory + per-symbol view next.", INFO)
+    }
+}
+
+/** The per-symbol view (ringkas): aggregate verdict + census + split-register two-lens + LOCKED grids. */
+@Composable
+private fun SymbolDetail(sym: String, onBack: () -> Unit) {
+    val d = SYM_DIR.first { it.sym == sym }
+    val agg = AGG_BY_SYM[sym]
+    ViewScaffold(
+        View.SUITE_SYMBOLS,
+        stance = listOf(
+            Stance("symbol", sym, NEUTRAL),
+            Stance("class", "${d.cls}${if (d.takes) " · takes" else ""}", classTone(d.cls)),
+            Stance("cands", if (d.cands > 0) "%,d".format(d.cands) else "0", NEUTRAL),
+            Stance("time", "dormant", WARN),
+        ),
+    ) {
+        // a plain back affordance — the directory is one tap up
+        Text(
+            "‹ all symbols", color = agentic.triad.missioncontrol.ui.theme.Emerald,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 12.sp,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            modifier = Modifier.clickable { onBack() }.padding(bottom = 10.dp, top = 2.dp),
+        )
+        val word = when (agg?.aVerdict) {
+            "PROFIT" -> "Profitable (rejected pool)"; "LOSING" -> "Losing (rejected pool)"
+            null -> "No resolved rows"; else -> "Undetermined"
+        }
+        VerdictBanner(
+            word = word,
+            said = if (agg != null)
+                "TRIAD-A (rejected pool): ${agg.aResN} resolved, WR ${agg.aWr}, net " +
+                    "${netCell(agg.aNet).first}. M-null (raw control): ${agg.mResN}, WR ${agg.mWr}, net " +
+                    "${netCell(agg.mNet).first}. Gross-basis vs the 28.6% breakeven."
+            else
+                "No resolved rows in either lens yet — $sym carries ${if (d.cands > 0) "%,d candidates".format(d.cands) else "no candidates"} but nothing has closed. No verdict ships.",
+            wordTone = when (agg?.aVerdict) { "PROFIT" -> GOOD; "LOSING" -> BAD; null -> UNK; else -> WARN },
+            title = sym,
+        )
+
+        McCard("Census", "get_decision_census") {
+            KvRow("class", "${d.cls}${if (d.takes) " · takes flowing" else ""}", classTone(d.cls))
+            KvRow("candidates", if (d.cands > 0) "%,d".format(d.cands) else "0", NEUTRAL)
+            if (agg != null) {
+                KvRow("TRIAD-A resolved", agg.aResN, NEUTRAL)
+                KvRow("M-null resolved", agg.mResN, NEUTRAL)
+            }
+            Note("Structures emitted + the 14-row split register populate live per detector.", UNK)
+        }
+
+        if (agg != null) {
+            McCard("The split register — two lenses", "get_bank_priced") {
+                MiniTable(
+                    headers = listOf("LENS", "RES/N", "WR", "NET R", "VERDICT"),
+                    rows = listOf(
+                        srow(
+                            "TRIAD-A" to NEUTRAL, agg.aResN to NEUTRAL, agg.aWr to NEUTRAL,
+                            netCell(agg.aNet), agg.aVerdict to verdictTone(agg.aVerdict),
+                        ),
+                        srow(
+                            "M-null" to NEUTRAL, agg.mResN to NEUTRAL, agg.mWr to NEUTRAL,
+                            netCell(agg.mNet), agg.mVerdict to verdictTone(agg.mVerdict),
+                        ),
+                    ),
+                )
+                Note("TRIAD-A = gated/rejected pool · M-null = raw take-everything control. Never blended.", NEUTRAL)
+            }
+        }
+
+        McCard("Hour · date · weekday grids", "get_bank_priced") {
+            Ribbon(
+                "LOCKED — the time cuts are dormant (D-CLOCK-01)",
+                "$sym's per-hour, per-date and per-weekday matrices are scaffolded on the true UTC ledger " +
+                    "clock but hold no P&L until the bank clock is repaired. They render locked, not fabricated.",
+                WARN,
+            )
+            PendBox(
+                "triad_clock_reconciler.py audit",
+                "unlocks $sym × weekday and $sym × hour once reader fix .1 + writer fix .2 land. Estate-level " +
+                    "weekday unlocks first (7 cells), then per-symbol where cells reach n ≥ 50.",
+            )
+        }
     }
 }
 
