@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +48,7 @@ import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.WhyBox
+import agentic.triad.missioncontrol.ui.theme.Line
 import agentic.triad.missioncontrol.ui.components.Tone
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
 import agentic.triad.missioncontrol.ui.components.Tone.GOOD
@@ -2309,7 +2312,8 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                     "Every number on every page of Mission Control came from one of these — tap to load, lint, and re-run it against the live ledger. A finding you cannot re-run is folklore.",
                     INFO,
                 )
-                catQueries.take(13).forEach { q ->
+                catQueries.take(13).forEachIndexed { i, q ->
+                    if (i > 0) Box(Modifier.fillMaxWidth().padding(top = 8.dp).height(1.dp).background(Line))
                     val qsql = q.text("sql", "")
                     val pages = guardDerive(emptyList<String>()) { (q.field("pages") ?: q.field("powers")).list().map { it.str() } }
                     val lintIds = guardDerive(emptyList<String>()) { q.field("lint").list().map { it.str() } }
@@ -2397,12 +2401,16 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                 modifier = Modifier.padding(top = 6.dp),
             )
             Note("The guards are real and they name themselves. But note what it implies: ledger.context.packets — 45,692 rows, with a health counter — is not in the allowlist. You cannot reach it from here. P4 replay is dead at the first hop and the console cannot even go look.")
-            LawBlock(
-                "Q-2",
-                "Read-only, and say so out loud. The console never attempts a write it knows will be rejected — L-0 blocks it client-side and tells you why. A UI that fires a doomed request and renders the error is a UI that has not read its own docs.",
-            )
+            WhyBox("THE LAW · Q-2") {
+                LawBlock(
+                    "Q-2",
+                    "Read-only, and say so out loud. The console never attempts a write it knows will be rejected — L-0 blocks it client-side and tells you why. A UI that fires a doomed request and renders the error is a UI that has not read its own docs.",
+                )
+            }
         }
-        LawBlock("Q-1..Q-7", "Lint before you run · read-only and say so · show the query that ran · a silent truncation is a lie · an aggregate over a dup table is a lie · the saved query is the unit of knowledge · the schema is in the room.")
+        WhyBox("THE LAWS · Q-1..Q-7") {
+            LawBlock("Q-1..Q-7", "Lint before you run · read-only and say so · show the query that ran · a silent truncation is a lie · an aggregate over a dup table is a lie · the saved query is the unit of knowledge · the schema is in the room.")
+        }
     }
 }
 
