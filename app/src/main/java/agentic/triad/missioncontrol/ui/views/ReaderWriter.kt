@@ -254,11 +254,12 @@ private data class RwModel(
     val liveReaders: Int,
     val haveMap: Boolean,
     val haveAudit: Boolean,
+    val layers: List<JsonObject>,    // get_row_integrity.layers (per-layer rows/distinct) — live grid
     val inflation: Double,
 )
 
-/** A writer with its live-overlaid state resolved. */
-private data class LiveWriter(val w: Writer, val liveState: String)
+/** A writer with its live-overlaid state + live row count resolved. */
+private data class LiveWriter(val w: Writer, val liveState: String, val liveRows: Int? = null)
 
 private val EMPTY_RW = RwModel(
     writers = WRITERS.map { LiveWriter(it, it.st) },
@@ -269,7 +270,7 @@ private val EMPTY_RW = RwModel(
     holeCount = WRITERS.count { it.hole },
     mismaps = WRITERS.count { it.mismapped },
     liveReaders = 0,
-    haveMap = false, haveAudit = false, inflation = 2.93,
+    haveMap = false, haveAudit = false, layers = emptyList(), inflation = 2.93,
 )
 
 private fun deriveRw(d: Map<String, kotlinx.serialization.json.JsonElement?>): RwModel {
@@ -278,10 +279,15 @@ private fun deriveRw(d: Map<String, kotlinx.serialization.json.JsonElement?>): R
     val svc = ss.arr("services").mapNotNull { it as? JsonObject }
         .associate { it.text("service", it.text("name")) to it.text("status") }
 
-    // Overlay each writer's fallback state with the live status when the server reports it.
+    // get_table_census → live per-table row counts; overlay the writer fixtures' hardcoded rows.
+    val tc = d["get_table_census"] as? JsonObject
+    val tcRows = tc.arr("tables").mapNotNull { it as? JsonObject }
+        .associate { it.text("name") to (it.int("rows") ?: 0) }
+    // Overlay each writer's fallback state with the live status + row count when the server reports it.
     val writers = WRITERS.map { w ->
         val live = svc[w.tbl] ?: svc[w.id] ?: w.st
-        LiveWriter(w, live)
+        val liveRows = tcRows[w.id] ?: tcRows[w.tbl] ?: tcRows[w.tbl.removePrefix("ledger.")]
+        LiveWriter(w, live, liveRows)
     }
 
     // get_bridge_lag → the 3 sync workers (the only readers with a heartbeat).
@@ -316,6 +322,11 @@ private fun deriveRw(d: Map<String, kotlinx.serialization.json.JsonElement?>): R
     val map = d["get_reader_writer_map"] as? JsonObject
     val db = d["get_databank"] as? JsonObject
 
+    // get_row_integrity → the per-layer rows/distinct grid + the authoritative inflation factor.
+    // (get_databank is the old source but its plane is often down; row_integrity is the live one.)
+    val ri = d["get_row_integrity"] as? JsonObject
+    val layers = ri.arr("layers").mapNotNull { it as? JsonObject }
+
     return RwModel(
         writers = writers,
         lanes = lanes,
@@ -328,7 +339,8 @@ private fun deriveRw(d: Map<String, kotlinx.serialization.json.JsonElement?>): R
         liveReaders = lanes.size,
         haveMap = map != null,
         haveAudit = haveAudit,
-        inflation = db?.num("inflation") ?: 2.93,
+        layers = layers,
+        inflation = ri.num("inflation_factor") ?: db?.num("inflation") ?: 2.93,
     )
 }
 
@@ -491,7 +503,12 @@ fun ReaderWriterScreen(repo: MissionRepository) {
 
         // ── per-layer row integrity — rows vs distinct (AT-RW10) ──
         McCard("Per-layer row integrity", tool = "get_row_integrity · the inflation factor", sub = "rows vs distinct") {
-            IntegGrid()
+            Note(
+                if (m.layers.isNotEmpty()) "LIVE from get_row_integrity — rows vs distinct per layer."
+                else "get_row_integrity returned no layers — the known estate below (reconstructed fallback).",
+                if (m.layers.isNotEmpty()) GOOD else UNK,
+            )
+            IntegGrid(m.layers)
             Ribbon(
                 "The shadow bank is the worst: ${m.inflation}×",
                 "8,008 rows over 2,731 distinct decisions. Every reader that sums net_pnl_r across the bank is " +
@@ -573,6 +590,7 @@ private fun StancePill(key: String, value: String, note: String, tone: Tone) {
 private fun WriterNode(lw: LiveWriter, expanded: Boolean, onClick: () -> Unit) {
     val w = lw.w
     val st = lw.liveState
+    val rows = lw.liveRows ?: w.rows   // live table_census count overlays the fixture
     val tone = stateTone(st)
     val holeBadge: Pair<String, Tone>? = when {
         w.orphan -> "NO READER" to SEV
@@ -597,7 +615,7 @@ private fun WriterNode(lw: LiveWriter, expanded: Boolean, onClick: () -> Unit) {
         }
         // meta: rows · last write
         Row(Modifier.fillMaxWidth().padding(top = 7.dp), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
-            MetaCell("rows", if (w.rows == null) "?" else nf(w.rows), if (w.rows == null) UNK else NEUTRAL)
+            MetaCell("rows", if (rows == null) "?" else nf(rows), if (rows == null) UNK else NEUTRAL)
             MetaCell("last write", fmtAge(w.last), if (st == "ok") GOOD else if (st == "stale") WARN else BAD)
         }
         // reader line
@@ -617,10 +635,10 @@ private fun WriterNode(lw: LiveWriter, expanded: Boolean, onClick: () -> Unit) {
                     w.partial -> " · KEYS NULL"; else -> ""
                 }
                 Ribbon(st.uppercase() + badge, w.note, if (st == "ok" && w.rok) GOOD else if (st == "stale") WARN else SEV)
-                KvRow("rows written", if (w.rows == null) "?" else nf(w.rows), NEUTRAL)
+                KvRow("rows written", if (rows == null) "?" else nf(rows), NEUTRAL)
                 if (w.readable != null) {
                     KvRow("rows readable", nf(w.readable), BAD)
-                    KvRow("gap", "−${nf((w.rows ?: 0) - w.readable)}", BAD)
+                    KvRow("gap", "−${nf((rows ?: 0) - w.readable)}", BAD)
                 }
                 KvRow("last write", fmtAge(w.last), if (st == "ok") GOOD else if (st == "stale") WARN else BAD)
                 KvRow("reader", w.reader, if (w.reader == "NONE") BAD else NEUTRAL)
@@ -752,9 +770,19 @@ private fun OrphanMismapNode(name: String, tag: String, tone: Tone, body: String
 
 // ── per-layer integrity grid ─────────────────────────────────────────────────────────────────────
 @Composable
-private fun IntegGrid() {
+private fun IntegGrid(layers: List<JsonObject>) {
+    // Live from get_row_integrity.layers when present, else the reconstructed INTEG fixture (honest).
+    val rows: List<IntegRow> = if (layers.isNotEmpty()) {
+        val worst = layers.maxByOrNull { l ->
+            val dz = l.int("distinct") ?: 0
+            if (dz > 0) (l.int("rows") ?: 0).toDouble() / dz else 0.0
+        }
+        layers.map { l -> IntegRow(l.text("name"), l.int("rows") ?: 0, l.int("distinct") ?: 0, hero = l === worst) }
+    } else {
+        INTEG
+    }
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        INTEG.chunked(2).forEach { pair ->
+        rows.chunked(2).forEach { pair ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 pair.forEach { r ->
                     val infl = if (r.distinct > 0) r.rows.toDouble() / r.distinct else 1.0
