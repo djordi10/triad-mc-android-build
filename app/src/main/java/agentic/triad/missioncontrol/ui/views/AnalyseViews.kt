@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -222,7 +223,8 @@ private fun AnaFilterGroup(label: String, options: List<String>, selected: Strin
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(label.uppercase(), fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = Color(0xFF7A857F), modifier = Modifier.padding(end = 2.dp, top = 5.dp))
+        // Fixed-width label so every group's first chip starts at the same x — the option rows line up.
+        Text(label.uppercase(), fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = Color(0xFF7A857F), modifier = Modifier.width(54.dp).padding(top = 5.dp))
         options.forEach { AnaChip(it, it == selected) { onSelect(it) } }
     }
 }
