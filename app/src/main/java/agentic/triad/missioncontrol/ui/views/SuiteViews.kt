@@ -136,7 +136,7 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
     ) {
         VerdictBanner(
             word = "One clock, one count",
-            said = "357 duplicate ledger rows found — every matrix is now distinct-based. The aggregate " +
+            said = "357 duplicate ledger rows found: every matrix is now distinct-based. The aggregate " +
                 "per-symbol verdict below is the deliverable; the weekday and hour cuts are quarantined " +
                 "(the D-CLOCK-01 defect) and read LOCKED.",
             pills = listOf(
@@ -150,7 +150,7 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
         )
 
         // ── TRIAD-A — the gated / rejected pool (LLM said NO) ──
-        McCard("Symbol profitability · TRIAD-A — the rejected pool", "get_bank_priced") {
+        McCard("Symbol profitability · TRIAD-A", tool = "get_bank_priced", sub = "the rejected pool · LLM said no") {
             Note(
                 "The stream the estate REFUSED on each symbol. PROFITABLE here = the gates rejected money " +
                     "(a calibration signal); LOSING = the gates provably refused losers (vindication). " +
@@ -169,14 +169,14 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
                     )
                 },
             )
-            Note("$AGG_ZERO_TAIL — 0 resolved rows, no verdict.", UNK)
+            Note("$AGG_ZERO_TAIL · 0 resolved rows, no verdict.", UNK)
         }
 
         // ── M-null — take-everything control (raw emissions, WITHOUT LLM) ──
-        McCard("Symbol profitability · M-null — take-everything control", "get_bank_priced") {
+        McCard("Symbol profitability · M-null", tool = "get_bank_priced", sub = "take-everything control · without LLM") {
             Note(
                 "Raw structure emissions with no model and no geometry law (incl. sub-floor stops). " +
-                    "Describes the symbol's raw stream. Never blended with the TRIAD-A lens — they answer " +
+                    "Describes the symbol's raw stream. Never blended with the TRIAD-A lens; they answer " +
                     "different questions.",
                 NEUTRAL,
             )
@@ -195,7 +195,7 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
             WhyBox("THE LAW · GROSS vs NET") {
                 Note(
                     "Both lenses are GROSS-basis vs the 28.6% breakeven (RR 2.5). The fee-net bar needs " +
-                        "each symbol's own median stop and is a registered follow-up — a 40% cell at a 12bps " +
+                        "each symbol's own median stop and is a registered follow-up: a 40% cell at a 12bps " +
                         "median stop still loses net. Aggregate = all hours, all days pooled, lifetime bank.",
                     NEUTRAL,
                 )
@@ -203,21 +203,21 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
         }
 
         // ── Days & Time metrics — DORMANT (locked) ──
-        McCard("Days & Time metrics — symbol × weekday / hour", "get_bank_priced") {
+        McCard("Days & Time metrics", tool = "get_bank_priced", sub = "symbol × weekday / hour") {
             Ribbon(
-                "LOCKED — three locks sit between here and a lawful weekday P&L read",
+                "LOCKED: three locks sit between here and a lawful weekday P&L read",
                 "The per-symbol weekday split is scaffolded in every symbol view and deliberately dormant. " +
-                    "Nothing needs rebuilding on unlock day — the frame already tracks candidate flow on the " +
+                    "Nothing needs rebuilding on unlock day; the frame already tracks candidate flow on the " +
                     "true UTC ledger clock.",
                 WARN,
             )
             KvRow("Lock 1 · bank clock", "D-CLOCK-01 · mixed −07:00 / +00:00 offsets", BAD)
             KvRow("Lock 2 · n floor", "n ≥ 50 / cell · lifetime 2,367 vs 315 cells", WARN)
-            KvRow("Lock 3 · resolver", "OPEN — flowing on true UTC", GOOD)
+            KvRow("Lock 3 · resolver", "OPEN · flowing on true UTC", GOOD)
             WhyBox("WHY IT MATTERS · the three locks") {
                 Note(
                     "Lock 1: outcomes live only in the shadow bank; the A-lane/resolver writer stamps −07:00 " +
-                        "while M-null stamps +00:00 — a naive weekday grouper mislabels every row within 7h of " +
+                        "while M-null stamps +00:00, so a naive weekday grouper mislabels every row within 7h of " +
                         "midnight (same class that suspended the W-57 hour findings). No weekday verdict ships " +
                         "until D-CLOCK-01 .1 (reader) + .2 (writer) land.",
                     NEUTRAL,
@@ -295,12 +295,12 @@ fun SuiteSymbolsScreen(repo: MissionRepository) {
         ) {
             VerdictBanner(
                 word = "45 symbols",
-                said = "Each opens its own view — the aggregate verdict, census, and the split register. " +
+                said = "Each opens its own view: the aggregate verdict, census, and the split register. " +
                     "The hour/date/weekday grids read LOCKED (dormant by design). Tap a symbol.",
                 wordTone = GOOD,
                 title = "Symbols",
             )
-            McCard("Directory — candidate volume & class", "get_decision_census") {
+            McCard("Directory", tool = "get_decision_census", sub = "candidate volume & class") {
                 Note("Ordered as indexed. Class = tradability tier (5 = takes flowing, 1 = dead feed).", NEUTRAL)
                 SYM_DIR.forEach { d -> SymDirRow(d) { selected = d.sym } }
             }
@@ -377,7 +377,7 @@ private fun SymbolDetail(sym: String, onBack: () -> Unit) {
                     "${netCell(agg.aNet).first}. M-null (raw control): ${agg.mResN}, WR ${agg.mWr}, net " +
                     "${netCell(agg.mNet).first}. Gross-basis vs the 28.6% breakeven."
             else
-                "No resolved rows in either lens yet — $sym carries ${if (d.cands > 0) "%,d candidates".format(d.cands) else "no candidates"} but nothing has closed. No verdict ships.",
+                "No resolved rows in either lens yet: $sym carries ${if (d.cands > 0) "%,d candidates".format(d.cands) else "no candidates"} but nothing has closed. No verdict ships.",
             wordTone = when (agg?.aVerdict) { "PROFIT" -> GOOD; "LOSING" -> BAD; null -> UNK; else -> WARN },
             title = sym,
         )
@@ -393,7 +393,7 @@ private fun SymbolDetail(sym: String, onBack: () -> Unit) {
         }
 
         if (agg != null) {
-            McCard("The split register — two lenses", "get_bank_priced") {
+            McCard("The split register", tool = "get_bank_priced", sub = "two lenses") {
                 MiniTable(
                     headers = listOf("LENS", "RES/N", "WR", "NET R", "VERDICT"),
                     rows = listOf(
@@ -413,7 +413,7 @@ private fun SymbolDetail(sym: String, onBack: () -> Unit) {
 
         McCard("Hour · date · weekday grids", "get_bank_priced") {
             Ribbon(
-                "LOCKED — the time cuts are dormant (D-CLOCK-01)",
+                "LOCKED: the time cuts are dormant (D-CLOCK-01)",
                 "$sym's per-hour, per-date and per-weekday matrices are scaffolded on the true UTC ledger " +
                     "clock but hold no P&L until the bank clock is repaired. They render locked, not fabricated.",
                 WARN,
@@ -496,7 +496,7 @@ private fun MatrixTable(shadowCoh: String?, paperCoh: String?) {
             (SuiteMx.symRow(paperCoh, it)?.getOrNull(1)?.toInt() ?: 0) > 0
     }
     if (syms.isEmpty()) {
-        Note("No resolved per-symbol rows for this combo yet — it registers fresh at n=0.", UNK)
+        Note("No resolved per-symbol rows for this combo yet: it registers fresh at n=0.", UNK)
         return
     }
     MiniTable(
@@ -572,7 +572,7 @@ fun SuiteLabScreen(repo: MissionRepository) {
                 put("arms", "both") // always shadow (WITHOUT LLM) + paper (WITH LLM)
                 put("composition", compositionName())
             },
-            rationale = "Lab pre-registration from Mission Control — forward clock starts at save; " +
+            rationale = "Lab pre-registration from Mission Control. Forward clock starts at save; " +
                 "the combo is matrix-checked across all 45 symbols, then lands in shadow (incl rejected) " +
                 "+ paper (accepted, never on venue). The app files a plan; triadctl applies nothing.",
         )
@@ -585,10 +585,10 @@ fun SuiteLabScreen(repo: MissionRepository) {
             saveResult = if (env.ok) {
                 val pid = (env.data as? kotlinx.serialization.json.JsonObject)?.get("proposal_id")
                     ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: "—"
-                true to "SAVED to this device + FILED · proposal_id $pid — ${compositionName()} pre-registered for triadctl. Forward clock starts now."
+                true to "SAVED to this device + FILED · proposal_id $pid · ${compositionName()} pre-registered for triadctl. Forward clock starts now."
             } else {
                 // the local book copy still holds it; only the authoritative registry didn't take it.
-                true to "SAVED to this device · authoritative registry pending (${env.error ?: "unavailable"}) — the experiment is in your Lab books + Tables now."
+                true to "SAVED to this device · authoritative registry pending (${env.error ?: "unavailable"}). The experiment is in your Lab books + Tables now."
             }
             saving = false
         }
@@ -606,13 +606,13 @@ fun SuiteLabScreen(repo: MissionRepository) {
             word = "Compose · preview · save",
             said = "Compose a generator × filters, preview where it lands across all 45 symbols, then save " +
                 "it into the shadow book (incl. rejected) and the paper book (accepted only, never on venue). " +
-                "A SAVE files a pre-registration — triadctl applies it, not the app.",
+                "A SAVE files a pre-registration: triadctl applies it, not the app.",
             wordTone = GOOD,
             title = "Lab",
         )
 
         // ── the composer ──
-        McCard("Compose — tap to add", "propose_action · lab_save") {
+        McCard("Compose", tool = "propose_action", sub = "tap to add", writes = true) {
             Note("GENERATORS · pick one", GOOD)
             LabChipFlow(LAB_GENS, selected = { it == gen }) { id -> gen = if (gen == id) null else id }
             Note("FILTERS · tap to toggle", GOOD)
@@ -620,8 +620,8 @@ fun SuiteLabScreen(repo: MissionRepository) {
                 if (fils.contains(id)) fils.remove(id) else fils.add(id)
             }
             Note(
-                "Both arms are always tested — shadow (incl. rejected · WITHOUT LLM) + paper (accepted · " +
-                    "WITH LLM) — so the with-vs-without-LLM read stays comparable. No arm to pick.",
+                "Both arms are always tested: shadow (incl. rejected · WITHOUT LLM) + paper (accepted · " +
+                    "WITH LLM), so the with-vs-without-LLM read stays comparable. No arm to pick.",
                 UNK,
             )
 
@@ -658,7 +658,7 @@ fun SuiteLabScreen(repo: MissionRepository) {
                     gen == null -> "Compose something."
                     genPaper(gen) == null ->
                         "${compositionName()} maps to shadow=${genShadow(gen)} (incl rejected · WITHOUT LLM). " +
-                            "No accepted-paper cohort yet — the WITH-LLM arm registers fresh at n=0."
+                            "No accepted-paper cohort yet: the WITH-LLM arm registers fresh at n=0."
                     else ->
                         "${compositionName()} maps to shadow=${genShadow(gen)} (WITHOUT LLM) + paper=${genPaper(gen)} (WITH LLM). " +
                             "Save → pre-registers; the forward clock starts at save."
@@ -675,9 +675,9 @@ fun SuiteLabScreen(repo: MissionRepository) {
         }
 
         // ── matrix preview — the with-vs-without-LLM CALCULATION, computed live, NO save needed ──
-        McCard("Preview · the with-vs-without-LLM calc", "get_shadow_bank") {
+        McCard("Preview", tool = "get_shadow_bank", sub = "the with-vs-without-LLM calc") {
             if (gen == null) {
-                Note("Compose a generator above — the aggregate across all 45 symbols computes here, live, before any save.", UNK)
+                Note("Compose a generator above: the aggregate across all 45 symbols computes here, live, before any save.", UNK)
             } else {
                 Note("RECIPE · ${compositionName()}", GOOD)
                 Verdict(
@@ -688,11 +688,11 @@ fun SuiteLabScreen(repo: MissionRepository) {
                 LabCalcTable(paperA, shadowA)
                 Note(
                     "Aggregate over all 45 symbols. n* = fewer than 50 resolved (grey until the floor). " +
-                        "Filters ride as analytic slices (W-63) — they don't change the cohort.",
+                        "Filters ride as analytic slices (W-63): they don't change the cohort.",
                     UNK,
                 )
                 // ── where this combo LANDS per symbol — the actual matrix (doc previewMatrix) ──
-                Note("WHERE IT LANDS — PER SYMBOL", GOOD)
+                Note("WHERE IT LANDS · PER SYMBOL", GOOD)
                 Note(
                     "S· = shadow (WITHOUT LLM, incl rejected) · P· = paper (WITH LLM, accepted). Scrolls sideways.",
                     UNK,
@@ -702,12 +702,12 @@ fun SuiteLabScreen(repo: MissionRepository) {
         }
 
         // ── the two destination books — one shared store (device copy), also shown in Tables ──
-        McCard("Shadow book — WITHOUT LLM (incl. rejected)", "get_shadow_bank") {
-            if (LabStore.saved.isEmpty()) Note("No experiments yet — compose above and SAVE.", UNK)
+        McCard("Shadow book", tool = "get_shadow_bank", sub = "WITHOUT LLM · incl. rejected") {
+            if (LabStore.saved.isEmpty()) Note("No experiments yet · compose above and SAVE.", UNK)
             else LabStore.saved.forEach { SavedLabRow(it, showShadow = true) }
         }
-        McCard("Paper book — WITH LLM (accepted only, never on venue)", "get_books_scoreboard") {
-            if (LabStore.saved.isEmpty()) Note("No experiments yet — compose above and SAVE.", UNK)
+        McCard("Paper book", tool = "get_books_scoreboard", sub = "WITH LLM · accepted, never on venue") {
+            if (LabStore.saved.isEmpty()) Note("No experiments yet · compose above and SAVE.", UNK)
             else LabStore.saved.forEach { SavedLabRow(it, showShadow = false) }
         }
 
@@ -837,7 +837,7 @@ fun SuiteTablesScreen(repo: MissionRepository) {
     ) {
         VerdictBanner(
             word = "Saved experiments",
-            said = "Every lab combo you SAVE lands here — matrix-backed, with both lenses: paper (accepted · " +
+            said = "Every lab combo you SAVE lands here, matrix-backed, with both lenses: paper (accepted · " +
                 "WITH LLM) + shadow (incl. rejected · WITHOUT LLM). A SAVE is a pre-registration: the forward " +
                 "clock starts at save, before any forward data exists, so it's clean by construction. Cells " +
                 "grey (n*) until n≥50 per arm.",
@@ -846,16 +846,16 @@ fun SuiteTablesScreen(repo: MissionRepository) {
         )
 
         if (LabStore.saved.isEmpty()) {
-            McCard("Lab — saved experiments", "get_books_scoreboard") {
+            McCard("Saved experiments", tool = "get_books_scoreboard") {
                 Note(
-                    "No saved lab experiments yet — go to Lab, compose a generator × filters, preview the " +
+                    "No saved lab experiments yet: go to Lab, compose a generator × filters, preview the " +
                         "with-vs-without-LLM calc, then SAVE. It appears here with both arms.",
                     UNK,
                 )
             }
         } else {
             LabStore.saved.forEach { lab ->
-                McCard(lab.composition, "lab · saved ${lab.savedUtc}") {
+                McCard(lab.composition, sub = "saved ${lab.savedUtc}") {
                     val (st, stTone) = labState(lab.shadow?.toAgg())
                     androidx.compose.foundation.layout.Row(
                         Modifier.fillMaxWidth().padding(bottom = 2.dp),
@@ -869,7 +869,7 @@ fun SuiteTablesScreen(repo: MissionRepository) {
                     }
                     LabCalcTable(lab.paper?.toAgg(), lab.shadow?.toAgg())
                     Note("WITH LLM = paper (accepted) · WITHOUT = shadow (incl. rejected). Gross vs 28.6% BE.", UNK)
-                    WhyBox("PER-SYMBOL MATRIX — where it landed") {
+                    WhyBox("PER-SYMBOL MATRIX · where it landed") {
                         MatrixTable(lab.shadowCoh, lab.paperCoh)
                     }
                 }
@@ -901,7 +901,7 @@ fun SuiteVenueScreen(repo: MissionRepository) {
             word = "The wall",
             said = "Everything that touched (or tried to touch) Binance. 0 fills ever, 13 incident-era open " +
                 "orders (07-11/12), every past order venue-rejected. One LIMIT-BUY→MARKET-SELL round-trip " +
-                "awaits P1 disposition. LIVE fills these from get_venue_session — until then the zero-state " +
+                "awaits P1 disposition. LIVE fills these from get_venue_session; until then the zero-state " +
                 "is the true state.",
             pills = listOf("0 FILLS" to BAD, "VENUE-REJECT" to WARN, "P0 PROBE OWED" to WARN),
             wordTone = WARN,
@@ -909,7 +909,7 @@ fun SuiteVenueScreen(repo: MissionRepository) {
         )
 
         McCard("Summary", "get_venue_session") {
-            KvRow("fills lifetime", "0 — the wall (venue_reject) · P0 probe owed", BAD)
+            KvRow("fills lifetime", "0 · the wall (venue_reject) · P0 probe owed", BAD)
             KvRow("open orders", "13 incident-era (07-11/12) · reconciler stamp NULL", WARN)
             KvRow("rejected lifetime", "every order ever sent · raw code = the autopsy grep", BAD)
         }
@@ -917,11 +917,11 @@ fun SuiteVenueScreen(repo: MissionRepository) {
         VenueTableCard("Open orders", "get_open_orders", venue == null,
             "ts · symbol · side · type · px · qty · lane")
         VenueTableCard("Fills (accepted & executed)", "get_venue_session", venue == null,
-            "ts · symbol · side · px · leg · lane · fees — 0 rows: nothing ever filled")
+            "ts · symbol · side · px · leg · lane · fees · 0 rows: nothing ever filled")
         VenueTableCard("SL / TP legs", "get_venue_session", venue == null,
             "decision · SL px·status · TP px·status · breaker")
         VenueTableCard("Rejected (with venue code)", "get_venue_session", venue == null,
-            "ts · symbol · code · msg — every past order, the autopsy grep")
+            "ts · symbol · code · msg · every past order, the autopsy grep")
         VenueTableCard("Canceled", "get_venue_session", venue == null,
             "ts · symbol · reason")
 
@@ -939,6 +939,6 @@ fun SuiteVenueScreen(repo: MissionRepository) {
 private fun VenueTableCard(title: String, tool: String, empty: Boolean, cols: String) {
     McCard(title, tool) {
         Note(cols, NEUTRAL)
-        if (empty) Note("— populates from $tool at LIVE (Rev A). The zero-state above is the true state.", UNK)
+        if (empty) Note("Populates from $tool at LIVE (Rev A). The zero-state above is the true state.", UNK)
     }
 }

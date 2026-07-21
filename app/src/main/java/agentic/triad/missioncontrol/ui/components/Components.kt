@@ -215,11 +215,20 @@ fun VerdictBanner(
 
 // ── cards, stats, tags ───────────────────────────────────────────────────────────────────────────
 /**
- * A titled white card — the web `.card`: a 14px-radius white panel with a 1px --line border, an
- * Archivo-bold title (13-15px) and a mono `· tool` source note in --unk (provenance).
+ * A titled white card — the web `.card`: a 14px-radius white panel with a 1px --line border, a
+ * bold title, an optional descriptive [sub]line, and a mono provenance note naming the source tool.
+ * [sub] holds the human "what this is" text (so titles stay clean nouns, not `Title — extra`);
+ * [tool] is the data source, prefixed `reads ·` (or `writes ·` when [writes] is true, e.g. a control
+ * card that files a propose_action rather than reading).
  */
 @Composable
-fun McCard(title: String, tool: String = "", content: @Composable ColumnScope.() -> Unit) {
+fun McCard(
+    title: String,
+    tool: String = "",
+    sub: String = "",
+    writes: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val shape = RoundedCornerShape(14.dp)
     Column(
         Modifier.fillMaxWidth().padding(bottom = 12.dp)
@@ -229,12 +238,25 @@ fun McCard(title: String, tool: String = "", content: @Composable ColumnScope.()
     ) {
         // A pine header band marks where each section starts — real contrast against the white body so a
         // long scroll of cards reads as distinct sections, not one blur. (Shared across every view's McCard.)
-        Column(Modifier.fillMaxWidth().background(Pine).padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(title, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.5.sp, letterSpacing = (-0.2).sp)
+        // Title + descriptive sub on the left; the source-tool provenance sits on the right.
+        Row(
+            Modifier.fillMaxWidth().background(Pine).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f).padding(end = 10.dp)) {
+                Text(title, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.5.sp, letterSpacing = (-0.2).sp)
+                if (sub.isNotEmpty()) {
+                    Text(
+                        sub, color = Color.White.copy(alpha = 0.74f), fontSize = 11.5.sp, lineHeight = 16.sp,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
             if (tool.isNotEmpty()) {
                 Text(
-                    "reads · $tool", color = EmeraldBright.copy(alpha = 0.85f), fontFamily = Mono, fontSize = 9.sp,
-                    letterSpacing = 0.4.sp, lineHeight = 13.sp, modifier = Modifier.padding(top = 3.dp),
+                    "${if (writes) "writes" else "reads"} · $tool", color = EmeraldBright.copy(alpha = 0.85f),
+                    fontFamily = Mono, fontSize = 9.sp, letterSpacing = 0.4.sp, lineHeight = 13.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
                 )
             }
         }
