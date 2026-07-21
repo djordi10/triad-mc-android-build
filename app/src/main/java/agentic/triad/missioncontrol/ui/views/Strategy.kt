@@ -28,6 +28,7 @@ import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
 import agentic.triad.missioncontrol.ui.components.LawBlock
+import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
@@ -371,12 +372,14 @@ fun StrategyScreen(repo: MissionRepository) {
                     "is ${rr(m1.ev)} a small-sample mirage? The CI is wide ${evCi(m1.ciLo, m1.ciHi)} precisely because n=${nf(m1.n)}.",
                 WARN,
             )
-            LawBlock(
-                "S-2",
-                "Track B is Track A gated by the LLM. Same detectors, same candidates, same exit book — the only " +
-                    "difference is whether FinGPT's gate_accepted let the trade through. That is what makes the sign " +
-                    "flip meaningful instead of a cohort artifact (S-3).",
-            )
+            WhyBox("THE LAW · S-2") {
+                LawBlock(
+                    "S-2",
+                    "Track B is Track A gated by the LLM. Same detectors, same candidates, same exit book — the only " +
+                        "difference is whether FinGPT's gate_accepted let the trade through. That is what makes the sign " +
+                        "flip meaningful instead of a cohort artifact (S-3).",
+                )
+            }
         }
 
         // ── pTable() — the fleet, grouped: detectors · SMC tracks · books · combos ────────────────────
@@ -464,12 +467,14 @@ fun StrategyScreen(repo: MissionRepository) {
             )
             Note("The combos you named — OB+volume, FVG+volume, sweep+volume — are not cohorts in the bank yet. Each must be registered as its own shadow_track and resolved by triad-cf/1 before a win rate exists (get_combo_registry PEND).", UNK)
 
-            LawBlock(
-                "S-1",
-                "A win rate is meaningless without its N and its CI. M1's ${pctv(m1.wr)} on n=${nf(m1.n)} and B0's " +
-                    "${pctv(b0.wr)} on n=${nf(b0.n)} are not the same kind of number — a table that showed only the " +
-                    "percentages would be lying by omission. Every EV carries its Wilson interval and its sample size.",
-            )
+            WhyBox("THE LAW · S-1") {
+                LawBlock(
+                    "S-1",
+                    "A win rate is meaningless without its N and its CI. M1's ${pctv(m1.wr)} on n=${nf(m1.n)} and B0's " +
+                        "${pctv(b0.wr)} on n=${nf(b0.n)} are not the same kind of number — a table that showed only the " +
+                        "percentages would be lying by omission. Every EV carries its Wilson interval and its sample size.",
+                )
+            }
             // the per-detector split that MCP cannot do yet — the join DuckDB↔SQLite (S-3), NOT BUILT.
             PfPendSpec("get_detector_split", SPEC_DETECTOR_SPLIT)
         }
@@ -521,12 +526,14 @@ fun StrategyScreen(repo: MissionRepository) {
                     "emitting, not how they performed.",
                 WARN,
             )
-            LawBlock(
-                "S-5",
-                "Recency windows, or the number is a fossil. An all-time win rate on a system that changed its stop " +
-                    "floor 52 minutes ago is measuring two different strategies as one. Until get_track_watch windows " +
-                    "the bank by resolved_at, this page shows lifetime and nothing finer — and says so.",
-            )
+            WhyBox("THE LAW · S-5") {
+                LawBlock(
+                    "S-5",
+                    "Recency windows, or the number is a fossil. An all-time win rate on a system that changed its stop " +
+                        "floor 52 minutes ago is measuring two different strategies as one. Until get_track_watch windows " +
+                        "the bank by resolved_at, this page shows lifetime and nothing finer — and says so.",
+                )
+            }
             // get_track_watch — LIVE the day it ships (haveWindows), else the §5.1 spec block, NOT BUILT.
             if (!haveWindows) PfPendSpec("get_track_watch", SPEC_TRACK_WATCH)
         }
@@ -572,12 +579,14 @@ fun StrategyScreen(repo: MissionRepository) {
                 Triple("conviction 0–9", "26.1%", NEUTRAL),
                 Triple("relationship", "INVERTED", BAD),
             )
-            LawBlock(
-                "conviction is not yet a sort key",
-                "High-conviction decisions win less often than low-conviction ones. Until the calibration curve is " +
-                    "monotone, a 'conviction ≥ X' book (B1) is sorting on noise — which is exactly why B1's CI still " +
-                    "spans zero at n=${nf(b1.n)}. Track B's edge is the binary gate, not the conviction score.",
-            )
+            WhyBox("THE LAW · conviction is not a sort key") {
+                LawBlock(
+                    "conviction is not yet a sort key",
+                    "High-conviction decisions win less often than low-conviction ones. Until the calibration curve is " +
+                        "monotone, a 'conviction ≥ X' book (B1) is sorting on noise — which is exactly why B1's CI still " +
+                        "spans zero at n=${nf(b1.n)}. Track B's edge is the binary gate, not the conviction score.",
+                )
+            }
         }
 
         // ── pClose() — the one-line fix with a large blast radius (S-4) ───────────────────────────────
@@ -589,22 +598,26 @@ fun StrategyScreen(repo: MissionRepository) {
                     "sits underneath. by_outcome.open = $open = M2(86) + M3(263) exactly.",
                 SEV,
             )
-            LawBlock(
-                "S-4",
-                "A detector that records but never resolves is a defect, drawn as one. This page paints M2/M3 STUCK — " +
-                    "the honest third state — and names the writer that has to change. Fix the one field, and $open rows " +
-                    "of already-computed P&L light up two whole tracks. The measurement lies while the data tells the truth.",
-            )
+            WhyBox("THE LAW · S-4") {
+                LawBlock(
+                    "S-4",
+                    "A detector that records but never resolves is a defect, drawn as one. This page paints M2/M3 STUCK — " +
+                        "the honest third state — and names the writer that has to change. Fix the one field, and $open rows " +
+                        "of already-computed P&L light up two whole tracks. The measurement lies while the data tells the truth.",
+                )
+            }
             // the one-line resolver fix (triad-cf/1) with the large blast radius — the §5.4 spec, NOT BUILT.
             PfPendSpec("resolve_stuck_tracks", SPEC_RESOLVE_STUCK)
         }
 
-        LawBlock(
-            "S-1..S-5",
-            "A win rate is a rumour without its N and its CI · Track B is Track A gated by the LLM · a per-detector " +
-                "split needs a join MCP cannot do yet · a defect is drawn as a defect, never a zero · recency windows " +
-                "or the number is a fossil · read-only.",
-        )
+        WhyBox("THE LAWS · S-1..S-5") {
+            LawBlock(
+                "S-1..S-5",
+                "A win rate is a rumour without its N and its CI · Track B is Track A gated by the LLM · a per-detector " +
+                    "split needs a join MCP cannot do yet · a defect is drawn as a defect, never a zero · recency windows " +
+                    "or the number is a fossil · read-only.",
+            )
+        }
     }
 }
 

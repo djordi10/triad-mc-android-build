@@ -476,11 +476,41 @@ fun KvRow(k: String, v: String, tone: Tone = Tone.NEUTRAL) {
  */
 @Composable
 fun MiniTable(headers: List<String>, rows: List<List<Pair<String, Tone>>>) {
-    // Columns fill the width by weight instead of fixed 112dp cells inside a horizontal scroll — the old
-    // fixed cells forced mono text to wrap one word per line, leaving ragged rows + wasted whitespace. The
-    // last column (usually the wordy "reason / value / action") gets 1.5× so it wraps cleanly; cells align
-    // to the top so a tall wrapped cell never floats the others mid-height.
     val n = headers.size.coerceAtLeast(1)
+    if (n >= 6) {
+        // WIDE tables (6+ short-cell columns like the strategy fleet): fixed-width columns inside a
+        // horizontal scroll, so each cell stays on one line and the table scrolls sideways — cramming six
+        // or seven columns into fill-width slivers wraps every short cell mid-word.
+        val colW = 108.dp
+        Column(Modifier.fillMaxWidth().padding(top = 6.dp).horizontalScroll(rememberScrollState())) {
+            Row(Modifier.padding(bottom = 6.dp)) {
+                headers.forEach { h ->
+                    Text(
+                        h.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.sp, letterSpacing = 0.8.sp,
+                        fontWeight = FontWeight.SemiBold, modifier = Modifier.width(colW).padding(end = 8.dp),
+                    )
+                }
+            }
+            Box(Modifier.width(colW * n.toFloat()).height(1.dp).background(Line))
+            rows.forEach { r ->
+                Row(Modifier.padding(vertical = 7.dp)) {
+                    r.forEach { (cell, tone) ->
+                        Text(
+                            cell, color = if (tone == Tone.NEUTRAL) Ink else tone.fg(),
+                            fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp,
+                            fontWeight = if (tone == Tone.NEUTRAL) FontWeight.Normal else FontWeight.SemiBold,
+                            modifier = Modifier.width(colW).padding(end = 8.dp),
+                        )
+                    }
+                }
+                Box(Modifier.width(colW * n.toFloat()).height(1.dp).background(HairLine))
+            }
+        }
+        return
+    }
+    // NARROW tables (<=5 columns): weighted fill-width columns, top-aligned, graceful wrap — the last
+    // column (usually the wordy "reason / value / action") gets 1.5x so it wraps cleanly. (The old build
+    // used fixed 112dp cells everywhere, which forced these long cells to wrap one word per line.)
     fun w(i: Int) = if (i == n - 1) 1.5f else 1f
     Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
