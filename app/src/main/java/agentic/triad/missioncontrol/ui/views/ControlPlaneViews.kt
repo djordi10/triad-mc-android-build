@@ -66,6 +66,9 @@ import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.Lever
+import agentic.triad.missioncontrol.ui.components.LeverTable
+import agentic.triad.missioncontrol.ui.components.VerdictBanner
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -549,12 +552,15 @@ private fun McpServerTile(s: McpServer, liveToolCount: Int?) {
             Tag("CLIENT", INFO)
             Tag(if (s.on) "ENABLED" else "DISABLED", if (s.on) GOOD else UNK)
         }
-        KvRow("url", s.url, NEUTRAL)
-        // The TOOLS / TOKEN / LAST TEST / STATUS grid — the web `.sm2`, honest-null off the connected window.
-        KvRow("tools", if (live) (liveToolCount ?: 0).toString() else "—", if (live) GOOD else UNK)
-        KvRow("token", "none", UNK)
-        KvRow("last test", if (probed) "live window" else "never", if (probed) NEUTRAL else UNK)
-        KvRow("status", statusLabel, statusTone)
+        // url + the TOOLS / TOKEN / LAST TEST / STATUS grid (the web `.sm2`) as one compact table,
+        // honest-null off the connected window.
+        LeverTable(buildList<Lever> {
+            add(Lever("url", s.url, NEUTRAL))
+            add(Lever("tools", if (live) (liveToolCount ?: 0).toString() else "—", if (live) GOOD else UNK))
+            add(Lever("token", "none", UNK))
+            add(Lever("last test", if (probed) "live window" else "never", if (probed) NEUTRAL else UNK))
+            add(Lever("status", statusLabel, statusTone))
+        })
         // CONTROL-WRITES — the SYSTEM plane. Rendered disabled; NEVER invoked (C-2).
         Row(Modifier.padding(top = 8.dp)) {
             Button(onClick = {}, enabled = false, modifier = Modifier.padding(end = 8.dp)) {
@@ -615,33 +621,27 @@ fun McpScreen(repo: MissionRepository) {
             Stance("estate control", "mcp_toggle — absent", WARN),
         ),
     ) {
-        Ribbon(
-            "Connections vs the server process: the distinction this page exists to hold.",
-            "Turning a server OFF here stops THIS dashboard calling it. It does NOT stop the process. " +
-                "Stopping the process is mcp_toggle, a SYSTEM control that does not exist yet. CLIENT-tier is " +
-                "real and instant; SYSTEM-tier probes tools/list, finds nothing, and files a proposal.",
-            INFO,
-        )
-
-        // ── the KPI strip — mirrors MCPVIEW host.strip 1:1 (6 tiles). "server tools" is the live tools/list
-        // count (— until you probe); "missing" is 16 of 16 SYSTEM control tools (a read-only estate exposes
-        // none); "mcp servers" is the roster size (2) and "enabled" the count that are on (1) — the exact
-        // final two host.strip cells, replacing the old fabricated ~77 / missing 4 / tier·CLIENT.
-        StatRow(
-            Triple("server tools", toolCount?.toString() ?: "—", if (toolCount == null) UNK else NEUTRAL),
-            Triple("writes", "1", BAD),
-            Triple("control tools", "0", BAD),
-            Triple("missing", "$controlToolsMissing", BAD),
-            Triple("mcp servers", MCP_SERVERS.size.toString(), NEUTRAL),
-            Triple("enabled", MCP_SERVERS.count { it.on }.toString(), NEUTRAL),
+        // Hero: the title, a plain reading of the CLIENT-vs-SYSTEM distinction this page exists to hold.
+        // Folds the old opening ribbon so the thesis lives in one place; the KPI strip was dropped as a
+        // restatement of the stance pills and the roster card right below (2 servers, 1 enabled).
+        VerdictBanner(
+            title = "MCP",
+            word = "read-only",
+            said = "What this dashboard connects to, and what it cannot control. Turning a server off here only " +
+                "stops this app calling it: the process on the estate keeps running. Stopping a process is a " +
+                "SYSTEM control (mcp_toggle) the estate does not expose yet, so every server-side write here " +
+                "renders read-only and files a proposal instead.",
+            wordTone = WARN,
         )
 
         // The connected MCP window — CLIENT-tier, real.
         McCard("The connected MCP window (CLIENT-tier)", "list_docs · listTools") {
             SectionLabel("the connection", divider = false)
-            KvRow("endpoint", TriadApp.LIVE_ENDPOINT.substringBefore("?"), NEUTRAL)
-            KvRow("tools exposed", "~77 (74 reads · run_select SELECT-only · 2 writes)", NEUTRAL)
-            KvRow("handshake", if (docCount > 0) "LIVE: list_docs returned $docCount docs" else "list_docs returned no rows", if (docCount > 0) GOOD else UNK)
+            LeverTable(buildList<Lever> {
+                add(Lever("endpoint", TriadApp.LIVE_ENDPOINT.substringBefore("?"), NEUTRAL))
+                add(Lever("tools exposed", "~77 (74 reads · run_select SELECT-only · 2 writes)", NEUTRAL))
+                add(Lever("handshake", if (docCount > 0) "LIVE: list_docs returned $docCount docs" else "list_docs returned no rows", if (docCount > 0) GOOD else UNK))
+            })
             Row(Modifier.padding(top = 4.dp, bottom = 2.dp)) {
                 Button(
                     onClick = {
@@ -670,12 +670,14 @@ fun McpScreen(repo: MissionRepository) {
                     else -> BAD
                 },
             )
-            KvRow("auth", "Authorization: Bearer, stored locally by the dashboard", NEUTRAL)
-            // The connected server's own truth (read-only) — get_config_active + get_attestation.
-            KvRow("estate applied preset", cfg.text("preset", cfg.text("name")), if (cfg == null) UNK else NEUTRAL)
-            KvRow("config fingerprint", cfg.text("fingerprint").removePrefix("sha256:").take(12), if (cfg == null) UNK else NEUTRAL)
-            KvRow("attestation manifest", att.text("manifest_sha").removePrefix("sha256:").take(12), if (att == null) UNK else NEUTRAL)
-            KvRow("contracts version", att.text("contracts_version"), if (att == null) UNK else NEUTRAL)
+            // auth + the connected server's own truth (read-only) — get_config_active + get_attestation.
+            LeverTable(buildList<Lever> {
+                add(Lever("auth", "Authorization: Bearer, stored locally by the dashboard", NEUTRAL))
+                add(Lever("estate applied preset", cfg.text("preset", cfg.text("name")), if (cfg == null) UNK else NEUTRAL))
+                add(Lever("config fingerprint", cfg.text("fingerprint").removePrefix("sha256:").take(12), if (cfg == null) UNK else NEUTRAL))
+                add(Lever("attestation manifest", att.text("manifest_sha").removePrefix("sha256:").take(12), if (att == null) UNK else NEUTRAL))
+                add(Lever("contracts version", att.text("contracts_version"), if (att == null) UNK else NEUTRAL))
+            })
             SectionLabel("what's real", divider = true)
             Note(
                 "CLIENT controls that are REAL here: add / remove a server, enable / disable (the dashboard " +
@@ -801,13 +803,11 @@ fun McpScreen(repo: MissionRepository) {
                     Triple("fail rate", failRate?.let { "${fmt(it * 100, 1)}%" } ?: "—", if ((failRate ?: 0.0) > 0.05) BAD else GOOD),
                 )
                 val byTool = guardDerive(emptyList<JsonObject>()) { audit.arr("by_tool").rows() }
-                KvRow("tools audited", if (byTool.isEmpty()) "—" else byTool.size.toString(), NEUTRAL)
                 val barred = guardDerive(0) { byTool.count { !it.bool("may_render_green") } }
-                KvRow(
-                    "barred from rendering green",
-                    if (byTool.isEmpty()) "—" else "$barred of ${byTool.size}",
-                    if (barred > 0) WARN else GOOD,
-                )
+                LeverTable(listOf(
+                    Triple("tools audited", if (byTool.isEmpty()) "—" else byTool.size.toString(), NEUTRAL),
+                    Triple("barred from rendering green", if (byTool.isEmpty()) "—" else "$barred of ${byTool.size}", if (barred > 0) WARN else GOOD),
+                ))
                 // The heaviest callers' traffic, by tool. (No by-caller split is served — see the note.)
                 val topBars = guardDerive(emptyList<Bar>()) {
                     byTool.sortedByDescending { it.num("calls") ?: 0.0 }.take(10).map { t ->
