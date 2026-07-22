@@ -729,11 +729,21 @@ fun SectionLabel(label: String, divider: Boolean = true, accent: Boolean = false
  *  [info] blurb. When [info] is set, an ⓘ appears by the name and taps open the blurb below the row. */
 data class Lever(val key: String, val value: String, val tone: Tone = Tone.NEUTRAL, val info: String = "")
 
+/** The lever name, with the ⓘ baked into the SAME Text as an emerald span when it has an info blurb, so an
+ *  info row occupies exactly one text line box, identical in height to a plain row (matched spacing). The
+ *  whole label is the tap target. */
 @Composable
-private fun InfoDot(onClick: () -> Unit) {
+private fun KeyLabel(key: String, hasInfo: Boolean, modifier: Modifier, onToggle: () -> Unit) {
     Text(
-        "ⓘ", color = Emerald, fontFamily = Mono, fontSize = 11.sp,
-        modifier = Modifier.padding(start = 6.dp).clip(CircleShape).clickable(onClick = onClick).padding(2.dp),
+        buildAnnotatedString {
+            append(key)
+            if (hasInfo) {
+                append(" ")
+                withStyle(SpanStyle(color = Emerald)) { append("ⓘ") }
+            }
+        },
+        color = Ink2, fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp,
+        modifier = if (hasInfo) modifier.clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle) else modifier,
     )
 }
 
@@ -755,17 +765,11 @@ fun LeverTable(rows: List<Lever>) {
             Column(Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
                 if (lev.value.length > 18) {
                     // long value: name (+ ⓘ) on one line, the value on its own full-width line below.
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(lev.key, color = Ink2, fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp)
-                        if (lev.info.isNotEmpty()) InfoDot { open = !open }
-                    }
+                    KeyLabel(lev.key, lev.info.isNotEmpty(), Modifier) { open = !open }
                     Text(lev.value, color = vColor, fontFamily = Mono, fontWeight = vWeight, fontSize = 11.5.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 2.dp))
                 } else {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Row(Modifier.weight(1f).padding(end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(lev.key, color = Ink2, fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp)
-                            if (lev.info.isNotEmpty()) InfoDot { open = !open }
-                        }
+                        KeyLabel(lev.key, lev.info.isNotEmpty(), Modifier.weight(1f).padding(end = 10.dp)) { open = !open }
                         Text(
                             lev.value, color = vColor, fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp,
                             fontWeight = vWeight, textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1f),

@@ -184,7 +184,7 @@ fun ConfigScreen(repo: MissionRepository) {
                 eyebrow = "Trading rules",
                 title = "Entries & risk",
                 whatItControls = "What decides a trade, how big it is, and when it stops for the day.",
-                detailLabel = "ALL RISK · EXECUTION · REGIMES · EDGE LEVERS",
+                detailLabel = "The rest · execution · regimes · edge",
                 surfaced = {
                     LeverTable(
                         listOf(
@@ -199,13 +199,8 @@ fun ConfigScreen(repo: MissionRepository) {
                     SectionLabel("Risk & execution", divider = false, accent = true)
                     LeverTable(
                         listOf(
-                            Triple("conviction threshold", num(risk, "conviction_threshold"), NEUTRAL),
-                            Triple("min stop width (bps)", num(risk, "min_stop_width_bps"), WARN),
                             Triple("net / gross RR floor", num(risk, "net_rr_floor") + " / " + num(risk, "gross_rr_floor"), NEUTRAL),
-                            Triple("risk % equity", num(risk, "risk_pct_equity"), NEUTRAL),
                             Triple("size mult range", num(risk, "mult_min") + " to " + num(risk, "mult_max"), NEUTRAL),
-                            Triple("global exposure cap %", num(risk, "global_exposure_cap_pct"), NEUTRAL),
-                            Triple("dd daily / weekly %", num(risk, "dd_daily_pct") + " / " + num(risk, "dd_weekly_pct"), NEUTRAL),
                             Triple("exit profile", exec.text("exit_profile"), INFO),
                             Triple("tp exec arm", exec.text("tp_exec_arm"), INFO),
                             Triple("time-stop mult", num(exec, "time_stop_mult"), INFO),
@@ -249,7 +244,7 @@ fun ConfigScreen(repo: MissionRepository) {
                 eyebrow = "Intelligence",
                 title = "The brain",
                 whatItControls = "The model and cached signals it judges each setup with.",
-                detailLabel = "ALL INTELLIGENCE · CAG · AUX LEVERS",
+                detailLabel = "The rest · intelligence · cag · aux",
                 surfaced = {
                     LeverTable(
                         listOf(
@@ -262,8 +257,6 @@ fun ConfigScreen(repo: MissionRepository) {
                     SectionLabel("LLM", divider = false, accent = true)
                     LeverTable(
                         listOf(
-                            Triple("serving", intel.text("serving"), NEUTRAL),
-                            Triple("model tag", intel.text("model_tag"), INFO),
                             Triple("temperature · seed", num(intel, "temperature") + " · " + num(intel, "seed"), NEUTRAL),
                             Triple("max tokens", num(intel, "max_tokens"), NEUTRAL),
                             Triple("deadline p95 / cap (s)", num(intel, "deadline_p95_s") + " / " + num(intel, "deadline_cap_s"), NEUTRAL),
@@ -273,8 +266,6 @@ fun ConfigScreen(repo: MissionRepository) {
                     SectionLabel("CAG", accent = true)
                     LeverTable(
                         listOf(
-                            Triple("cag2 enabled", (cag?.bool("cag2_enabled") ?: false).yn(), NEUTRAL),
-                            Triple("ttl (s)", num(cag, "ttl_s"), NEUTRAL),
                             Triple("zone IoU min", num(cag, "zone_iou_min"), NEUTRAL),
                             Triple("audit frac · min agree", num(cag, "audit_frac") + " · " + num(cag, "audit_min_agree"), NEUTRAL),
                         ),
@@ -298,7 +289,7 @@ fun ConfigScreen(repo: MissionRepository) {
                 eyebrow = "Market inputs",
                 title = "What it watches",
                 whatItControls = "Which markets it trades and which price patterns it reads.",
-                detailLabel = "ALL DETECTORS · STRUCTURES · INDICATORS · TIMEFRAMES · SYMBOLS",
+                detailLabel = "The rest · detectors · structures · indicators · timeframes",
                 surfaced = {
                     LeverTable(
                         listOf(
@@ -309,12 +300,7 @@ fun ConfigScreen(repo: MissionRepository) {
                 },
                 detail = {
                     SectionLabel("Universe", divider = false, accent = true)
-                    LeverTable(
-                        listOf(
-                            Triple("whitelist size", wl.size.toString(), NEUTRAL),
-                            Triple("blacklist", sym.text("blacklist"), UNK),
-                        ),
-                    )
+                    LeverTable(listOf(Triple("blacklist", sym.text("blacklist"), UNK)))
                     Note("Per-symbol enable/score/exposure_cap are levers: edit them through a change-plan, not here.")
                     SectionLabel("Detectors (shadow-walled)", accent = true)
                     MiniTable(
@@ -345,7 +331,7 @@ fun ConfigScreen(repo: MissionRepository) {
                 eyebrow = "Self-tuning",
                 title = "Learning",
                 whatItControls = "How it tunes itself, and the gates a new model must clear before it counts.",
-                detailLabel = "ALL TUNING · SWEEP GATE LEVERS",
+                detailLabel = "The rest · reward weights · gates",
                 surfaced = {
                     LeverTable(
                         listOf(
@@ -366,18 +352,12 @@ fun ConfigScreen(repo: MissionRepository) {
                     SectionLabel("T1 gate", accent = true)
                     LeverTable(
                         listOf(
-                            Triple("T1 min labeled", num(tune, "t1_min_labeled"), WARN),
                             Triple("T1 lora r · alpha · epochs", num(tune, "t1_lora_r") + " · " + num(tune, "t1_lora_alpha") + " · " + num(tune, "t1_epochs"), NEUTRAL),
                             Triple("T1 validator-reject max %", num(tune, "t1_validator_reject_max_pct"), NEUTRAL),
                         ),
                     )
                     SectionLabel("Sweep & promotion gates", accent = true)
-                    LeverTable(
-                        listOf(
-                            Triple("sweep pbo max · dsr min", num(tune, "sweep_pbo_max") + " · " + num(tune, "sweep_dsr_prob_min"), NEUTRAL),
-                            Triple("edge min weeks · candidates", num(tune, "edge_min_weeks") + " · " + num(tune, "edge_min_candidates"), NEUTRAL),
-                        ),
-                    )
+                    LeverTable(listOf(Triple("edge min weeks · candidates", num(tune, "edge_min_weeks") + " · " + num(tune, "edge_min_candidates"), NEUTRAL)))
                     Note("Sweeps run through the governed path, not this viewer.")
                 },
             )
@@ -387,7 +367,7 @@ fun ConfigScreen(repo: MissionRepository) {
                 eyebrow = "Access & safety",
                 title = "People & safety",
                 whatItControls = "Who can touch money, the two-person guard, and the shadow books.",
-                detailLabel = "ALL USER · PERSONA LEVERS",
+                detailLabel = "The rest · users · personas",
                 surfaced = {
                     val approver = users.text("second_approver").ifBlank { "none" }
                     val ceremonyOn = users?.bool("ceremony_two_person") == true
@@ -400,19 +380,13 @@ fun ConfigScreen(repo: MissionRepository) {
                     )
                 },
                 detail = {
-                    val approverD = users.text("second_approver").ifBlank { "none" }
-                    val ceremonyOn = users?.bool("ceremony_two_person") == true
-                    SectionLabel("Roles & guards", divider = false, accent = true)
+                    SectionLabel("More user settings", divider = false, accent = true)
                     LeverTable(
                         listOf(
-                            Triple("operator", users.text("operator"), NEUTRAL),
-                            Triple("second approver", approverD, if (approverD == "none") UNK else NEUTRAL),
-                            Triple("two-person ceremony", ceremonyOn.yn(), if (ceremonyOn) GOOD else WARN),
                             Triple("page alerts", (users?.bool("page_alerts") ?: false).yn(), NEUTRAL),
                             Triple("journal email", users.text("journal_email").ifBlank { "none" }, UNK),
                         ),
                     )
-                    Note("A second_approver + two-person ceremony are the money-touching guards.")
                     SectionLabel("Personas (shadow books) · $personaOn of ${personaList.size} on", accent = true)
                     MiniTable(
                         listOf("persona", "enabled", "question"),
@@ -434,7 +408,7 @@ fun ConfigScreen(repo: MissionRepository) {
                 eyebrow = "Operations",
                 title = "Plumbing",
                 whatItControls = "Logging cadence, and where this preset came from.",
-                detailLabel = "ALL LOGGER + PRESET METADATA",
+                detailLabel = "The rest · logger · preset metadata",
                 surfaced = {
                     LeverTable(
                         listOf(
@@ -447,7 +421,6 @@ fun ConfigScreen(repo: MissionRepository) {
                     SectionLabel("Logger", divider = false, accent = true)
                     LeverTable(
                         listOf(
-                            Triple("during cadence (min)", num(logger, "during_cadence_min"), NEUTRAL),
                             Triple("pre / post window (min)", num(logger, "pre_window_min") + " / " + num(logger, "post_window_min"), NEUTRAL),
                             Triple("tier-2 enrichment", (logger.obj("tier2_enrichment")?.bool("on") ?: logger?.bool("tier2_enrichment") ?: false).yn(), WARN),
                         ),
@@ -456,8 +429,6 @@ fun ConfigScreen(repo: MissionRepository) {
                     SectionLabel("This preset", accent = true)
                     LeverTable(
                         buildList<Lever> {
-                            add(Lever("schema", active.text("schema"), NEUTRAL))
-                            add(Lever("source", active.text("src"), NEUTRAL))
                             if (meta != null) {
                                 add(Lever("preset file", presetEnv.text("file"), NEUTRAL))
                                 add(Lever("author · ums", meta.text("author") + " · " + meta.text("ums"), NEUTRAL))
