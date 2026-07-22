@@ -203,13 +203,15 @@ fun VerdictBanner(
             color = Emerald, fontFamily = Mono, fontSize = 10.sp, letterSpacing = 1.4.sp,
             fontWeight = FontWeight.SemiBold,
         )
-        // the huge ExtraBold title — the view name (Archivo 800, `.viewhead h1`)
+        // the huge ExtraBold title — the view name (Archivo 800, `.viewhead h1`), with the emerald
+        // accent bar under it (matching the AnaSection plane-header) so view titles read consistently.
         if (title.isNotEmpty()) {
             Text(
                 title, color = Ink, fontFamily = Disp, fontWeight = FontWeight.ExtraBold,
                 fontSize = 30.sp, letterSpacing = (-0.8).sp,
                 modifier = Modifier.padding(top = 5.dp),
             )
+            Box(Modifier.padding(top = 9.dp).width(46.dp).height(3.dp).background(Emerald, RoundedCornerShape(2.dp)))
         }
         // the verdict word (bold, tone-coloured) leading the said paragraph as ink prose
         if (said.isNotEmpty()) {
