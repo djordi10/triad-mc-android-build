@@ -104,10 +104,10 @@ That view's P&L subsection will mis-read. Flagging for a separate fix; not touch
 
 ## 3. Per-view state (all five)
 
-- **21 Overview** — declares 4 tools, renders only `get_bank_priced` (dead: DSN). Headline
-  `candidates 22,356` / `takes 109` + both symbol tables are frozen snapshot. `get_take_rate`,
-  `get_pnl_summary`, `get_bank_dedup` are fetched then **never read**. Biggest gap. (fix 4A)
-- **22 Symbols** — declares 4 tools, renders none. `SYM_DIR` + `AGG_ROWS` 100% snapshot.
+- **21 Overview** — WIRED (4A, commit `304fc94`): live accepted-vs-rest card + live-first stance
+  + explicit "needs DSN" card. The two per-symbol bank tables stay snapshot (need the DSN, 4C).
+- **22 Symbols** — WIRED (4A, commit `1057b35`): live 24h scan overlay (directory note, per-row
+  tag, per-symbol "Live 24h scan" card). The profitability split stays snapshot (need the DSN).
 - **23 Lab** — calc is snapshot-math from `MX` in `SuiteData.kt` by design. SAVE →
   `propose_action(kind=other, type:lab_save)` is correctly wired. Leave it.
 - **24 Tables** — reads local `LabStore`. Correct.
@@ -118,23 +118,34 @@ That view's P&L subsection will mis-read. Flagging for a separate fix; not touch
 
 ## 4. The connect plan (split)
 
-### 4A. App-side — connectable NOW (live, no DSN needed). This is the small diff I will make.
+### 4A. App-side — DONE + verified live (no DSN needed)
 
-On Overview 21, add one honest **"Accepted lane"** card sourced from the tools that are already
-live, and replace the stale hardcoded stance:
+**Overview 21** (commit `304fc94`) — new **"Accepted vs the rest"** card, live from tools that
+work without the DSN. Verified live on emulator: 438 accepted, skip 831,956, resolution line.
 
-- stance `takes` ← `get_take_rate.by_verdict.take` (live 438), fallback snapshot.
-- stance `candidates` ← `get_decision_census.total` (live 832,400), fallback snapshot.
-- new card: accepted (take 438) vs the rest, from `get_decision_census.by_reason` (real `n`
-  per reason) — the clean split above.
-- resolution line: from `get_pnl_summary.groups` — n resolved, net R, wins — "the resolver is
-  running" when non-empty, honest "no closed outcomes yet" when empty.
-- keep the existing `get_bank_priced` card exactly as-is; it already degrades to absent when the
-  DSN is unset. Add a one-line "bank tools need TRIAD_DATABANK_DSN" note so the dead cards read
-  as a known config gap, not a mystery 0000.
+- stance `takes` ← `get_take_rate.by_verdict.take` (live 438), snapshot fallback.
+- stance `candidates` ← `get_decision_census.total` (live 832,400), snapshot fallback.
+- card: accepted (take) vs the rest, from `get_decision_census.by_reason` (real `n` per reason);
+  falls back to `get_take_rate.by_verdict` (take/wait/skip) so the split renders even when the
+  census flaps to absent (see section 6).
+- resolution line from `get_pnl_summary.groups` — n resolved, net R, wins — "resolver is running"
+  when non-empty, honest "no closed outcomes this poll" when empty.
+- `get_bank_priced == null` now renders an explicit "needs the databank DSN" card instead of
+  vanishing, so the dead bank cards read as a known config gap, not a mystery 0000.
+
+**Symbols 22** (commit `1057b35`) — added `get_scan_board`, the one genuinely per-symbol read
+that works without the DSN. Verified live on emulator (note rendered "Live 24h feed: 0 of 31
+emitting, feed absent").
+
+- directory stance live-first: symbols / emitting 24h / screened from the board.
+- directory note "Live 24h feed: N of M emitting" ("feed absent" when the market feed is down).
+- per-symbol row: a "24h N" tag only when that symbol has fresh 24h candidates.
+- per-symbol detail: a "Live 24h scan" card (candidates 24h / regime / spread / screen_reason).
+- profitability split stays snapshot (needs DSN), labelled as such.
 
 All additive + guarded (render only when the tool is present), so nothing blanks when a tool is
-absent. Field names are confirmed live, so this is screenshot-verifiable now.
+absent — it degrades to the snapshot. NOTE: because these are heavy live reads on a flapping
+origin, the live overlays appear only on polls where the tool actually lands (section 6).
 
 ### 4B. Your side — one server env var (lights up the rest, zero app change)
 
@@ -164,4 +175,35 @@ If neither exists, the tables stay snapshot (honest) until the DSN is set and we
 Cloudflare 502 `origin_bad_gateway` = the mcp process hung (the pgrep watchdog catches a crash,
 not a hang). Fix: `sshpass -p 2026 ssh liko@sshmac.transportech.ai`, `pgrep -fl triad-mcp`,
 `kill <PID>` — the keeper respawns it. Do NOT bounce the whole stack (live trading runs there).
-Today it self-recovered within minutes.
+During this work it flapped 502 twice and self-recovered within minutes each time; SSH to the
+Mac also timed out during a 502 window (so a hard 502 may need liko, not just a kill).
+
+---
+
+## 6. Known problems / why a live panel sometimes "flips" to blank
+
+This is expected behaviour, not a bug — worth knowing so a blank panel is not mistaken for lost
+wiring. Every live card is guarded (`if (tool != null)`) and degrades to the snapshot / a "—"
+when the tool does not answer that poll. So the same card can show live data one refresh and the
+snapshot the next. Causes, in order of how often you will see them:
+
+1. **Origin 502 flap.** When the mcp proc hangs, ALL live tools read absent for that window and
+   every panel shows its snapshot / "—". Recovers on watchdog respawn (section 5).
+2. **Heavy-tool flap (the big one for SUITE).** `get_scan_board` (a 45-symbol scan) and the bank
+   reads are heavy. When they are one of ~5 sequential calls against a flapping origin, that one
+   call can 502 while the light tools (census, take-rate, pnl) succeed. Result: on Symbols the
+   directory shows snapshot rows with no "Live 24h feed" note until a poll where scan_board lands.
+   `ToolsViewModel` gives a null result one quick retry (`RETRY_BUDGET = 3` per poll) to soften
+   this, but a badly-flapping origin still misses some polls. Tap refresh a few times; it lands.
+   Observed this session: curl (a fresh single-tool session) got scan_board 6/6, but the app (one
+   persistent session, 5 sequential calls) missed several polls before it rendered. Not a code
+   bug — the read pattern is the same one Venue and the Overview accepted card use successfully.
+3. **DSN-gated tools never land** (not a flap): `get_bank_priced` / `get_shadow_bank` /
+   `get_bank_dedup` return `transport: unavailable` every poll until `TRIAD_DATABANK_DSN` is set
+   (section 4B). These read as their explicit "needs DSN" state, permanently, by design.
+4. **feed_absent (upstream, not a flap).** When the market feed is down, `get_scan_board` still
+   answers but every `cands_24h` is 0 and `screen_reason` is `feed_absent`. The live overlay then
+   correctly says "0 of 31 emitting (feed absent)" — that IS the live truth, not a wiring miss.
+
+Honest-data rule held throughout: nothing renders a fabricated number. A tool that is absent,
+DSN-gated, or feed-absent shows its real absent/zero state, never a made-up value.
