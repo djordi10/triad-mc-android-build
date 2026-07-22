@@ -203,11 +203,13 @@ private fun ConnProfileTile(p: ConnProfile, blocked: Boolean, applied: Boolean) 
             Tag(if (blocked) "INTERLOCKED" else "CLIENT", if (blocked) SEV else INFO)
         }
         Note(p.sub, NEUTRAL)
-        KvRow("adapter", p.adapter, NEUTRAL)
-        KvRow("venue", p.venue, if (p.venue == "binance-usdm") BAD else NEUTRAL)
-        KvRow("keys", p.keys, if (p.keys == "trade") BAD else GOOD)
-        KvRow("entries", p.entries, if (p.entries == "ENABLED") BAD else UNK)
-        KvRow("preset", p.preset, NEUTRAL)
+        LeverTable(buildList<Lever> {
+            add(Lever("adapter", p.adapter, NEUTRAL))
+            add(Lever("venue", p.venue, if (p.venue == "binance-usdm") BAD else NEUTRAL))
+            add(Lever("keys", p.keys, if (p.keys == "trade") BAD else GOOD))
+            add(Lever("entries", p.entries, if (p.entries == "ENABLED") BAD else UNK))
+            add(Lever("preset", p.preset, NEUTRAL))
+        })
         if (applied) Note("APPLIED: get_config_active reports the estate is running this preset.", GOOD)
         if (blocked) {
             Ribbon(
@@ -300,34 +302,26 @@ fun ConnectionsScreen(repo: MissionRepository) {
             Stance("calls today", "propose_action", INFO),
         ),
     ) {
-        // AT-C1 · name the missing control plane, quoting the tools' own words.
-        Ribbon(
-            "Every control you asked for needs a server-side path. There isn't one, deliberately never built.",
-            "77 tools. 74 reads. The system says so in its own descriptions: get_kill_state is " +
-                "\"read-only (never a control path); honest unknown\"; get_config_preset says \"no tool writes it\"; " +
-                "propose_action \"EXECUTES NOTHING\". A restart button that does not restart is the worst " +
-                "object in this dashboard: the false-green machine wearing the uniform of a control plane. " +
-                "So every control here is honest about which of two tiers it lives in.",
-            SEV,
-        )
-
-        // ── the KPI strip — mirrors CXVIEW host.strip (positions + kill switch now live-wired) ──
-        StatRow(
-            Triple("dashboard", if (TriadApp.LIVE_ENDPOINT.contains("bgzr")) "triad-mc" else "client", NEUTRAL),
-            Triple("go / no-go", if (boardClean) "CLEAN" else "NO-GO", if (boardClean) GOOD else BAD),
-            Triple("live", "INTERLOCKED", BAD),
-            Triple("conn_activate", "ABSENT", BAD),
-            Triple("positions", posCount?.toString() ?: "—", if (posCount == null) UNK else NEUTRAL),
-            Triple("kill switch", killState, switchTone(killState)),
+        // Hero: the title, and the two-tier thesis this page exists to hold. Folds the AT-C1 ribbon so
+        // the meaning lives in one place; the KPI strip was dropped as a restatement of the stance pills
+        // and the live-state readout in "The server" card below (positions, kill switch, go/no-go).
+        VerdictBanner(
+            title = "Connections",
+            word = "interlocked",
+            said = "Two switches this page never confuses. \"Use for this dashboard\" repoints this app's own " +
+                "connection: real, instant, zero server work. \"Switch the SYSTEM\" would change what the estate is " +
+                "running, and it needs a server-side path that was deliberately never built, so every estate-side " +
+                "control here renders read-only and files a proposal. Real money stays refused until the go/no-go " +
+                "board is clean.",
+            wordTone = SEV,
         )
 
         // pProfiles · the four-profile connection board — demo / paper / live·REAL-MONEY / shadow (CXVIEW).
         McCard("Connections", tool = "CLIENT switch is real · SYSTEM switch is absent", sub = "the four-profile board") {
             SectionLabel("what it means", divider = false)
             Note(
-                "Two different switches, and the page never confuses them. \"Use for this dashboard\" (the CLIENT " +
-                    "card below) repoints THIS dashboard (real, instant). \"Switch the SYSTEM →\" is conn_activate: it " +
-                    "changes what the estate is doing, it needs a tool that does not exist, and the dashboard never calls it.",
+                "Four connection profiles, demo through real money. The one the estate is running shows APPLIED; the " +
+                    "rest are inert here. Switching which one runs is the SYSTEM action the dashboard can only propose.",
                 INFO,
             )
             SectionLabel("the profiles", divider = true)
@@ -347,15 +341,17 @@ fun ConnectionsScreen(repo: MissionRepository) {
 
         // pServer · the live-state tiles + the read-only SYSTEM writes (svc_restart / config_apply).
         McCard("The server · restart · config profile", "get_config_active × get_kill_state × get_positions") {
-            KvRow("applied preset", appliedPreset, if (ca == null) UNK else NEUTRAL)
-            KvRow("config state", dirtyLabel, dirtyTone)
-            KvRow("kill switch", killState.uppercase(), switchTone(killState))
-            KvRow("control_path", controlPath, UNK)
-            KvRow("circuit breaker", breakerState.uppercase(), switchTone(breakerState))
-            KvRow("open positions", posCount?.toString() ?: "—", if (posCount == null) UNK else NEUTRAL)
-            KvRow("resting orders", ordCount?.toString() ?: "—", if (ordCount == null) UNK else NEUTRAL)
-            KvRow("estate phase", sysov.text("phase"), if (sysov == null) UNK else NEUTRAL)
-            KvRow("money path", sysov.text("money_path").uppercase(), if (sysov == null) UNK else switchTone(sysov.text("money_path")))
+            LeverTable(buildList<Lever> {
+                add(Lever("applied preset", appliedPreset, if (ca == null) UNK else NEUTRAL))
+                add(Lever("config state", dirtyLabel, dirtyTone))
+                add(Lever("kill switch", killState.uppercase(), switchTone(killState)))
+                add(Lever("control path", controlPath, UNK))
+                add(Lever("circuit breaker", breakerState.uppercase(), switchTone(breakerState)))
+                add(Lever("open positions", posCount?.toString() ?: "—", if (posCount == null) UNK else NEUTRAL))
+                add(Lever("resting orders", ordCount?.toString() ?: "—", if (ordCount == null) UNK else NEUTRAL))
+                add(Lever("estate phase", sysov.text("phase"), if (sysov == null) UNK else NEUTRAL))
+                add(Lever("money path", sysov.text("money_path").uppercase(), if (sysov == null) UNK else switchTone(sysov.text("money_path"))))
+            })
             Ribbon(
                 "The safe half already works. The dangerous half is not on the server.",
                 "svc_restart and config_apply are SYSTEM writes: restart the MCP process / apply a preset to the " +
