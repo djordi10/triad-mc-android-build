@@ -24,6 +24,7 @@ import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.ConfigSeal
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.LeverTable
 import agentic.triad.missioncontrol.ui.components.SettingGroup
 import agentic.triad.missioncontrol.ui.components.TradeSummaryBanner
 import agentic.triad.missioncontrol.ui.components.VerdictBanner
@@ -192,19 +193,23 @@ fun ConfigScreen(repo: MissionRepository) {
                     KvRow("daily / weekly DD halt %", num(risk, "dd_daily_pct") + " / " + num(risk, "dd_weekly_pct"), NEUTRAL)
                 },
                 detail = {
-                    SectionLabel("Risk & execution", divider = false)
-                    KvRow("conviction threshold", num(risk, "conviction_threshold"), NEUTRAL)
-                    KvRow("min stop width (bps)", num(risk, "min_stop_width_bps") + " · 45bps fee law", WARN)
-                    KvRow("net / gross RR floor", num(risk, "net_rr_floor") + " / " + num(risk, "gross_rr_floor"), NEUTRAL)
-                    KvRow("risk % equity", num(risk, "risk_pct_equity"), NEUTRAL)
-                    KvRow("size mult range", num(risk, "mult_min") + " to " + num(risk, "mult_max"), NEUTRAL)
-                    KvRow("global exposure cap %", num(risk, "global_exposure_cap_pct"), NEUTRAL)
-                    KvRow("dd daily / weekly %", num(risk, "dd_daily_pct") + " / " + num(risk, "dd_weekly_pct"), NEUTRAL)
-                    KvRow("exit profile", exec.text("exit_profile"), INFO)
-                    KvRow("tp exec arm", exec.text("tp_exec_arm"), INFO)
-                    KvRow("time-stop mult", num(exec, "time_stop_mult"), INFO)
+                    SectionLabel("Risk & execution", divider = false, accent = true)
+                    LeverTable(
+                        listOf(
+                            Triple("conviction threshold", num(risk, "conviction_threshold"), NEUTRAL),
+                            Triple("min stop width (bps)", num(risk, "min_stop_width_bps"), WARN),
+                            Triple("net / gross RR floor", num(risk, "net_rr_floor") + " / " + num(risk, "gross_rr_floor"), NEUTRAL),
+                            Triple("risk % equity", num(risk, "risk_pct_equity"), NEUTRAL),
+                            Triple("size mult range", num(risk, "mult_min") + " to " + num(risk, "mult_max"), NEUTRAL),
+                            Triple("global exposure cap %", num(risk, "global_exposure_cap_pct"), NEUTRAL),
+                            Triple("dd daily / weekly %", num(risk, "dd_daily_pct") + " / " + num(risk, "dd_weekly_pct"), NEUTRAL),
+                            Triple("exit profile", exec.text("exit_profile"), INFO),
+                            Triple("tp exec arm", exec.text("tp_exec_arm"), INFO),
+                            Triple("time-stop mult", num(exec, "time_stop_mult"), INFO),
+                        ),
+                    )
                     Note("Read-only. exit_profile flip is adoption-gated (paired CI): the compiler refuses it without the evidence line.")
-                    SectionLabel("Regimes")
+                    SectionLabel("Regimes", accent = true)
                     MiniTable(
                         listOf("regime", "enabled", "size_mult"),
                         (regimes?.keys ?: emptySet()).map { r ->
@@ -218,16 +223,20 @@ fun ConfigScreen(repo: MissionRepository) {
                             )
                         },
                     )
-                    SectionLabel("Edge · W-33 levers")
-                    KvRow("side weight short", num(edge, "side_weight_short"), NEUTRAL)
-                    KvRow("session weight 12-14Z", num(edge, "session_weight_12_14Z"), NEUTRAL)
-                    KvRow("zone offset repair", num(edge, "zone_offset_repair"), NEUTRAL)
-                    KvRow("entry confirm", (edge.obj("entry_confirm")?.bool("on") ?: edge?.bool("entry_confirm") ?: false).yn(), NEUTRAL)
-                    KvRow("aux agree gate", (edge.obj("aux_agree_gate")?.bool("on") ?: edge?.bool("aux_agree_gate") ?: false).yn(), NEUTRAL)
-                    KvRow("ladder tp1 · tp2 (R)", num(edge, "ladder_tp1_r") + " · " + num(edge, "ladder_tp2_r"), NEUTRAL)
-                    KvRow("ladder split tp1", num(edge, "ladder_split_tp1"), NEUTRAL)
-                    KvRow("trail activate R · atr mult", num(edge, "trail_activate_r") + " · " + num(edge, "trail_atr_mult"), NEUTRAL)
-                    KvRow("trail floor (bps)", num(edge, "trail_floor_bps"), NEUTRAL)
+                    SectionLabel("Edge · W-33 levers", accent = true)
+                    LeverTable(
+                        listOf(
+                            Triple("side weight short", num(edge, "side_weight_short"), NEUTRAL),
+                            Triple("session weight 12-14Z", num(edge, "session_weight_12_14Z"), NEUTRAL),
+                            Triple("zone offset repair", num(edge, "zone_offset_repair"), NEUTRAL),
+                            Triple("entry confirm", (edge.obj("entry_confirm")?.bool("on") ?: edge?.bool("entry_confirm") ?: false).yn(), NEUTRAL),
+                            Triple("aux agree gate", (edge.obj("aux_agree_gate")?.bool("on") ?: edge?.bool("aux_agree_gate") ?: false).yn(), NEUTRAL),
+                            Triple("ladder tp1 · tp2 (R)", num(edge, "ladder_tp1_r") + " · " + num(edge, "ladder_tp2_r"), NEUTRAL),
+                            Triple("ladder split tp1", num(edge, "ladder_split_tp1"), NEUTRAL),
+                            Triple("trail activate R · atr mult", num(edge, "trail_activate_r") + " · " + num(edge, "trail_atr_mult"), NEUTRAL),
+                            Triple("trail floor (bps)", num(edge, "trail_floor_bps"), NEUTRAL),
+                        ),
+                    )
                     Note("Wired / unwired / conflict is the apply-map's business (edge.v1.json), not this read-only viewer.")
                 },
             )
@@ -242,24 +251,36 @@ fun ConfigScreen(repo: MissionRepository) {
                     KvRow("cag2 enabled · ttl (s)", (cag?.bool("cag2_enabled") ?: false).yn() + " · " + num(cag, "ttl_s"), NEUTRAL)
                 },
                 detail = {
-                    SectionLabel("LLM", divider = false)
-                    KvRow("serving", intel.text("serving"), NEUTRAL)
-                    KvRow("model tag", intel.text("model_tag"), INFO)
-                    KvRow("temperature · seed", num(intel, "temperature") + " · " + num(intel, "seed"), NEUTRAL)
-                    KvRow("max tokens", num(intel, "max_tokens"), NEUTRAL)
-                    KvRow("deadline p95 / cap (s)", num(intel, "deadline_p95_s") + " / " + num(intel, "deadline_cap_s"), NEUTRAL)
+                    SectionLabel("LLM", divider = false, accent = true)
+                    LeverTable(
+                        listOf(
+                            Triple("serving", intel.text("serving"), NEUTRAL),
+                            Triple("model tag", intel.text("model_tag"), INFO),
+                            Triple("temperature · seed", num(intel, "temperature") + " · " + num(intel, "seed"), NEUTRAL),
+                            Triple("max tokens", num(intel, "max_tokens"), NEUTRAL),
+                            Triple("deadline p95 / cap (s)", num(intel, "deadline_p95_s") + " / " + num(intel, "deadline_cap_s"), NEUTRAL),
+                        ),
+                    )
                     Note("model_tag changes require a registry entry + ceremony; a prompt_template bump triggers goldens + a corpus re-cut checklist.")
-                    SectionLabel("CAG")
-                    KvRow("cag2 enabled", (cag?.bool("cag2_enabled") ?: false).yn(), NEUTRAL)
-                    KvRow("ttl (s)", num(cag, "ttl_s"), NEUTRAL)
-                    KvRow("zone IoU min", num(cag, "zone_iou_min"), NEUTRAL)
-                    KvRow("audit frac · min agree", num(cag, "audit_frac") + " · " + num(cag, "audit_min_agree"), NEUTRAL)
-                    SectionLabel("Aux signals")
-                    KvRow("kronos", (aux.obj("kronos")?.bool("on") ?: aux?.bool("kronos") ?: false).yn(), NEUTRAL)
-                    KvRow("fingpt news", (aux.obj("fingpt_news")?.bool("on") ?: aux?.bool("fingpt_news") ?: false).yn(), NEUTRAL)
-                    KvRow("s7b render", (aux.obj("s7b_render")?.bool("on") ?: aux?.bool("s7b_render") ?: false).yn(), NEUTRAL)
-                    KvRow("kronos staleness (s)", num(aux, "kronos_staleness_s"), NEUTRAL)
-                    KvRow("news staleness (min)", num(aux, "news_staleness_min"), NEUTRAL)
+                    SectionLabel("CAG", accent = true)
+                    LeverTable(
+                        listOf(
+                            Triple("cag2 enabled", (cag?.bool("cag2_enabled") ?: false).yn(), NEUTRAL),
+                            Triple("ttl (s)", num(cag, "ttl_s"), NEUTRAL),
+                            Triple("zone IoU min", num(cag, "zone_iou_min"), NEUTRAL),
+                            Triple("audit frac · min agree", num(cag, "audit_frac") + " · " + num(cag, "audit_min_agree"), NEUTRAL),
+                        ),
+                    )
+                    SectionLabel("Aux signals", accent = true)
+                    LeverTable(
+                        listOf(
+                            Triple("kronos", (aux.obj("kronos")?.bool("on") ?: aux?.bool("kronos") ?: false).yn(), NEUTRAL),
+                            Triple("fingpt news", (aux.obj("fingpt_news")?.bool("on") ?: aux?.bool("fingpt_news") ?: false).yn(), NEUTRAL),
+                            Triple("s7b render", (aux.obj("s7b_render")?.bool("on") ?: aux?.bool("s7b_render") ?: false).yn(), NEUTRAL),
+                            Triple("kronos staleness (s)", num(aux, "kronos_staleness_s"), NEUTRAL),
+                            Triple("news staleness (min)", num(aux, "news_staleness_min"), NEUTRAL),
+                        ),
+                    )
                     Note("Bounds are laws the compiler clamps.")
                 },
             )
@@ -274,11 +295,15 @@ fun ConfigScreen(repo: MissionRepository) {
                     KvRow("detectors live", "$detOn of $detTot on", if (detOn == 0) UNK else NEUTRAL)
                 },
                 detail = {
-                    SectionLabel("Universe", divider = false)
-                    KvRow("whitelist size", wl.size.toString(), NEUTRAL)
-                    KvRow("blacklist", sym.text("blacklist"), UNK)
+                    SectionLabel("Universe", divider = false, accent = true)
+                    LeverTable(
+                        listOf(
+                            Triple("whitelist size", wl.size.toString(), NEUTRAL),
+                            Triple("blacklist", sym.text("blacklist"), UNK),
+                        ),
+                    )
                     Note("Per-symbol enable/score/exposure_cap are levers: edit them through a change-plan, not here.")
-                    SectionLabel("Detectors (shadow-walled)")
+                    SectionLabel("Detectors (shadow-walled)", accent = true)
                     MiniTable(
                         listOf("detector", "enabled", "note"),
                         (det?.keys ?: emptySet()).sorted().map { k ->
@@ -292,11 +317,11 @@ fun ConfigScreen(repo: MissionRepository) {
                         },
                     )
                     Note("A dark detector reading 'on' is not the same as live: it stays shadow-only until GE-3 promotion.", WARN)
-                    SectionLabel("Structures")
+                    SectionLabel("Structures", accent = true)
                     featureModuleRows(domains.obj("structures"))
-                    SectionLabel("Indicators")
+                    SectionLabel("Indicators", accent = true)
                     featureModuleRows(domains.obj("indicators"))
-                    SectionLabel("Timeframes")
+                    SectionLabel("Timeframes", accent = true)
                     featureModuleRows(domains.obj("timeframes"))
                     Note("Feature-module switches feed the packet assembler; disabling one makes its packet field go null-with-reason, never fabricated.")
                 },
@@ -312,17 +337,29 @@ fun ConfigScreen(repo: MissionRepository) {
                     KvRow("sweep pbo max · dsr min", num(tune, "sweep_pbo_max") + " · " + num(tune, "sweep_dsr_prob_min"), NEUTRAL)
                 },
                 detail = {
-                    SectionLabel("Reward weights", divider = false)
-                    KvRow("reward w (pnl·cal·fmt·tr)", num(tune, "w_pnl") + " · " + num(tune, "w_cal") + " · " + num(tune, "w_fmt") + " · " + num(tune, "w_tr"), NEUTRAL)
-                    KvRow("skip reward · miss penalty", num(tune, "skip_good_reward") + " · " + num(tune, "skip_miss_penalty"), NEUTRAL)
-                    KvRow("payoff clip lo / hi", num(tune, "payoff_clip_lo") + " / " + num(tune, "payoff_clip_hi"), NEUTRAL)
-                    SectionLabel("T1 gate")
-                    KvRow("T1 min labeled", num(tune, "t1_min_labeled"), WARN)
-                    KvRow("T1 lora r · alpha · epochs", num(tune, "t1_lora_r") + " · " + num(tune, "t1_lora_alpha") + " · " + num(tune, "t1_epochs"), NEUTRAL)
-                    KvRow("T1 validator-reject max %", num(tune, "t1_validator_reject_max_pct"), NEUTRAL)
-                    SectionLabel("Sweep & promotion gates")
-                    KvRow("sweep pbo max · dsr min", num(tune, "sweep_pbo_max") + " · " + num(tune, "sweep_dsr_prob_min"), NEUTRAL)
-                    KvRow("edge min weeks · candidates", num(tune, "edge_min_weeks") + " · " + num(tune, "edge_min_candidates"), NEUTRAL)
+                    SectionLabel("Reward weights", divider = false, accent = true)
+                    LeverTable(
+                        listOf(
+                            Triple("reward w (pnl·cal·fmt·tr)", num(tune, "w_pnl") + " · " + num(tune, "w_cal") + " · " + num(tune, "w_fmt") + " · " + num(tune, "w_tr"), NEUTRAL),
+                            Triple("skip reward · miss penalty", num(tune, "skip_good_reward") + " · " + num(tune, "skip_miss_penalty"), NEUTRAL),
+                            Triple("payoff clip lo / hi", num(tune, "payoff_clip_lo") + " / " + num(tune, "payoff_clip_hi"), NEUTRAL),
+                        ),
+                    )
+                    SectionLabel("T1 gate", accent = true)
+                    LeverTable(
+                        listOf(
+                            Triple("T1 min labeled", num(tune, "t1_min_labeled"), WARN),
+                            Triple("T1 lora r · alpha · epochs", num(tune, "t1_lora_r") + " · " + num(tune, "t1_lora_alpha") + " · " + num(tune, "t1_epochs"), NEUTRAL),
+                            Triple("T1 validator-reject max %", num(tune, "t1_validator_reject_max_pct"), NEUTRAL),
+                        ),
+                    )
+                    SectionLabel("Sweep & promotion gates", accent = true)
+                    LeverTable(
+                        listOf(
+                            Triple("sweep pbo max · dsr min", num(tune, "sweep_pbo_max") + " · " + num(tune, "sweep_dsr_prob_min"), NEUTRAL),
+                            Triple("edge min weeks · candidates", num(tune, "edge_min_weeks") + " · " + num(tune, "edge_min_candidates"), NEUTRAL),
+                        ),
+                    )
                     Note("Sweeps run through the governed path, not this viewer.")
                 },
             )
@@ -339,15 +376,20 @@ fun ConfigScreen(repo: MissionRepository) {
                     KvRow("two-person ceremony", (users?.bool("ceremony_two_person") ?: false).yn(), if (users?.bool("ceremony_two_person") == true) GOOD else WARN)
                 },
                 detail = {
-                    SectionLabel("Roles & guards", divider = false)
-                    KvRow("operator", users.text("operator"), NEUTRAL)
-                    val approver = users.text("second_approver").ifBlank { "none" }
-                    KvRow("second approver", approver, if (approver == "none") UNK else NEUTRAL)
-                    KvRow("two-person ceremony", (users?.bool("ceremony_two_person") ?: false).yn(), if (users?.bool("ceremony_two_person") == true) GOOD else WARN)
-                    KvRow("page alerts", (users?.bool("page_alerts") ?: false).yn(), NEUTRAL)
-                    KvRow("journal email", users.text("journal_email").ifBlank { "none" }, UNK)
+                    val approverD = users.text("second_approver").ifBlank { "none" }
+                    val ceremonyOn = users?.bool("ceremony_two_person") == true
+                    SectionLabel("Roles & guards", divider = false, accent = true)
+                    LeverTable(
+                        listOf(
+                            Triple("operator", users.text("operator"), NEUTRAL),
+                            Triple("second approver", approverD, if (approverD == "none") UNK else NEUTRAL),
+                            Triple("two-person ceremony", ceremonyOn.yn(), if (ceremonyOn) GOOD else WARN),
+                            Triple("page alerts", (users?.bool("page_alerts") ?: false).yn(), NEUTRAL),
+                            Triple("journal email", users.text("journal_email").ifBlank { "none" }, UNK),
+                        ),
+                    )
                     Note("A second_approver + two-person ceremony are the money-touching guards.")
-                    SectionLabel("Personas (shadow books) · $personaOn of ${personaList.size} on")
+                    SectionLabel("Personas (shadow books) · $personaOn of ${personaList.size} on", accent = true)
                     MiniTable(
                         listOf("persona", "enabled", "question"),
                         personaList.map { p ->
@@ -373,19 +415,27 @@ fun ConfigScreen(repo: MissionRepository) {
                     KvRow("schema · source", active.text("schema") + " · " + active.text("src"), NEUTRAL)
                 },
                 detail = {
-                    SectionLabel("Logger", divider = false)
-                    KvRow("during cadence (min)", num(logger, "during_cadence_min"), NEUTRAL)
-                    KvRow("pre / post window (min)", num(logger, "pre_window_min") + " / " + num(logger, "post_window_min"), NEUTRAL)
-                    KvRow("tier-2 enrichment", (logger.obj("tier2_enrichment")?.bool("on") ?: logger?.bool("tier2_enrichment") ?: false).yn(), WARN)
+                    SectionLabel("Logger", divider = false, accent = true)
+                    LeverTable(
+                        listOf(
+                            Triple("during cadence (min)", num(logger, "during_cadence_min"), NEUTRAL),
+                            Triple("pre / post window (min)", num(logger, "pre_window_min") + " / " + num(logger, "post_window_min"), NEUTRAL),
+                            Triple("tier-2 enrichment", (logger.obj("tier2_enrichment")?.bool("on") ?: logger?.bool("tier2_enrichment") ?: false).yn(), WARN),
+                        ),
+                    )
                     Note("Tier-2 enrichment stays walled.", WARN)
-                    SectionLabel("This preset")
-                    KvRow("schema", active.text("schema"), NEUTRAL)
-                    KvRow("source", active.text("src"), NEUTRAL)
-                    if (meta != null) {
-                        KvRow("preset file", presetEnv.text("file"), NEUTRAL)
-                        KvRow("author · ums", meta.text("author") + " · " + meta.text("ums"), NEUTRAL)
-                        Note(meta.text("notes"), NEUTRAL)
-                    }
+                    SectionLabel("This preset", accent = true)
+                    LeverTable(
+                        buildList {
+                            add(Triple("schema", active.text("schema"), NEUTRAL))
+                            add(Triple("source", active.text("src"), NEUTRAL))
+                            if (meta != null) {
+                                add(Triple("preset file", presetEnv.text("file"), NEUTRAL))
+                                add(Triple("author · ums", meta.text("author") + " · " + meta.text("ums"), NEUTRAL))
+                            }
+                        },
+                    )
+                    if (meta != null) Note(meta.text("notes"), NEUTRAL)
                     if (dirty) Note("Draft diverges from BASE: export a change-plan and run it through the compiler.", WARN)
                 },
             )

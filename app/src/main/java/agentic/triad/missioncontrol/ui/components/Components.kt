@@ -484,6 +484,7 @@ fun SettingGroup(
     surfaced: @Composable ColumnScope.() -> Unit,
     detail: @Composable ColumnScope.() -> Unit,
 ) {
+    var open by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(14.dp)
     Column(
         Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(shape)
@@ -493,7 +494,20 @@ fun SettingGroup(
         Text(title, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Ink, fontSize = 16.sp, letterSpacing = (-0.3).sp)
         Text(whatItControls, color = Ink2, fontSize = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 3.dp))
         Column(Modifier.padding(top = 12.dp)) { surfaced() }
-        WhyBox(detailLabel) { detail() }
+        // Inline accordion: a hairline + clickable label row + chevron. Opening flows the detail INLINE in
+        // the same card (no nested bordered box), so it adds content, not another layer of padding/indent.
+        Box(Modifier.fillMaxWidth().padding(top = 12.dp).height(1.dp).background(Line))
+        Row(
+            Modifier.fillMaxWidth().clickable { open = !open }.padding(top = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                detailLabel.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.5.sp,
+                letterSpacing = 0.8.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+            )
+            Text(if (open) "▾" else "▸", color = Emerald, fontFamily = Mono, fontSize = 12.sp)
+        }
+        if (open) Column(Modifier.fillMaxWidth()) { detail() }
     }
 }
 
@@ -682,14 +696,46 @@ fun PendBox(tool: String, spec: String) {
  * McCard can carve its body into named parts. Pass `divider = false` for the first section (no rule above).
  */
 @Composable
-fun SectionLabel(label: String, divider: Boolean = true) {
+fun SectionLabel(label: String, divider: Boolean = true, accent: Boolean = false) {
     Column(Modifier.fillMaxWidth().padding(top = if (divider) 14.dp else 6.dp)) {
         if (divider) Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
-        Text(
-            label.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.sp,
-            fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp,
+        // accent lifts the heading above the loose-eyebrow default: an emerald tick + darker, bolder ink
+        // so nested sub-sections read as real dividers, not a faint caption that blurs into the rows.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(top = if (divider) 9.dp else 0.dp, bottom = 2.dp),
-        )
+        ) {
+            if (accent) Box(Modifier.padding(end = 7.dp).width(3.dp).height(11.dp).background(Emerald, RoundedCornerShape(2.dp)))
+            Text(
+                label.uppercase(),
+                color = if (accent) Pine else Ink2, fontFamily = Mono,
+                fontSize = if (accent) 10.sp else 9.sp,
+                fontWeight = if (accent) FontWeight.Bold else FontWeight.SemiBold, letterSpacing = 1.sp,
+            )
+        }
+    }
+}
+
+/**
+ * A headerless key→value table — the compact tabular readout for a lever dump: each row is the lever name
+ * (left) and its value (right, tone-tinted), closed by a hairline, so a run of settings reads as an aligned
+ * table instead of loose rows. Like [MiniTable] but for the 2-column value case with no column headers.
+ */
+@Composable
+fun LeverTable(rows: List<Triple<String, String, Tone>>) {
+    Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        rows.forEach { (k, v, tone) ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.Top) {
+                Text(k, color = Ink2, fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp, modifier = Modifier.weight(1.4f).padding(end = 10.dp))
+                Text(
+                    v, color = if (tone == Tone.NEUTRAL) Ink else tone.fg(),
+                    fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp,
+                    fontWeight = if (tone == Tone.NEUTRAL) FontWeight.Normal else FontWeight.SemiBold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1f),
+                )
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(HairLine))
+        }
     }
 }
 
