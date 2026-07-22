@@ -239,9 +239,13 @@ private fun exUts(us: Double?): String? = us?.let {
 }
 
 /** The primitive fields of a served object, as printable pairs — the honest raw dump. */
+/** Snake_case server field name → readable words (`headroom_pct` → `headroom pct`), so a raw key→value
+ *  dump reads as plain labels instead of code identifiers. */
+private fun humanKey(k: String): String = k.replace('_', ' ').trim()
+
 private fun exPrimRows(o: JsonObject?, max: Int = 6): List<Pair<String, String>> =
     guardDerive(emptyList()) {
-        o?.entries?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.let { k to it.content } }?.take(max)
+        o?.entries?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.let { humanKey(k) to it.content } }?.take(max)
             ?: emptyList()
     }
 
@@ -1750,6 +1754,7 @@ private fun ExecServerReads(m: ExModel) {
         Note("X-2: a budget you are not measuring is a wish. Live values render UNAVAILABLE until Prometheus is present.")
     }
     ExecCard("Prometheus lane reads", "get_lane_headroom · get_watchdog_stats · get_clock_skew") {
+        Note("Three health reads from Prometheus: spare capacity per ingest lane, whether the watchdog processes are alive, and how far the clock has drifted. All three read UNAVAILABLE while the transport is absent.")
         if (m.lh != null) {
             ExecEyebrow("LANE HEADROOM")
             exPrimRows(m.lh).forEach { (k, v) -> KvRow(k, v, NEUTRAL) }
