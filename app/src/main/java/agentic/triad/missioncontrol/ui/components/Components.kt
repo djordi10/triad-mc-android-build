@@ -319,7 +319,7 @@ fun StatRow(vararg tiles: Triple<String, String, Tone>) {
  * bank summary) so metrics read as their own kind of surface, distinct from prose/table cards.
  */
 @Composable
-fun StatCard(label: String, tool: String = "", vararg tiles: Triple<String, String, Tone>) {
+fun StatCard(label: String, vararg tiles: Triple<String, String, Tone>, tool: String = "") {
     val shape = RoundedCornerShape(14.dp)
     Column(
         Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(shape).background(Card).border(1.dp, Line, shape),
