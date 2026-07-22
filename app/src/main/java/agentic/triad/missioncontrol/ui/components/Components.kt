@@ -491,8 +491,16 @@ fun SettingGroup(
             .background(Card).border(1.dp, Line, shape)
             .padding(horizontal = 16.dp, vertical = 15.dp),
     ) {
-        Text(title, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Ink, fontSize = 16.sp, letterSpacing = (-0.3).sp)
-        Text(whatItControls, color = Ink2, fontSize = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 3.dp))
+        // Header indicator: an emerald left rail beside the title + sub. Marks the block as a header the way
+        // McCard's dark pine band does, but in the light emerald "section" idiom so a group reads as its own
+        // family (grouped settings), clearly distinct from a content McCard's dark header band.
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            Box(Modifier.width(4.dp).fillMaxHeight().background(Emerald, RoundedCornerShape(2.dp)))
+            Column(Modifier.padding(start = 12.dp)) {
+                Text(title, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Ink, fontSize = 16.sp, letterSpacing = (-0.3).sp)
+                Text(whatItControls, color = Ink2, fontSize = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 3.dp))
+            }
+        }
         Column(Modifier.padding(top = 12.dp)) { surfaced() }
         // Inline accordion: a hairline + clickable label row + chevron. Opening flows the detail INLINE in
         // the same card (no nested bordered box), so it adds content, not another layer of padding/indent.

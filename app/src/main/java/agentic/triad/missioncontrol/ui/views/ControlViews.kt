@@ -122,12 +122,9 @@ fun ConfigScreen(repo: MissionRepository) {
 
     ViewScaffold(
         View.CONFIG,
-        stance = listOf(
-            Stance("preset", if (preset == "—") "—" else preset, NEUTRAL),
-            Stance("state", stateLabel, stateTone),
-            Stance("fingerprint", fpShort, NEUTRAL),
-            Stance("apply path", "R-C1 · triadctl only", INFO),
-        ),
+        // No view stance pills: preset / state / fingerprint all live in the Attested Config seal below,
+        // so a top pill row would just duplicate it.
+        stance = emptyList(),
     ) {
         // ── HERO: the view title + one plain sentence on what this page is ──
         VerdictBanner(
