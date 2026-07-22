@@ -50,6 +50,7 @@ import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
+import agentic.triad.missioncontrol.ui.components.SectionLabel
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tone
@@ -158,12 +159,12 @@ private fun defaultBlocks(): List<Block> = listOf(
             "choch={choch.dir}@{choch.price} swing=[{low},{high}]\n{{/tf}}",
     ),
     Block(
-        "Zones — order blocks", "timeframes[*].order_blocks[] (low·high·dir·mitigated)", 418,
+        "Zones: order blocks", "timeframes[*].order_blocks[] (low·high·dir·mitigated)", 418,
         enabled = true,
         body = "ORDER BLOCKS\n{{#tf}}{tf}: {{#ob}}[{low}-{high} {dir}{mitigated?' MIT':''}] {{/ob}}\n{{/tf}}",
     ),
     Block(
-        "Zones — fair value gaps", "timeframes[*].fvgs[] (low·high·dir·fill_pct)", 402, enabled = true,
+        "Zones: fair value gaps", "timeframes[*].fvgs[] (low·high·dir·fill_pct)", 402, enabled = true,
         body = "FVG\n{{#tf}}{tf}: {{#fvg}}[{low}-{high} {dir} {fill_pct}%] {{/fvg}}\n{{/tf}}",
     ),
     Block(
@@ -207,18 +208,18 @@ private fun defaultBlocks(): List<Block> = listOf(
             "exposure={symbol_exposure_notional}",
     ),
     Block(
-        "Data quality — the guard", "data_quality.gaps · staleness_ms · degraded_modules[]", 28,
+        "Data quality: the guard", "data_quality.gaps · staleness_ms · degraded_modules[]", 28,
         enabled = true,
         body = "DATA QUALITY\ngaps={gaps} staleness={staleness_ms}ms degraded={degraded_modules}\n" +
             "If any module is degraded, SKIP and say so.",
     ),
     Block(
         "Risk envelope",
-        "limit_config/1 — min_stop_width_bps · gross_rr_floor · net_rr_floor · max_entry_ttl_s · " +
+        "limit_config/1 · min_stop_width_bps · gross_rr_floor · net_rr_floor · max_entry_ttl_s · " +
             "conviction_take_threshold",
         96, enabled = false, risk = true,
         warn = "NOT IN THE CONTEXT PACKET. get_limits has these values. The packet does not carry " +
-            "them, so the model has never seen them — OFF by default, mirroring reality (AT-P4).",
+            "them, so the model has never seen them: OFF by default, mirroring reality (AT-P4).",
         body = "HARD CONSTRAINTS — your proposal is REJECTED if it violates any of these:\n" +
             "  stop distance  >= {min_stop_width_bps} bps  AND >= {min_stop_atr_mult} x ATR\n" +
             "  gross R:R      >= {gross_rr_floor}\n  net R:R (after fees) >= {net_rr_floor}\n" +
@@ -403,10 +404,10 @@ fun PromptStudioScreen(repo: MissionRepository) {
         Ribbon(
             "BLINDFOLDED · the model is asked to satisfy constraints it has never been shown",
             "It is not a bad judge. It is a blindfolded one. The validator killed 689 of the model's " +
-                "691 proposals (99.7%) — on ttl_bounds ($ttlKills vs limit ${maxTtl?.toInt() ?: 1800}s), " +
+                "691 proposals (99.7%): on ttl_bounds ($ttlKills vs limit ${maxTtl?.toInt() ?: 1800}s), " +
                 "stop_distance ($stopKills vs ${minStop?.toInt() ?: 45} bps), net_rr_floor ($rrKills vs " +
                 "${rrFloor ?: 2.5}). None of those three limits is in the packet, and the prompt is the " +
-                "empty string — you cannot audit a prompt you do not have.",
+                "empty string. You cannot audit a prompt you do not have.",
             SEV,
         )
 
@@ -417,7 +418,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
         val packetSrc = if (packetLive) {
             "context_packet/1 · $featureModules feature modules, live · $timeframeDepth timeframes deep"
         } else {
-            "context_packet/1 · get_packet not served — block table from the spec (fields honest)"
+            "context_packet/1 · get_packet not served · block table from the spec (fields honest)"
         }
         McCard("The composer", tool = packetSrc, sub = "14 blocks, from the real packet") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -457,10 +458,10 @@ fun PromptStudioScreen(repo: MissionRepository) {
                 }
             }
             Note(
-                "P-4 · a block must name the field it reads. Two blocks lie if switched on: Derivatives " +
-                    "— basis_bps is ${if (basisNullLive) "null in the live packet" else "present"}, so " +
+                "P-4 · a block must name the field it reads. Two blocks lie if switched on: Derivatives, " +
+                    "where basis_bps is ${if (basisNullLive) "null in the live packet" else "present"}, so " +
                     "asking about basis ${if (basisNullLive) "makes the model invent one" else "is safe"} " +
-                    "(AT-P5). Risk envelope — not in the packet at all: drawn red, OFF by default, because " +
+                    "(AT-P5). Risk envelope: not in the packet at all, drawn red, OFF by default, because " +
                     "that is the truth of what runs today. Switch it on and the meter rises by exactly 96.",
                 if (basisNullLive) WARN else NEUTRAL,
             )
@@ -470,7 +471,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
         //    narrative ribbons and the "cheapest experiment" law the HTML leads with (AT-P2) ──
         McCard("The 96 tokens that would change everything", "get_limits × get_validator_rejects") {
             Ribbon(
-                "The three checks that kill the model's proposals — and where their values live.",
+                "The three checks that kill the model's proposals, and where their values live.",
                 "",
                 SEV,
             )
@@ -499,16 +500,16 @@ fun PromptStudioScreen(repo: MissionRepository) {
             )
             Ribbon(
                 "The model is doing its job.",
-                "It proposes a trade on 18.9% of candidates — a reasonable take rate. Then the validator " +
+                "It proposes a trade on 18.9% of candidates, a reasonable take rate. Then the validator " +
                     "kills 99.7% of those proposals for breaking rules that were never in the prompt. The " +
-                    "Shadow page already proved the validator is RIGHT — a ~10bps scalp loses money once you " +
+                    "Shadow page already proved the validator is RIGHT: a ~10bps scalp loses money once you " +
                     "price the fees. So the fix is not to loosen the validator. The fix is to tell the model the floor.",
                 WARN,
             )
             WhyBox("THE LAW · the cheapest experiment") {
                 LawBlock(
                     "the cheapest experiment in this system",
-                    "Switch on the Risk envelope block. It costs 96 tokens on a ~$enabledTokens-token prompt — about " +
+                    "Switch on the Risk envelope block. It costs 96 tokens on a ~$enabledTokens-token prompt, about " +
                         "4%. Run it against the same candidates. If the validator kill rate does not collapse, you have " +
                         "learned something enormous. If it does, you have just recovered 689 trades. Either way it is a " +
                         "one-afternoon experiment, and nobody has run it, because nobody could see the prompt.",
@@ -518,15 +519,17 @@ fun PromptStudioScreen(repo: MissionRepository) {
 
         // ── P-2 / P-3 — the arming drawer ──
         McCard("Arm the studio", tool = "no MCP · direct to LLM (P-3)", sub = "P-2 · OFF until you turn it on") {
+            SectionLabel("the target", divider = false)
             KvRow("target", "$OLLAMA_BASE/api/generate", INFO)
             KvRow("model", OLLAMA_MODEL, NEUTRAL)
             KvRow("params", "temperature 0 · seed 7 · num_predict 350", NEUTRAL)
             KvRow("state", if (armed) "ARMED" else "OFF · zero fetches to the LLM have been made", if (armed) BAD else UNK)
+            SectionLabel("how the run works", divider = true)
             Note(
-                "The RUN path is the one in Mission Control that is NOT an MCP client — MCP is read-only " +
+                "The RUN path is the one in Mission Control that is NOT an MCP client. MCP is read-only " +
                     "(prompt_get reads the applied prompt; there is still no prompt_set). The honest constraint: " +
                     "a direct call needs OLLAMA_ORIGINS set on the Ollama process and a route to a private " +
-                    "address. If it fails, the page shows the network error — it does not fake a result (AT-P7).",
+                    "address. If it fails, the page shows the network error. It does not fake a result (AT-P7).",
             )
             if (!armed && !confirming) {
                 Button(onClick = { confirming = true }) { Text("Arm studio") }
@@ -544,7 +547,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
                         color = BAD.fg(), fontWeight = FontWeight.Bold, fontSize = 13.sp,
                     )
                     Text(
-                        "Direct to $OLLAMA_BASE — not the MCP. This browser/device must route to the " +
+                        "Direct to $OLLAMA_BASE, not the MCP. This browser/device must route to the " +
                             "private address and Ollama must allow the origin.",
                         color = Tone.NEUTRAL.fg(), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp),
                     )
@@ -562,14 +565,14 @@ fun PromptStudioScreen(repo: MissionRepository) {
                     OutlinedButton(onClick = { armed = false }) { Text("Disarm") }
                 }
             } else {
-                Note("Run is disabled until armed (P-2) — and zero fetches have been made (AT-P6).", UNK)
+                Note("Run is disabled until armed (P-2), and zero fetches have been made (AT-P6).", UNK)
             }
         }
 
         // ── the run result — measured, or the honest error (P-5 / AT-P13) ──
         McCard("The bench", tool = "POST /api/generate · Ollama", sub = "measured (P-5)") {
             if (runError != null) {
-                Note("Run failed — $runError", BAD)
+                Note("Run failed: $runError", BAD)
                 Note("No result is fabricated. Fix OLLAMA_ORIGINS + routing, then re-run (AT-P7).", UNK)
             } else if (runMs != null) {
                 StatRow(
@@ -603,7 +606,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
                     }
                 }
             } else {
-                Note("No run yet. Arm the studio, then Run — the bench reports measured numbers, not estimates.", UNK)
+                Note("No run yet. Arm the studio, then Run. The bench reports measured numbers, not estimates.", UNK)
             }
         }
 
@@ -619,7 +622,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
                     listOf("take" to NEUTRAL, "2" to GOOD, "4,816 ms" to BAD, "the path that trades" to NEUTRAL),
                 ),
             )
-            Note("The slowest real path is 48% of budget — and it is the path you would most want headroom on.")
+            Note("The slowest real path is 48% of budget, and it is the path you would most want headroom on.")
         }
 
         // ── the rendered prompt — the real assembled text, fingerprinted (§5 / P-1) ──
@@ -646,7 +649,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
                     // Save a version WITHOUT a run — carries the fp/tokens, no measured latency (P-6).
                     version += 1
                     runCounter += 1
-                    history.add(Run("saved v — run #$runCounter", version, enabledTokens, renderFp, null))
+                    history.add(Run("saved v · run #$runCounter", version, enabledTokens, renderFp, null))
                 }) { Text("Save version") }
             }
         }
@@ -678,7 +681,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
                         }) { Text("Restore latest → appends") }
                     }
                 }
-                Note("A rollback is a decision with evidence, not a vibe — restore never overwrites (AT-P15).")
+                Note("A rollback is a decision with evidence, not a vibe: restore never overwrites (AT-P15).")
             }
         }
 
@@ -688,7 +691,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
             mutableStateOf(
                 "Add intelligence.prompt_template so effective_fp covers the prompt (Lanes L-2). Includes " +
                     "the risk-envelope block: the validator kills 689 of 691 proposals on ttl_bounds, " +
-                    "stop_distance and net_rr_floor — constraints the context packet never carried.",
+                    "stop_distance and net_rr_floor: constraints the context packet never carried.",
             )
         }
         var filing by remember { mutableStateOf(false) }
@@ -734,7 +737,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
                 OutlinedTextField(
                     value = rationale,
                     onValueChange = { rationale = it },
-                    label = { Text("rationale — required") },
+                    label = { Text("rationale (required)") },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
                 Note(
@@ -768,7 +771,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
                     },
                 ) { Text(if (filing) "Filing…" else "File the change-plan →") }
                 proposalId?.let { KvRow("proposal_id", it, GOOD) }
-                exportError?.let { Note("Proposal failed — $it", BAD) }
+                exportError?.let { Note("Proposal failed: $it", BAD) }
             }
         }
 
@@ -783,7 +786,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
             KvRow("order of operations", "land prompt_template in the preset FIRST, then build the promoter", INFO)
             Note(
                 "This page makes the prompt a first-class artifact and exports it into " +
-                    "intelligence.prompt_template — the field CSL-1 D2 assumes already exists. Once it does " +
+                    "intelligence.prompt_template: the field CSL-1 D2 assumes already exists. Once it does " +
                     "and carries the fingerprint, effective_fp covers the prompt and D2 becomes true. " +
                     "Backwards and you ship a promoter that promotes the wrong thing.",
             )
@@ -792,7 +795,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
         // ── §7 · prompt_get is LIVE (server truth); prompt_set stays absent (AT-P16) ──
         McCard("The applied prompt", tool = "prompt_get", sub = "server truth") {
             if (pg == null) {
-                Note("no data — prompt_get not served yet. The studio still composes client-side.", UNK)
+                Note("no data: prompt_get not served yet. The studio still composes client-side.", UNK)
             } else {
                 KvRow("preset", pg.text("preset"), NEUTRAL)
                 KvRow("fingerprint", shortFp(pg.text("fingerprint")), NEUTRAL)
@@ -800,7 +803,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
                 if (pgTemplateReal) {
                     VerdictBanner(
                         word = "PROMPT PINNED",
-                        said = "prompt_template is present in the applied preset — the fingerprint covers the " +
+                        said = "prompt_template is present in the applied preset: the fingerprint covers the " +
                             "prompt (P-1/L-2 hold).",
                         pills = listOf(
                             (if (pgPinned) "PROMPT_PINNED TRUE" else "PROMPT_PINNED FALSE") to
@@ -812,7 +815,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
                 } else {
                     VerdictBanner(
                         word = "NO PROMPT IN THE PRESET",
-                        said = "prompt_template is null — the fingerprint does not cover the prompt (P-1/L-2). " +
+                        said = "prompt_template is null: the fingerprint does not cover the prompt (P-1/L-2). " +
                             "This is the page's whole thesis, now server-attested: the prompt the model runs " +
                             "under is not part of the config it is fingerprinted by.",
                         pills = listOf(
@@ -837,7 +840,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
                 )
                 KvRow(
                     "writable",
-                    if (pg.bool("writable")) "true" else "false — writes stay the governed proposal path",
+                    if (pg.bool("writable")) "true" else "false (writes stay the governed proposal path)",
                     UNK,
                 )
                 pg.obj("render_context")?.let { rc ->
@@ -849,7 +852,7 @@ fun PromptStudioScreen(repo: MissionRepository) {
         }
         PendBox(
             "prompt_set",
-            "§7 · still not on the server — prompt_get is live but writable:false; the only write is " +
+            "§7 · still not on the server: prompt_get is live but writable:false; the only write is " +
                 "propose_action (AT-P16).",
         )
 

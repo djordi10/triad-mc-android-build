@@ -33,6 +33,7 @@ import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.Ribbon
+import agentic.triad.missioncontrol.ui.components.SectionLabel
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
@@ -128,19 +129,19 @@ private data class FleetBook(
 
 private val FLEET_BOOKS = listOf(
     FleetBook(
-        "B0", "B0 — take every candidate", "A", 9750, 0.253, -0.150, -0.19, -0.11, "live", true, "neg",
+        "B0", "B0: take every candidate", "A", 9750, 0.253, -0.150, -0.19, -0.11, "live", true, "neg",
         "TRACK A, in one row: take every candidate the detectors fire. 9,750 resolved. CI excludes zero on the WRONG side. The mechanical strategy LOSES.",
     ),
     FleetBook(
-        "B1", "B1 — take conviction ≥ MED", "mid", 78, null, 0.149, -0.20, 0.50, "cold", false, "pos",
+        "B1", "B1: take conviction ≥ MED", "mid", 78, null, 0.149, -0.20, 0.50, "cold", false, "pos",
         "the halfway house — a conviction threshold, no full gate. 78 resolved, CI spans zero. Not significant yet.",
     ),
     FleetBook(
-        "M1", "M1 — the FinGPT gate (gate_accepted)", "B", 21, 0.667, 0.778, 0.11, 1.44, "live", true, "pos",
+        "M1", "M1: the FinGPT gate (gate_accepted)", "B", 21, 0.667, 0.778, 0.11, 1.44, "live", true, "pos",
         "TRACK B, in one row: the SAME candidates, taken ONLY when FinGPT says take. 21 resolved. +0.778R, CI [+0.11..+1.44] — positive. The gate flips the sign. But n=21 vs 9,750: the gate is so selective the sample is tiny.",
     ),
     FleetBook(
-        "K1", "K1 — model ∧ Kronos", "B2", 0, null, null, null, null, "dead", false, null,
+        "K1", "K1: model ∧ Kronos", "B2", 0, null, null, null, null, "dead", false, null,
         "model AND Kronos agree. NOT WIRED — zero rows. The most selective gate is not even recording.",
     ),
 )
@@ -191,7 +192,7 @@ private const val SPEC_DETECTOR_SPLIT =
         "RULES  (S-3)\n" +
         "· get_shadow_bank group_by SUPPORTS stop_bucket|cohort|symbol|side\n" +
         "  and NOT detector_id. Per-detector outcome splits require joining\n" +
-        "  DuckDB candidate geometry to SQLite outcomes — WHICH MCP CANNOT\n" +
+        "  DuckDB candidate geometry to SQLite outcomes, WHICH MCP CANNOT\n" +
         "  DO. That is why the detector rows above show candidate counts but\n" +
         "  borrow their WR from TRIAD-A.\n" +
         "· The DuckDB 'outcomes' view is EMPTY; all resolved outcomes live\n" +
@@ -294,11 +295,11 @@ fun StrategyScreen(repo: MissionRepository) {
             word = "GATED",
             said = "Two tracks. Track A takes every candidate the detectors fire. Track B takes the same " +
                 "candidates only when the LLM says take. Track A (book B0, ${nf(b0.n)} resolved) runs at ${rr(b0.ev)} " +
-                "per selection — CI excludes zero on the losing side. The mechanical strategy bleeds. Track B (book " +
-                "M1, the FinGPT gate) runs at ${rr(m1.ev)} — CI ${evCi(m1.ciLo, m1.ciHi)}, positive. The gate flips " +
-                "the sign. That is the headline everyone wants — and it is ${nf(m1.n)} trades against ${nf(b0.n)}. The " +
+                "per selection. CI excludes zero on the losing side. The mechanical strategy bleeds. Track B (book " +
+                "M1, the FinGPT gate) runs at ${rr(m1.ev)}, CI ${evCi(m1.ciLo, m1.ciHi)}, positive. The gate flips " +
+                "the sign. That is the headline everyone wants, and it is ${nf(m1.n)} trades against ${nf(b0.n)}. The " +
                 "gate is so selective the sample is tiny, so the win rate is real but fragile. A win rate without its " +
-                "N is a rumour, so every row on this page carries both. And two detectors — M2 and M3 — are recording " +
+                "N is a rumour, so every row on this page carries both. And two detectors (M2 and M3) are recording " +
                 "but never resolving: $open rows sit open while the resolver quietly writes their P&L underneath. The " +
                 "scoreboard reads them as zero because a writer forgets one field.",
             pills = listOf(
@@ -314,9 +315,9 @@ fun StrategyScreen(repo: MissionRepository) {
         //    table dims the other track's row (the same interactivity the HTML buttons drive). ──
         McCard("Track A · Mechanical", "B0 · take every candidate") {
             Row(Modifier.fillMaxWidth().clickable { track = "A" }) {
-                Tag(if (trackA) "● SELECTED — drives the page" else "○ tap to select this track", if (trackA) INFO else UNK)
+                Tag(if (trackA) "● SELECTED · drives the page" else "○ tap to select this track", if (trackA) INFO else UNK)
             }
-            Note("take every candidate the detectors fire — no LLM")
+            Note("take every candidate the detectors fire, no LLM")
             StatRow(
                 Triple("EV / sel", rr(b0.ev), BAD),
                 Triple("resolved", nf(b0.n), NEUTRAL),
@@ -325,7 +326,7 @@ fun StrategyScreen(repo: MissionRepository) {
         }
         McCard("Track B · LLM-gated 🔒", "M1 · the FinGPT gate") {
             Row(Modifier.fillMaxWidth().clickable { track = "B" }) {
-                Tag(if (!trackA) "● SELECTED — drives the page" else "○ tap to select this track", if (!trackA) INFO else UNK)
+                Tag(if (!trackA) "● SELECTED · drives the page" else "○ tap to select this track", if (!trackA) INFO else UNK)
             }
             Note("the same candidates, taken only when FinGPT says take")
             StatRow(
@@ -338,9 +339,10 @@ fun StrategyScreen(repo: MissionRepository) {
         // ── pTrackAB() — the comparison: one candidate stream, evaluated two ways (S-2) ───────────────
         McCard("Track A vs Track B", tool = "get_books_scoreboard · S-2", sub = "the same candidates, one gate") {
             Note(
-                "This is the comparison you asked for. Not two strategies — one candidate stream, evaluated " +
+                "This is the comparison you asked for. Not two strategies: one candidate stream, evaluated " +
                     "two ways. Track B is Track A with the FinGPT gate in front of it.",
             )
+            SectionLabel("the two books, head to head", divider = false)
             MiniTable(
                 listOf("track", "EV / sel", "resolved", "WR", "CI (R)"),
                 listOf(
@@ -360,14 +362,15 @@ fun StrategyScreen(repo: MissionRepository) {
                     ),
                 ),
             )
-            KvRow("breakeven WR (2.5R book)", "${String.format("%.1f", BE * 100)}% — Track A is below it", BAD)
+            SectionLabel("does the win rate survive its sample")
+            KvRow("breakeven WR (2.5R book)", "${String.format("%.1f", BE * 100)}%, Track A is below it", BAD)
             // The Wilson lower bound (S-1) rendered for both books — a win rate without its N is a rumour.
             KvRow("Track A Wilson WR (n=${nf(b0.n)})", wilsonWr(b0.wr, b0.n), BAD)
             KvRow("Track B Wilson WR (n=${nf(m1.n)})", wilsonWr(m1.wr, m1.n), if ((m1.n ?: 0) < 30) WARN else GOOD)
             val refused = if ((b0.n ?: 0) > 0) 100.0 * (1 - (m1.n ?: 0).toDouble() / (b0.n ?: 1)) else 0.0
             Ribbon(
                 "Read the honest tension, not just the sign flip",
-                "The gate takes you from ${rr(b0.ev)} to ${rr(m1.ev)} — a genuine reversal. But it does it by " +
+                "The gate takes you from ${rr(b0.ev)} to ${rr(m1.ev)}, a genuine reversal. But it does it by " +
                     "refusing ${String.format("%.1f", refused)}% of the stream. Does Track B's edge survive as N grows, or " +
                     "is ${rr(m1.ev)} a small-sample mirage? The CI is wide ${evCi(m1.ciLo, m1.ciHi)} precisely because n=${nf(m1.n)}.",
                 WARN,
@@ -375,7 +378,7 @@ fun StrategyScreen(repo: MissionRepository) {
             WhyBox("THE LAW · S-2") {
                 LawBlock(
                     "S-2",
-                    "Track B is Track A gated by the LLM. Same detectors, same candidates, same exit book — the only " +
+                    "Track B is Track A gated by the LLM. Same detectors, same candidates, same exit book: the only " +
                         "difference is whether FinGPT's gate_accepted let the trade through. That is what makes the sign " +
                         "flip meaningful instead of a cohort artifact (S-3).",
                 )
@@ -384,7 +387,7 @@ fun StrategyScreen(repo: MissionRepository) {
 
         // ── pTable() — the fleet, grouped: detectors · SMC tracks · books · combos ────────────────────
         McCard("The fleet", tool = "get_shadow_bank × get_books_scoreboard", sub = "recording status & performance") {
-            Note("detectors — the signal sources", INFO)
+            Note("detectors: the signal sources", INFO)
             MiniTable(
                 listOf("strategy", "state", "rec", "cand", "WR", "EV", "sig"),
                 FLEET_DETECTORS.map { det ->
@@ -400,9 +403,9 @@ fun StrategyScreen(repo: MissionRepository) {
                     )
                 },
             )
-            Note("The detector rows borrow their WR from TRIAD-A — get_shadow_bank cannot group by detector_id (only stop_bucket / cohort / symbol / side). That join needs get_detector_split (PEND).", UNK)
+            Note("The detector rows borrow their WR from TRIAD-A. get_shadow_bank cannot group by detector_id (only stop_bucket / cohort / symbol / side). That join needs get_detector_split (PEND).", UNK)
 
-            Note("SMC shadow tracks — separate topic · never acceptance-eligible", INFO)
+            Note("SMC shadow tracks: separate topic · never acceptance-eligible", INFO)
             MiniTable(
                 listOf("strategy", "state", "rec", "rows", "resolved", "WR/EV", "sig"),
                 FLEET_TRACKS.map { t ->
@@ -418,7 +421,7 @@ fun StrategyScreen(repo: MissionRepository) {
                 },
             )
 
-            Note("books — the strategy, priced (Track ${track} = ${if (trackA) "mechanical" else "LLM-gated"})", INFO)
+            Note("books: the strategy, priced (Track ${track} = ${if (trackA) "mechanical" else "LLM-gated"})", INFO)
             MiniTable(
                 listOf("strategy", "role", "rec", "n", "WR", "EV / sel", "sig"),
                 books.map { b ->
@@ -450,7 +453,7 @@ fun StrategyScreen(repo: MissionRepository) {
                 },
             )
 
-            Note("combos you named — not yet cohorts in the bank", INFO)
+            Note("combos you named: not yet cohorts in the bank", INFO)
             MiniTable(
                 listOf("strategy", "state", "rec", "rows", "resolved", "WR/EV", "verdict"),
                 FLEET_COMBOS.map { c ->
@@ -465,13 +468,13 @@ fun StrategyScreen(repo: MissionRepository) {
                     )
                 },
             )
-            Note("The combos you named — OB+volume, FVG+volume, sweep+volume — are not cohorts in the bank yet. Each must be registered as its own shadow_track and resolved by triad-cf/1 before a win rate exists (get_combo_registry PEND).", UNK)
+            Note("The combos you named (OB+volume, FVG+volume, sweep+volume) are not cohorts in the bank yet. Each must be registered as its own shadow_track and resolved by triad-cf/1 before a win rate exists (get_combo_registry PEND).", UNK)
 
             WhyBox("THE LAW · S-1") {
                 LawBlock(
                     "S-1",
                     "A win rate is meaningless without its N and its CI. M1's ${pctv(m1.wr)} on n=${nf(m1.n)} and B0's " +
-                        "${pctv(b0.wr)} on n=${nf(b0.n)} are not the same kind of number — a table that showed only the " +
+                        "${pctv(b0.wr)} on n=${nf(b0.n)} are not the same kind of number: a table that showed only the " +
                         "percentages would be lying by omission. Every EV carries its Wilson interval and its sample size.",
                 )
             }
@@ -484,17 +487,20 @@ fun StrategyScreen(repo: MissionRepository) {
             val regRows = guardDerive(emptyList<JsonObject>()) { dr.arr("detectors").rows() }
             if (regRows.isEmpty()) {
                 // honest degrade to the taxonomy seed when the tool answers no rows.
+                SectionLabel("the detectors, from the seed", divider = false)
                 HBarChart(
                     FLEET_DETECTORS.map { Bar(it.name, it.cand.toDouble(), if (it.stateTone == BAD) BAD else NEUTRAL, it.state) },
                     unit = "cand",
                     labelWidth = 120,
                 )
-                Note("get_detector_registry returned no rows — falling back to the module's two live detectors (fvg_retest control · sweep_reclaim bleeding).", UNK)
+                SectionLabel("why this is a fallback")
+                Note("get_detector_registry returned no rows, falling back to the module's two live detectors (fvg_retest control · sweep_reclaim bleeding).", UNK)
             } else {
                 // get_detector_registry payload = { detectors:[{detector_id, emitted_count}], source }.
                 // There is no per-detector recording flag on the ledger plane, so the state is derived
                 // from emitted_count (>0 → EMITTING). The count column reads emitted_count (lifetime emits).
                 val regSource = dr.text("source", "ledger")
+                SectionLabel("the detectors, live", divider = false)
                 MiniTable(
                     listOf("detector", "state", "emitted"),
                     regRows.map { r ->
@@ -507,6 +513,7 @@ fun StrategyScreen(repo: MissionRepository) {
                         )
                     },
                 )
+                SectionLabel("what the counts mean")
                 Note("Live from get_detector_registry (source: $regSource): lifetime emitted counts. Per-detector outcome splits still need get_detector_split (PEND); the ledger carries no recording flag and get_shadow_bank cannot group by detector_id, so these detectors still borrow their win rate from TRIAD-A.", UNK)
             }
         }
@@ -514,20 +521,20 @@ fun StrategyScreen(repo: MissionRepository) {
         // ── pRecency() — 24h / 7d / 30d / all; the bank answers ONE window today (S-5) ────────────────
         McCard("Recency", tool = "get_track_watch · the bank answers ONE window today · S-5", sub = "24h · 7d · 30d · all") {
             Ribbon(
-                "The bank cannot answer \"the last 24 hours\" — and this page will not pretend it can",
+                "The bank cannot answer \"the last 24 hours\", and this page will not pretend it can",
                 "get_shadow_bank has no since/until on the outcome axis; it returns lifetime totals. The track_watch " +
-                    "cron writes a 30-minute snapshot line to a text log — a log, not a queryable series. So every " +
+                    "cron writes a 30-minute snapshot line to a text log: a log, not a queryable series. So every " +
                     "windowed number below is marked as what it is.",
                 SEV,
             )
-            KvRow("LAST 24H", if (haveWindows) "windowed" else "needs tool — windowed by resolved_at", if (haveWindows) NEUTRAL else BAD)
-            KvRow("LAST 7D", if (haveWindows) "windowed" else "needs tool — not computable from get_shadow_bank", if (haveWindows) NEUTRAL else BAD)
-            KvRow("LAST 30D", if (haveWindows) "windowed" else "needs tool — the SQLite bank has resolved_at, window it", if (haveWindows) NEUTRAL else BAD)
-            KvRow("ALL-TIME", "'all' only — the one window the bank does answer", WARN)
+            KvRow("LAST 24H", if (haveWindows) "windowed" else "needs tool: windowed by resolved_at", if (haveWindows) NEUTRAL else BAD)
+            KvRow("LAST 7D", if (haveWindows) "windowed" else "needs tool: not computable from get_shadow_bank", if (haveWindows) NEUTRAL else BAD)
+            KvRow("LAST 30D", if (haveWindows) "windowed" else "needs tool: the SQLite bank has resolved_at, window it", if (haveWindows) NEUTRAL else BAD)
+            KvRow("ALL-TIME", "'all' only: the one window the bank does answer", WARN)
             Ribbon(
                 "What the cron DID capture",
                 "from logs/track-watch.log (a 30-min line): M1=56513 M2=27 M3=88 total=56628 open_pos=0 " +
-                    "live_fills=0. That is a row-count delta, not a windowed win rate — it tells you the tracks are " +
+                    "live_fills=0. That is a row-count delta, not a windowed win rate: it tells you the tracks are " +
                     "emitting, not how they performed.",
                 WARN,
             )
@@ -536,7 +543,7 @@ fun StrategyScreen(repo: MissionRepository) {
                     "S-5",
                     "Recency windows, or the number is a fossil. An all-time win rate on a system that changed its stop " +
                         "floor 52 minutes ago is measuring two different strategies as one. Until get_track_watch windows " +
-                        "the bank by resolved_at, this page shows lifetime and nothing finer — and says so.",
+                        "the bank by resolved_at, this page shows lifetime and nothing finer, and says so.",
                 )
             }
             // get_track_watch — LIVE the day it ships (haveWindows), else the §5.1 spec block, NOT BUILT.
@@ -564,7 +571,7 @@ fun StrategyScreen(repo: MissionRepository) {
             Ribbon(
                 "This is also why the LLM gate works",
                 "Track B's edge is largely the gate declining the tight-stop trades that Track A takes and loses. The " +
-                    "model is, in effect, learning the scale law — which is why showing it the floor might let a cheaper " +
+                    "model is, in effect, learning the scale law, which is why showing it the floor might let a cheaper " +
                     "mechanical rule capture the same edge.",
                 WARN,
             )
@@ -576,7 +583,7 @@ fun StrategyScreen(repo: MissionRepository) {
                 "The judge's conviction is degenerate",
                 "get_calibration returns feasible: ${if (calFeasible) "true" else "false"}" +
                     (if (calStatus != "—") " (status $calStatus)" else "") +
-                    " — 64% of all conviction mass sits on a single value.",
+                    ". 64% of all conviction mass sits on a single value.",
                 SEV,
             )
             StatRow(
@@ -588,7 +595,7 @@ fun StrategyScreen(repo: MissionRepository) {
                 LawBlock(
                     "conviction is not yet a sort key",
                     "High-conviction decisions win less often than low-conviction ones. Until the calibration curve is " +
-                        "monotone, a 'conviction ≥ X' book (B1) is sorting on noise — which is exactly why B1's CI still " +
+                        "monotone, a 'conviction ≥ X' book (B1) is sorting on noise, which is exactly why B1's CI still " +
                         "spans zero at n=${nf(b1.n)}. Track B's edge is the binary gate, not the conviction score.",
                 )
             }
@@ -598,7 +605,7 @@ fun StrategyScreen(repo: MissionRepository) {
         McCard("The one-line fix with a large blast radius", "triad-cf/1 · S-4") {
             Ribbon(
                 "M2 and M3 are recording correctly and resolving invisibly",
-                "triad-cf/1 writes pnl_r, close_price and closed_at into $open rows — and never advances " +
+                "triad-cf/1 writes pnl_r, close_price and closed_at into $open rows, and never advances " +
                     "shadow_outcome off open. Every SMC-track win rate on every dashboard reads zero while the data " +
                     "sits underneath. by_outcome.open = $open = M2(86) + M3(263) exactly.",
                 SEV,
@@ -606,8 +613,8 @@ fun StrategyScreen(repo: MissionRepository) {
             WhyBox("THE LAW · S-4") {
                 LawBlock(
                     "S-4",
-                    "A detector that records but never resolves is a defect, drawn as one. This page paints M2/M3 STUCK — " +
-                        "the honest third state — and names the writer that has to change. Fix the one field, and $open rows " +
+                    "A detector that records but never resolves is a defect, drawn as one. This page paints M2/M3 STUCK " +
+                        "(the honest third state) and names the writer that has to change. Fix the one field, and $open rows " +
                         "of already-computed P&L light up two whole tracks. The measurement lies while the data tells the truth.",
                 )
             }

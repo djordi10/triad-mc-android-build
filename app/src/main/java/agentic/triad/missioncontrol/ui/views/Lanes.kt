@@ -37,6 +37,7 @@ import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.Ribbon
+import agentic.triad.missioncontrol.ui.components.SectionLabel
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
@@ -221,31 +222,31 @@ fun LanesScreen(repo: MissionRepository) {
     val lanes = listOf(
         Lane(
             "live", "proven", "applied 🔒", "mainnet", "YES", SEV,
-            "L-1 · live binds only to applied — INTERLOCKED to go/no-go ($gatesEvidenced of $gateCount)",
+            "L-1 · live binds only to applied: INTERLOCKED to go/no-go ($gatesEvidenced of $gateCount)",
             "close all 9 gates on the go/no-go board; the dashboard REFUSES to propose until then",
             absent = false,
         ),
         Lane(
             "paper", "proven", "applied 🔒", "mainnet", "no", NEUTRAL,
-            "L-3 · a pointer, not a copy — resolves to the strategy alone",
-            "nothing — it already tracks the applied preset by arithmetic (paper follows live)",
+            "L-3 · a pointer, not a copy: resolves to the strategy alone",
+            "nothing: it already tracks the applied preset by arithmetic (paper follows live)",
             absent = false,
         ),
         Lane(
             "shadow-of-live", "proven", "applied 🔒", "none", "no", NEUTRAL,
-            "L-4 · a lens, not a profile — resolves to the strategy alone",
-            "nothing — it is the same strategy read through a shadow overlay",
+            "L-4 · a lens, not a profile: resolves to the strategy alone",
+            "nothing: it is the same strategy read through a shadow overlay",
             absent = false,
         ),
         Lane(
             "live playground", "candidate", "candidate", "testnet", "no", UNK,
-            "L-1 · would bind to a candidate preset — but none exists",
+            "L-1 · would bind to a candidate preset, but none exists",
             "a candidate preset must exist first (get_preset_lineage → candidate: null)",
             absent = true,
         ),
         Lane(
             "shadow playground", "candidate", "candidate", "none", "no", UNK,
-            "L-4 · a lens over a candidate — but none exists",
+            "L-4 · a lens over a candidate, but none exists",
             "a candidate preset must exist first (get_preset_lineage → candidate: null)",
             absent = true,
         ),
@@ -275,7 +276,7 @@ fun LanesScreen(repo: MissionRepository) {
             }
             proposeResult = if (env.ok) {
                 val pid = (env.data as? JsonObject).text("proposal_id")
-                true to "FILED · proposal_id $pid · kind=${action.kind} — a change-plan for triadctl; the app applied NOTHING."
+                true to "FILED · proposal_id $pid · kind=${action.kind} · a change-plan for triadctl; the app applied NOTHING."
             } else {
                 false to "REFUSED · ${env.error ?: "unknown error"} · kind=${action.kind}"
             }
@@ -299,10 +300,10 @@ fun LanesScreen(repo: MissionRepository) {
         ),
     ) {
         Ribbon(
-            "ONE — five lanes, one preset, one fingerprint (AT-L2)",
+            "ONE: five lanes, one preset, one fingerprint (AT-L2)",
             "CSL-1 asks for five lanes resolving to two preset identities. The config store serves ONE " +
                 "preset ($presetName, $fpShort, $dirtyLabel) and there is no candidate. Five lanes, one " +
-                "fingerprint — because there is only one thing to bind to. Read-only; the only write is " +
+                "fingerprint, because there is only one thing to bind to. Read-only; the only write is " +
                 "propose_action (AT-L13).",
             INFO,
         )
@@ -321,7 +322,7 @@ fun LanesScreen(repo: MissionRepository) {
         // Reduction-only: this dashboard proposes; arming/rollback is the human ceremony at triadctl.
         proposeResult?.let { (ok, msg) ->
             Ribbon(
-                if (ok) "Proposal filed — triadctl applies, not the app (L-7)" else "Proposal refused",
+                if (ok) "Proposal filed: triadctl applies, not the app (L-7)" else "Proposal refused",
                 msg,
                 if (ok) GOOD else BAD,
             )
@@ -343,35 +344,35 @@ fun LanesScreen(repo: MissionRepository) {
                 Column(androidx.compose.ui.Modifier.weight(1f).padding(start = 6.dp)) {
                     Tag("CANDIDATE · draft", UNK)
                     KvRow("preset", "DOES NOT EXIST", UNK)
-                    Note("No second preset. No draft identity. The entire candidate track — both playground lanes — has nothing to run.", UNK)
+                    Note("No second preset. No draft identity. The entire candidate track (both playground lanes) has nothing to run.", UNK)
                 }
             }
             Ribbon(
-                "D2 defaults candidate.model_tag = applied.model_tag — a good call",
+                "D2 defaults candidate.model_tag = applied.model_tag: a good call",
                 "It means the engine serves ONE model until you deliberately test a new one, and only the " +
-                    "deterministic layer varies — keeping L-5 (fork at most once) cheap. It also means slot B stays " +
+                    "deterministic layer varies, keeping L-5 (fork at most once) cheap. It also means slot B stays " +
                     "cold, and the learning ladder is already deadlocked on slot B never having run. These two facts " +
                     "have to be reconciled before promotion is built.",
                 WARN,
             )
-            Note("L-3 · paper is a pointer, not a copy · L-4 · shadow is a lens, not a profile. Both true by construction — 'paper follows live' stops being discipline and becomes arithmetic.", INFO)
+            Note("L-3 · paper is a pointer, not a copy · L-4 · shadow is a lens, not a profile. Both true by construction: 'paper follows live' stops being discipline and becomes arithmetic.", INFO)
         }
 
         // ── §1 · P0 finding: D2's premise is false (AT-L6) ──
         McCard("§1 · D2's premise is false", tool = "get_config_preset", sub = "the fingerprint would leave the prompt behind (P0)") {
             KvRow(
                 "intelligence.model_tag",
-                if (modelPinned) "$modelTag — pinned ✅" else "absent ❌",
+                if (modelPinned) "$modelTag · pinned ✅" else "absent ❌",
                 if (modelPinned) GOOD else BAD,
             )
             Note(
-                "D2 says the preset pins `llm.model_tag` — but the domain is `intelligence`, not `llm`. " +
+                "D2 says the preset pins `llm.model_tag`, but the domain is `intelligence`, not `llm`. " +
                     "The model itself is pinned, so that half is true.",
                 NEUTRAL,
             )
             if (templateReal) {
-                KvRow("intelligence.prompt_template", "present — \"${templateVal.take(40)}\"", GOOD)
-                Note("The template field exists and is non-empty — the immutable unit holds.", GOOD)
+                KvRow("intelligence.prompt_template", "present: \"${templateVal.take(40)}\"", GOOD)
+                Note("The template field exists and is non-empty, the immutable unit holds.", GOOD)
             } else {
                 KvRow("intelligence.prompt_template", "THE FIELD DOES NOT EXIST ❌", BAD)
                 KvRow("  prompt_draft_system", if (draftSystem.isEmpty()) "\"\" (empty)" else draftSystem, UNK)
@@ -379,7 +380,7 @@ fun LanesScreen(repo: MissionRepository) {
                 KvRow("  get_render", "render_context_missing", BAD)
                 Ribbon(
                     "L-2 · a fingerprint must cover everything it promotes",
-                    "Build the promoter exactly as D2 specifies and it graduates the model and the knobs — and " +
+                    "Build the promoter exactly as D2 specifies and it graduates the model and the knobs, and " +
                         "silently leaves the prompt behind. Two presets could then carry identical fingerprints " +
                         "and produce different decisions; the immutable unit would not be immutable, and " +
                         "effective_fp would attest to something it does not cover. Pin the template, or take it " +
@@ -395,15 +396,15 @@ fun LanesScreen(repo: MissionRepository) {
             KvRow("state", dirtyLabel, dirtyTone)
             if (urlIsPlaceholder) {
                 Ribbon(
-                    "Committed, clean, and fingerprinted — attesting to a dead URL",
+                    "Committed, clean, and fingerprinted: attesting to a dead URL",
                     "The real endpoint is triad-mc.bgzr.io. This preset is committed, dirty:false, and " +
-                        "fingerprinted — and the fingerprint attests to a placeholder (example.com). CSL-1 makes " +
+                        "fingerprinted, and the fingerprint attests to a placeholder (example.com). CSL-1 makes " +
                         "that fingerprint the input to every promotion and every delivery stamp. Fix it before " +
                         "you build the promoter, not after.",
                     SEV,
                 )
             } else {
-                Note("http_url is a real endpoint — no placeholder detected in the served preset.", GOOD)
+                Note("http_url is a real endpoint: no placeholder detected in the served preset.", GOOD)
             }
         }
 
@@ -444,16 +445,16 @@ fun LanesScreen(repo: MissionRepository) {
                     KvRow("what it would take", lane.toMakeReal, WARN)
                     if (lane.name == "live") {
                         Ribbon(
-                            "The live lane REFUSES — interlocked, no propose button (AT-L12)",
+                            "The live lane REFUSES: interlocked, no propose button (AT-L12)",
                             "Live binds only to applied and is interlocked to the same go/no-go board the " +
-                                "Connections view uses — one board, one interlock, two views. Today $gatesEvidenced " +
+                                "Connections view uses: one board, one interlock, two views. Today $gatesEvidenced " +
                                 "of $gateCount gates carry evidence; Gate 2 (key-safety) is UNKNOWN because the sole " +
                                 "keyholder has no health source. The dashboard WILL NOT propose a promotion into the " +
                                 "live lane. " + (if (goClean) "" else "NO-GO."),
                             SEV,
                         )
                         Note(
-                            "No propose button on the live lane — the interlock refuses at the source (AT-L12).",
+                            "No propose button on the live lane: the interlock refuses at the source (AT-L12).",
                             SEV,
                         )
                     } else {
@@ -462,7 +463,7 @@ fun LanesScreen(repo: MissionRepository) {
                         // triadctl compiles, verifies, and applies (L-7). L-2 note verbatim from CSLVIEW.
                         val bindsKind = if (lane.absent) "candidate" else "applied"
                         Note(
-                            "L-2 · a fingerprint must cover everything it promotes — the preset does not pin a " +
+                            "L-2 · a fingerprint must cover everything it promotes: the preset does not pin a " +
                                 "prompt template, so effective_fp would not cover the prompt.",
                             WARN,
                         )
@@ -510,7 +511,7 @@ fun LanesScreen(repo: MissionRepository) {
             )
             if (!hasPreset) {
                 Note(
-                    "get_config_active reports schema \"triad-preset/1\" — but it is NOT one of the $schemaCount " +
+                    "get_config_active reports schema \"triad-preset/1\", but it is NOT one of the $schemaCount " +
                         "vendored schemas. The store claims to serve a schema it does not vendor.",
                     BAD,
                 )
@@ -519,6 +520,7 @@ fun LanesScreen(repo: MissionRepository) {
 
         // ── §6 · the applied preset (AT-L9) ──
         McCard("§6 · the applied preset", tool = "get_config_preset", sub = "its real shape") {
+            SectionLabel("the shape", divider = false)
             KvRow("preset", presetName, NEUTRAL)
             KvRow("schema", doc.text("schema"), NEUTRAL)
             KvRow("real domains", "$domainCount", NEUTRAL)
@@ -528,6 +530,7 @@ fun LanesScreen(repo: MissionRepository) {
                 KvRow("created", meta.text("created"), NEUTRAL)
                 KvRow("author · ums", meta.text("author") + " · " + meta.text("ums"), NEUTRAL)
             }
+            SectionLabel("what it means")
             Note(
                 "Live: $domainCount domains served, $symbolCount-symbol whitelist, and the FinGPT pin " +
                     (if (modelPinned) "($modelTag)." else "(absent)."),
@@ -580,8 +583,8 @@ fun LanesScreen(repo: MissionRepository) {
             }
             if (urlIsPlaceholder) {
                 Ribbon(
-                    "The applied preset contains a placeholder — and it is marked dirty: false",
-                    "domains.mcp.http_url = $mcpUrl — the real endpoint is triad-mc.bgzr.io. This preset is " +
+                    "The applied preset contains a placeholder, and it is marked dirty: false",
+                    "domains.mcp.http_url = $mcpUrl, the real endpoint is triad-mc.bgzr.io. This preset is " +
                         "clean, committed and fingerprinted, and the fingerprint attests to a dead URL. CSL-1 makes " +
                         "that fingerprint the input to every promotion and every delivery stamp. Fix it before you " +
                         "build the promoter, not after.",
@@ -590,7 +593,7 @@ fun LanesScreen(repo: MissionRepository) {
             }
             Ribbon(
                 "And this preset is what put FinGPT in the chair",
-                "intelligence.model_tag = ${if (modelTag == "—") "—" else modelTag} — the playbook assigns " +
+                "intelligence.model_tag = ${if (modelTag == "—") "—" else modelTag}: the playbook assigns " +
                     "FinGPT to the BIAS role, not adjudication. The config store is where that decision lives, " +
                     "and there is no ledger entry explaining it.",
                 WARN,
@@ -599,15 +602,17 @@ fun LanesScreen(repo: MissionRepository) {
 
         // ── §7 · the promotion ledger headline — live numbers, honestly (AT-L8) ──
         McCard("§7 · promotion ledger", tool = "get_promotion_ledger", sub = "$ledgerCount ENTRIES") {
+            SectionLabel("the count", divider = false)
             KvRow("entries", "$ledgerCount", if (ledgerCount == 0) UNK else NEUTRAL)
             KvRow(
                 "chain_verified",
                 if (chainVerified) "true" else if (ledgerCount == 0) "false · no chain to verify yet" else "false",
                 if (chainVerified) GOOD else if (ledgerCount == 0) UNK else BAD,
             )
+            SectionLabel("what it means")
             Note(
                 "The applied preset ($presetName) was created ${meta.text("created")} and NOTHING records how it " +
-                    "got there. get_promotion_ledger is LIVE now and reports $ledgerCount entries — the empty " +
+                    "got there. get_promotion_ledger is LIVE now and reports $ledgerCount entries: the empty " +
                     "ledger is served honestly rather than back-filled. Full panel in §5.2 below.",
                 WARN,
             )
@@ -616,7 +621,7 @@ fun LanesScreen(repo: MissionRepository) {
         // ── §5 · the CSL-1 lane tools — LIVE on the server now, wired below ──
         Note(
             "The four CSL-1 lane tools are LIVE on the server now (get_lanes · get_promotion_ledger · " +
-                "get_preset_lineage · export_config_bundle) — the panels below read them directly, never faked. " +
+                "get_preset_lineage · export_config_bundle). The panels below read them directly, never faked. " +
                 "triad-lane/1 is still NOT vendored as a contract schema, and the live/paper guard (may bind only " +
                 "`applied`) must still be enforced AT VERIFY, not warned about in a GUI.",
             INFO,
@@ -626,7 +631,7 @@ fun LanesScreen(repo: MissionRepository) {
         McCard("§5.1 · the lane board", tool = "get_lanes", sub = "live from the store") {
             KvRow("strategy_fp", shortFp(strategyFp), NEUTRAL)
             if (laneRows.isEmpty()) {
-                Note("no data — get_lanes returned no lanes.", UNK)
+                Note("no data: get_lanes returned no lanes.", UNK)
             } else {
                 MiniTable(
                     listOf("lane", "binds", "env", "overlay_fp", "effective_fp", "status"),
@@ -652,7 +657,7 @@ fun LanesScreen(repo: MissionRepository) {
                 )
                 Note(
                     "D4 · effective_fp = sha256(strategy_fp ‖ overlay_fp). The three applied-bound lanes " +
-                        "resolve; both playground lanes serve effective_fp null — no candidate to bind.",
+                        "resolve; both playground lanes serve effective_fp null: no candidate to bind.",
                     INFO,
                 )
             }
@@ -662,25 +667,25 @@ fun LanesScreen(repo: MissionRepository) {
         // ── §5.2 · get_promotion_ledger — the D5 promoter ledger, chain verdict LOUD ──
         McCard("§5.2 · the promotion ledger", tool = "get_promotion_ledger", sub = "append-only, hash-chained (D5/L-6)") {
             if (ledgerEnv == null) {
-                Note("no data — get_promotion_ledger not served.", UNK)
+                Note("no data: get_promotion_ledger not served.", UNK)
             } else {
                 when {
                     chainVerified -> VerdictBanner(
                         word = "CHAIN VERIFIED",
-                        said = "chain_verified:true over $ledgerCount entries — every prev_hash → hash link holds.",
+                        said = "chain_verified:true over $ledgerCount entries: every prev_hash → hash link holds.",
                         pills = listOf("CHAIN_VERIFIED TRUE" to GOOD, "$ledgerCount ENTRIES" to NEUTRAL),
                         wordTone = GOOD,
                     )
                     ledgerCount > 0 -> VerdictBanner(
                         word = "CHAIN BROKEN",
-                        said = "chain_verified:false over $ledgerCount entries — a prev_hash → hash link does not " +
+                        said = "chain_verified:false over $ledgerCount entries: a prev_hash → hash link does not " +
                             "hold. L-6: do not trust an unverifiable chain; verify on write.",
                         pills = listOf("CHAIN_VERIFIED FALSE" to BAD, "$ledgerCount ENTRIES" to BAD),
                         wordTone = BAD,
                     )
                     else -> VerdictBanner(
                         word = "EMPTY · UNVERIFIED",
-                        said = "chain_verified:false and 0 entries — there is no chain to verify yet. The applied " +
+                        said = "chain_verified:false and 0 entries: there is no chain to verify yet. The applied " +
                             "preset has no recorded provenance; served loud (L-6), not back-filled.",
                         pills = listOf("CHAIN_VERIFIED FALSE" to WARN, "0 ENTRIES" to UNK),
                         wordTone = WARN,
@@ -688,7 +693,7 @@ fun LanesScreen(repo: MissionRepository) {
                 }
                 if (ledgerEntries.isEmpty()) {
                     Note(
-                        "0 entries — no promotions yet. Every promote/rollback lands here as a NEW row " +
+                        "0 entries: no promotions yet. Every promote/rollback lands here as a NEW row " +
                             "(a rollback is action:rollback, never a rewrite), chained prev_hash → hash.",
                         UNK,
                     )
@@ -712,9 +717,10 @@ fun LanesScreen(repo: MissionRepository) {
 
         // ── §5.3 · get_preset_lineage — versions + the candidate callout ──
         McCard("§5.3 · preset lineage", tool = "get_preset_lineage", sub = "versions and the candidate") {
+            SectionLabel("the versions", divider = false)
             KvRow("preset", lineageEnv.text("preset"), NEUTRAL)
             if (versions.isEmpty()) {
-                Note("no versions served — the lineage is empty.", UNK)
+                Note("no versions served: the lineage is empty.", UNK)
             } else {
                 MiniTable(
                     listOf("v", "fp", "ts", "author", "applied"),
@@ -738,7 +744,7 @@ fun LanesScreen(repo: MissionRepository) {
                 val rollbackTargets = guardDerive(emptyList<JsonObject>()) { versions.filter { !it.bool("applied") } }
                 if (rollbackTargets.isEmpty()) {
                     Note(
-                        "L-6 · history is append-only · rollback is a new row — but there is no prior version to " +
+                        "L-6 · history is append-only · rollback is a new row, but there is no prior version to " +
                             "roll back to (candidate: null, and the lineage holds only the applied version).",
                         UNK,
                     )
@@ -777,6 +783,7 @@ fun LanesScreen(repo: MissionRepository) {
                     }
                 }
             }
+            SectionLabel("the candidate")
             KvRow(
                 "candidate",
                 if (candidateIsNull) "— · null" else candidateLabel,
@@ -784,9 +791,9 @@ fun LanesScreen(repo: MissionRepository) {
             )
             if (candidateIsNull) {
                 Ribbon(
-                    "candidate: null — rollback has nothing to roll back to",
+                    "candidate: null, rollback has nothing to roll back to",
                     "A rollback = promote a prior version, which requires a prior version. The lineage holds " +
-                        "exactly ${versions.size} — and the ledger records no provenance for it.",
+                        "exactly ${versions.size}, and the ledger records no provenance for it.",
                     WARN,
                 )
             }
@@ -796,7 +803,7 @@ fun LanesScreen(repo: MissionRepository) {
         // ── §5.4 · export_config_bundle — the offline-reproducibility manifest ──
         McCard("§5.4 · the offline bundle", tool = "export_config_bundle", sub = "reproduce the config away from the box") {
             if (bundle == null) {
-                Note("no data — export_config_bundle not served.", UNK)
+                Note("no data: export_config_bundle not served.", UNK)
             } else {
                 KvRow("bundle schema", bundle.text("schema"), NEUTRAL)
                 KvRow(
@@ -824,7 +831,7 @@ fun LanesScreen(repo: MissionRepository) {
                 )
                 KvRow(
                     "prompt_template",
-                    if (bundlePromptPinned) "PINNED" else "null — NOT pinned",
+                    if (bundlePromptPinned) "PINNED" else "null, NOT pinned",
                     if (bundlePromptPinned) GOOD else BAD,
                 )
                 KvRow(
@@ -834,19 +841,19 @@ fun LanesScreen(repo: MissionRepository) {
                 )
                 if (bundleEffFp.startsWith("sha256:sha256:")) {
                     Note(
-                        "Observed quirk: the bundle serves effective_fp with a doubled sha256: prefix — " +
+                        "Observed quirk: the bundle serves effective_fp with a doubled sha256: prefix, " +
                             "rendered verbatim above, not repaired here.",
                         WARN,
                     )
                 }
                 KvRow("exported_at (µs epoch)", bundle.text("exported_at"), NEUTRAL)
                 if (bundlePromptPinned) {
-                    Note("prompt_pinned:true — the bundle covers the prompt (L-2 holds).", GOOD)
+                    Note("prompt_pinned:true, the bundle covers the prompt (L-2 holds).", GOOD)
                 } else {
                     Ribbon(
-                        "L-2 · the bundle must include the prompt — or it reproduces nothing",
+                        "L-2 · the bundle must include the prompt, or it reproduces nothing",
                         "The manifest carries the preset, the lane overlay, the lineage, the ledger, and the " +
-                            "prompt fields — but prompt_template is null, so prompt_pinned:false. A bundle whose " +
+                            "prompt fields, but prompt_template is null, so prompt_pinned:false. A bundle whose " +
                             "fingerprint does not cover the prompt cannot reproduce the decisions it attests to.",
                         SEV,
                     )
@@ -859,10 +866,10 @@ fun LanesScreen(repo: MissionRepository) {
         WhyBox("THE LAWS · L-1..L-7") {
         LawBlock(
             "L-1..L-7",
-            "L-1 live binds only to applied — today true by accident (an empty room, not enforcement): write and " +
+            "L-1 live binds only to applied, today true by accident (an empty room, not enforcement): write and " +
                 "test the guard BEFORE a candidate exists · L-2 a fingerprint must cover everything it promotes " +
                 "(§1, P0) · L-3 paper is a pointer, not a copy · L-4 shadow is a lens, not a profile (L-3/L-4 make " +
-                "'paper follows live' arithmetic, not discipline) · L-5 the engine forks at most once — but slot B " +
+                "'paper follows live' arithmetic, not discipline) · L-5 the engine forks at most once, but slot B " +
                 "stays cold and the learning ladder is deadlocked on it · L-6 history is append-only, rollback is a " +
                 "new row: do not ship a second unverifiable chain, verify on write · L-7 the GUI proposes, triadctl " +
                 "applies (R-C1).",

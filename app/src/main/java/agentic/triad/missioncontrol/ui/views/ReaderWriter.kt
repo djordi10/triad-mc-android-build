@@ -112,14 +112,14 @@ private val WRITERS = listOf(
     Writer(
         "candidates", "ledger.candidates", "ok", 34.0, 56862, 19420,
         "Trade Logs", "trades", true,
-        note = "The detectors write here. 164 duplicate candidates (BTC 86 + ETH 78) — a race under " +
+        note = "The detectors write here. 164 duplicate candidates (BTC 86 + ETH 78), a race under " +
             "load, because the bus that would dedup them is not provisioned (RW-5).",
     ),
     Writer(
         "context.packets", "ledger.context.packets", "ok", 34.0, 45692, 45692,
         "NONE", null, false, orphan = true,
         note = "45,692 packets written. ZERO views read them. The single largest writer in the estate " +
-            "and it has no reader — P4 replay is dead at the first hop, because the record of what the " +
+            "and it has no reader. P4 replay is dead at the first hop, because the record of what the " +
             "model saw is write-only.",
     ),
     Writer(
@@ -131,38 +131,38 @@ private val WRITERS = listOf(
     Writer(
         "intents", "ledger.intents", "stale", 29900.0, 0, 0,
         "Executor", "exec", true,
-        note = "STALE, not empty — a writer was here and it STOPPED. The governor passed 0 intents. " +
+        note = "STALE, not empty: a writer was here and it STOPPED. The governor passed 0 intents. " +
             "The reader is wired and waiting; the writer went quiet.",
     ),
     Writer(
         "orders", "ledger.orders", "stale", 29900.0, 0, 0,
         "Executor", "exec", true,
-        note = "STALE. Same story as intents — the writer stopped. 0 orders have ever reached a venue.",
+        note = "STALE. Same story as intents: the writer stopped. 0 orders have ever reached a venue.",
     ),
     Writer(
         "refusals", "ledger.refusals", "stale", 29900.0, 115, 115,
         "Governance", "gov", false, hole = true, readable = 18,
         note = "THE CLEAREST HOLE: the writer has written 115 refusals. The view exposes 18. 97 rows " +
-            "are written-but-unreadable — the reader is looking at a different slice than the writer " +
+            "are written-but-unreadable: the reader is looking at a different slice than the writer " +
             "is filling.",
     ),
     Writer(
         "fills", "ledger.fills", "empty", null, 0, 0,
         "Executor", "exec", true,
-        note = "EMPTY — never wrote. The reader exists; nothing has ever fed it. Distinct from stale: " +
+        note = "EMPTY: never wrote. The reader exists; nothing has ever fed it. Distinct from stale: " +
             "this writer never started.",
     ),
     Writer(
         "outcomes", "ledger.outcomes", "empty", null, 0, 0,
         "Shadow", "shadow", false, mismapped = true,
         note = "THE READER↔WRITER MISMAP: the DuckDB outcomes VIEW is empty, so a reader here sees " +
-            "nothing — but the outcomes ARE being written, to the SQLite shadow bank (56,862 rows). " +
+            "nothing, but the outcomes ARE being written, to the SQLite shadow bank (56,862 rows). " +
             "The reader is pointed at the wrong store. A lie of omission, not an absence of data.",
     ),
     Writer(
         "shadow_sync", "shadow_sync", "no_fingerprint", null, null, null,
         "—", null, false,
-        note = "no_fingerprint — this writer cannot identify itself. A writer with no fingerprint " +
+        note = "no_fingerprint: this writer cannot identify itself. A writer with no fingerprint " +
             "cannot be verified by any reader; you cannot know if what you are reading is what it wrote.",
     ),
 )
@@ -395,7 +395,7 @@ fun ReaderWriterScreen(repo: MissionRepository) {
         McCard("The seam", tool = "get_service_status × get_view_catalog", sub = "writers on the left, who reads them on the right") {
             Note(
                 "Nine ledger writers. get_service_status is named for services and returns these tables. " +
-                    "Each row shows the writer's state and the reader that consumes it — and flags the seam " +
+                    "Each row shows the writer's state and the reader that consumes it, and flags the seam " +
                     "where the two do not line up. Tap any writer.",
                 NEUTRAL,
             )
@@ -405,16 +405,16 @@ fun ReaderWriterScreen(repo: MissionRepository) {
             }
             SectionLabel("→ READS · THE LIVE SYNC WORKERS (HEARTBEATS)")
             if (m.lanes.isEmpty()) {
-                Note("get_bridge_lag returned no live lanes — the 3 known workers below, heartbeat unknown. Nothing fabricated.", UNK)
+                Note("get_bridge_lag returned no live lanes: the 3 known workers below, heartbeat unknown. Nothing fabricated.", UNK)
             }
             readerLanes.forEach { l -> ReaderNode(l) }
             // the DuckDB-views and NATS-consumers reader nodes (the mismap store + the missing dedup)
-            ReaderMetaNode("DuckDB views", "SOME EMPTY", UNK, "the outcomes view is empty — its writer went to SQLite (RW-3)")
-            ReaderMetaNode("NATS consumers", "DOWN", SEV, "the dedup layer between writer and reader — not provisioned (RW-5)")
+            ReaderMetaNode("DuckDB views", "SOME EMPTY", UNK, "the outcomes view is empty: its writer went to SQLite (RW-3)")
+            ReaderMetaNode("NATS consumers", "DOWN", SEV, "the dedup layer between writer and reader: not provisioned (RW-5)")
             Ribbon(
                 "Read the state, not just the colour.",
-                "intents and orders are STALE, not empty — a writer was there and it stopped. fills and " +
-                    "outcomes are EMPTY — they never started. Different bugs: one writer went quiet, the " +
+                "intents and orders are STALE, not empty: a writer was there and it stopped. fills and " +
+                    "outcomes are EMPTY: they never started. Different bugs: one writer went quiet, the " +
                     "other never ran.",
                 WARN,
             )
@@ -422,7 +422,7 @@ fun ReaderWriterScreen(repo: MissionRepository) {
                 "RW-1 · MEASURE BOTH SIDES, AT THE SEAM",
                 "A writer that got a row and a reader that kept up are two different health checks, and the " +
                     "estate only does the first. get_service_status tells you a table got a row; nothing tells " +
-                    "you a reader can see it. The three sync workers are the only readers with a heartbeat — and " +
+                    "you a reader can see it. The three sync workers are the only readers with a heartbeat, and " +
                     "they read the bridge, not the money path.",
             )
         }
@@ -430,8 +430,8 @@ fun ReaderWriterScreen(repo: MissionRepository) {
         // ── §2 · THE HOLE — rows written vs rows readable (AT-RW4 / RW8) ──
         McCard("The hole", tool = "RW-4 · the check that does not exist", sub = "rows written vs rows readable") {
             Note(
-                if (m.holesLive) "LIVE from get_seam_audit — writer-count minus view-count, per table."
-                else "get_seam_audit is not deployed — reconstructed from get_table_census / get_row_integrity / get_view_catalog and the known estate (labelled fallback).",
+                if (m.holesLive) "LIVE from get_seam_audit: writer-count minus view-count, per table."
+                else "get_seam_audit is not deployed: reconstructed from get_table_census / get_row_integrity / get_view_catalog and the known estate (labelled fallback).",
                 if (m.holesLive) GOOD else UNK,
             )
             HoleTable(m.holes)
@@ -442,8 +442,8 @@ fun ReaderWriterScreen(repo: MissionRepository) {
                 SEV,
             )
             LawBlock(
-                "RW-4 · ROWS WRITTEN ≠ ROWS READABLE IS A HOLE — QUANTIFY IT",
-                "get_seam_audit is one SELECT per table — writer-count minus view-count — and it does not " +
+                "RW-4 · ROWS WRITTEN ≠ ROWS READABLE IS A HOLE: QUANTIFY IT",
+                "get_seam_audit is one SELECT per table (writer-count minus view-count) and it does not " +
                     "exist. It is the cheapest integrity check in the system, and it would have caught the " +
                     "refusals hole, the orphaned packets, and the outcomes mismap the day each one appeared.",
             )
@@ -456,13 +456,13 @@ fun ReaderWriterScreen(repo: MissionRepository) {
             Ribbon("Two failures that look identical on a status board and are opposites.", "", SEV)
             OrphanMismapNode(
                 "context.packets", "ORPHAN", SEV,
-                "RW-2 · a writer with no reader is a leak. 45,692 rows of exactly what the model saw — " +
+                "RW-2 · a writer with no reader is a leak. 45,692 rows of exactly what the model saw: " +
                     "written, fingerprinted, and read by nothing. P4 replay dies here.",
             )
             OrphanMismapNode(
                 "outcomes", "MISMAP", SEV,
                 "RW-3 · a reader with no writer is a lie. The DuckDB outcomes view returns empty, so a reader " +
-                    "concludes \"no outcomes\" — but 56,862 outcomes exist in the SQLite bank. The reader is " +
+                    "concludes \"no outcomes\", but 56,862 outcomes exist in the SQLite bank. The reader is " +
                     "pointed at the wrong store.",
             )
             LawBlock(
@@ -480,7 +480,7 @@ fun ReaderWriterScreen(repo: MissionRepository) {
             Ribbon(
                 "get_bus_status → ${m.busErr ?: "ok"}",
                 "NATS JetStream is the layer that would deduplicate messages between the writer and the " +
-                    "reader — Nats-Msg-Id, 120s window. It is not provisioned.",
+                    "reader (Nats-Msg-Id, 120s window). It is not provisioned.",
                 SEV,
             )
             Ribbon(
@@ -495,7 +495,7 @@ fun ReaderWriterScreen(repo: MissionRepository) {
                 "RW-5 · THE DEDUP BELONGS IN THE TRANSPORT, AND THE TRANSPORT IS MISSING",
                 "You cannot fix this at the writer (it correctly emits what it sees twice under a race) or the " +
                     "reader (it correctly reads what is there). Dedup is a property of the pipe. Provision NATS, " +
-                    "and the same writer and the same reader stop inflating — with no change to either.",
+                    "and the same writer and the same reader stop inflating, with no change to either.",
             )
             // §5.3 · provision_nats — a mutation that does not exist; its build spec always shows here.
             RwPendSpec("provision_nats", SPEC_PROVISION_NATS)
@@ -504,15 +504,15 @@ fun ReaderWriterScreen(repo: MissionRepository) {
         // ── per-layer row integrity — rows vs distinct (AT-RW10) ──
         McCard("Per-layer row integrity", tool = "get_row_integrity · the inflation factor", sub = "rows vs distinct") {
             Note(
-                if (m.layers.isNotEmpty()) "LIVE from get_row_integrity — rows vs distinct per layer."
-                else "get_row_integrity returned no layers — the known estate below (reconstructed fallback).",
+                if (m.layers.isNotEmpty()) "LIVE from get_row_integrity: rows vs distinct per layer."
+                else "get_row_integrity returned no layers: the known estate below (reconstructed fallback).",
                 if (m.layers.isNotEmpty()) GOOD else UNK,
             )
             IntegGrid(m.layers)
             Ribbon(
                 "The shadow bank is the worst: ${m.inflation}×",
                 "8,008 rows over 2,731 distinct decisions. Every reader that sums net_pnl_r across the bank is " +
-                    "counting the same decision up to three times unless it dedups first — which is why the " +
+                    "counting the same decision up to three times unless it dedups first, which is why the " +
                     "Strategy page warns never to sum across cohorts, and why the counterfactual net_pnl_r of " +
                     "+988R is a counterfeit.",
                 WARN,
@@ -538,7 +538,7 @@ private fun StanceBlock(m: RwModel) {
         )
         // One-line verdict; the two-paragraph autopsy that used to sit open here folds into the WhyBox below.
         Note(
-            "Writers and readers are measured in different places, and the seam between them is unwatched — so " +
+            "Writers and readers are measured in different places, and the seam between them is unwatched, so " +
                 "links sit quietly severed, and the bank runs ${m.inflation}× inflated.",
             NEUTRAL,
         )
@@ -546,8 +546,8 @@ private fun StanceBlock(m: RwModel) {
             Modifier.fillMaxWidth().padding(top = 11.dp).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
-            StancePill("WRITER · NO READER", m.orphans.toString(), "context.packets — 45,692 rows, 0 views", SEV)
-            StancePill("WRITTEN ≠ READABLE", m.holeCount.toString(), "refusals — 115 written, 18 readable", SEV)
+            StancePill("WRITER · NO READER", m.orphans.toString(), "context.packets · 45,692 rows, 0 views", SEV)
+            StancePill("WRITTEN ≠ READABLE", m.holeCount.toString(), "refusals · 115 written, 18 readable", SEV)
             StancePill("REAL HEARTBEATS", if (m.lanes.isEmpty()) "—" else m.lanes.size.toString(), "the only live readers in the plane", WARN)
         }
         WhyBox("THE SEAM · IN FULL") {
@@ -555,14 +555,14 @@ private fun StanceBlock(m: RwModel) {
                 "A writer's health is whether it wrote a row. A reader's health is whether it kept up. The two " +
                     "are measured in completely different places, and the seam between them is unwatched. So the " +
                     "estate has links that are quietly severed: ledger.context.packets holds 45,692 rows that no " +
-                    "view reads — the largest writer, with zero readers. ledger.refusals has written 115 rows; its " +
-                    "view exposes 18 — 97 written-but-unreadable. And the outcomes reader points at an empty DuckDB " +
+                    "view reads: the largest writer, with zero readers. ledger.refusals has written 115 rows; its " +
+                    "view exposes 18, 97 written-but-unreadable. And the outcomes reader points at an empty DuckDB " +
                     "view while the outcomes are written somewhere else entirely (the SQLite bank).",
                 NEUTRAL,
             )
             Note(
                 "Every one of these is invisible on every other page, because no tool compares what a writer wrote " +
-                    "to what a reader can see. The only genuine liveness in the whole plane is three sync workers — " +
+                    "to what a reader can see. The only genuine liveness in the whole plane is three sync workers, " +
                     "and NATS, the transport that should dedup between writer and reader, is not provisioned, which " +
                     "is why the bank is ${m.inflation}× inflated.",
                 NEUTRAL,
@@ -622,7 +622,7 @@ private fun WriterNode(lw: LiveWriter, expanded: Boolean, onClick: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(top = 7.dp)) {
             Text("reader: ", color = Ink2, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
             if (w.reader == "NONE") {
-                Text("NONE — nobody reads this", color = Sev, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                Text("NONE · nobody reads this", color = Sev, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
             } else {
                 Text(w.reader + if (w.rok) "" else "  ⚠", color = if (w.rok) Ink else Sev, fontFamily = Mono, fontSize = 10.sp)
             }
@@ -649,7 +649,7 @@ private fun WriterNode(lw: LiveWriter, expanded: Boolean, onClick: () -> Unit) {
                     }
                 } else {
                     // AT-RW14 · the orphan writer has NO reader-route — nobody reads it.
-                    Note("No reader-route — this writer is an orphan; nobody reads it (AT-RW14).", SEV)
+                    Note("No reader-route: this writer is an orphan; nobody reads it (AT-RW14).", SEV)
                 }
             }
         }

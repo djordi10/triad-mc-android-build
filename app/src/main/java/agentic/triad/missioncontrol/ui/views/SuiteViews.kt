@@ -41,6 +41,7 @@ import agentic.triad.missioncontrol.ui.components.field
 import agentic.triad.missioncontrol.ui.components.rows
 import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
+import agentic.triad.missioncontrol.ui.components.SectionLabel
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Verdict
@@ -165,12 +166,13 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
 
         // ── live priced-bank aggregate (the one card that IS live; the per-symbol tables stay snapshot) ──
         if (bp != null) {
-            McCard("Priced bank — live aggregate", tool = "get_bank_priced", sub = "the whole bank, cf-priced") {
+            McCard("Priced bank: live aggregate", tool = "get_bank_priced", sub = "the whole bank, cf-priced") {
                 Verdict(
                     "Net expectancy ${netExp?.let { "${fmt1(it * 1)}" } ?: "—"}R per trade over ${bankN?.let { "%,d".format(it) } ?: "—"} rows",
                     "Gross ${bp.num("gross_expectancy")?.let { fmt1(it) } ?: "—"}R, cost ${bp.num("cost_r_per_trade")?.let { fmt1(it) } ?: "—"}R/trade (roundtrip ${bp.obj("cost_model").num("roundtrip_bps")?.let { fmt1(it) } ?: "—"}bps).",
                     if ((netExp ?: -1.0) >= 0) GOOD else BAD,
                 )
+                SectionLabel("Metrics", divider = false)
                 MiniTable(
                     headers = listOf("METRIC", "VALUE"),
                     rows = listOf(
@@ -181,7 +183,8 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
                         srow("breakeven roundtrip" to NEUTRAL, (bp.num("breakeven_roundtrip_bps")?.let { "${fmt1(it)}bps" } ?: "—") to NEUTRAL),
                     ),
                 )
-                Note("S-1: breakeven_roundtrip_bps decides whether the business exists — gross edge is worthless below the venue's real roundtrip cost.", UNK)
+                SectionLabel("Why it matters", divider = true)
+                Note("S-1: breakeven_roundtrip_bps decides whether the business exists: gross edge is worthless below the venue's real roundtrip cost.", UNK)
             }
         }
 
@@ -247,6 +250,7 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
                     "true UTC ledger clock.",
                 WARN,
             )
+            SectionLabel("The three locks", divider = false)
             KvRow("Lock 1 · bank clock", "D-CLOCK-01 · mixed −07:00 / +00:00 offsets", BAD)
             KvRow("Lock 2 · n floor", "n ≥ 50 / cell · lifetime 2,367 vs 315 cells", WARN)
             KvRow("Lock 3 · resolver", "OPEN · flowing on true UTC", GOOD)
@@ -979,7 +983,7 @@ fun SuiteVenueScreen(repo: MissionRepository) {
         } else {
             VerdictBanner(
                 word = "The wall",
-                said = "get_venue_session has not answered this poll — the authoring-time zero-state below is " +
+                said = "get_venue_session has not answered this poll: the authoring-time zero-state below is " +
                     "the last-known shape. Tap ↻ to pull the live session.",
                 pills = listOf("SESSION —" to UNK),
                 wordTone = WARN,
@@ -1028,11 +1032,11 @@ fun SuiteVenueScreen(repo: MissionRepository) {
 
         // These row-tables have no dedicated MCP read yet — column shape only (honest).
         VenueTableCard("Fills (accepted & executed)", "get_venue_session", true,
-            "ts · symbol · side · px · leg · lane · fees — ${fills ?: 0} live fill(s) counted; per-fill rows PEND")
+            "ts · symbol · side · px · leg · lane · fees. ${fills ?: 0} live fill(s) counted; per-fill rows PEND")
         VenueTableCard("SL / TP legs", "get_venue_session", true,
-            "decision · SL px·status · TP px·status · breaker — per-leg rows PEND")
+            "decision · SL px·status · TP px·status · breaker. Per-leg rows PEND")
         VenueTableCard("Rejected / Canceled", "get_venue_session", true,
-            "ts · symbol · code · reason — per-row read PEND")
+            "ts · symbol · code · reason. Per-row read PEND")
 
         if (s.stale != null) Note("· ${s.stale}", WARN)
     }

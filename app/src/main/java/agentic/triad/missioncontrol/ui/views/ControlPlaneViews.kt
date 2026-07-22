@@ -73,6 +73,7 @@ import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
+import agentic.triad.missioncontrol.ui.components.SectionLabel
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
@@ -204,19 +205,19 @@ private fun ConnProfileTile(p: ConnProfile, blocked: Boolean, applied: Boolean) 
         KvRow("keys", p.keys, if (p.keys == "trade") BAD else GOOD)
         KvRow("entries", p.entries, if (p.entries == "ENABLED") BAD else UNK)
         KvRow("preset", p.preset, NEUTRAL)
-        if (applied) Note("APPLIED — get_config_active reports the estate is running this preset.", GOOD)
+        if (applied) Note("APPLIED: get_config_active reports the estate is running this preset.", GOOD)
         if (blocked) {
             Ribbon(
-                "INTERLOCKED — the dashboard will not arm this.",
+                "INTERLOCKED: the dashboard will not arm this.",
                 "The go/no-go board is not clean and the sole keyholder (EXECUTOR·CCXT) has no health source. " +
-                    "The dashboard will not arm real money — clear the board on Governance (view 18) first.",
+                    "The dashboard will not arm real money. Clear the board on Governance (view 18) first.",
                 SEV,
             )
         }
         if (p.system) {
             Note(
                 "Switch the SYSTEM → conn_activate · SYSTEM · CRITICAL. An operator action performed at " +
-                    "triadctl — this read-only dashboard never calls it.",
+                    "triadctl, this read-only dashboard never calls it.",
                 UNK,
             )
         }
@@ -298,11 +299,11 @@ fun ConnectionsScreen(repo: MissionRepository) {
     ) {
         // AT-C1 · name the missing control plane, quoting the tools' own words.
         Ribbon(
-            "Every control you asked for needs a server-side path. There isn't one — deliberately never built.",
+            "Every control you asked for needs a server-side path. There isn't one, deliberately never built.",
             "77 tools. 74 reads. The system says so in its own descriptions: get_kill_state is " +
-                "\"read-only (never a control path); honest unknown\"; get_config_preset — \"no tool writes it\"; " +
+                "\"read-only (never a control path); honest unknown\"; get_config_preset says \"no tool writes it\"; " +
                 "propose_action \"EXECUTES NOTHING\". A restart button that does not restart is the worst " +
-                "object in this dashboard — the false-green machine wearing the uniform of a control plane. " +
+                "object in this dashboard: the false-green machine wearing the uniform of a control plane. " +
                 "So every control here is honest about which of two tiers it lives in.",
             SEV,
         )
@@ -319,12 +320,14 @@ fun ConnectionsScreen(repo: MissionRepository) {
 
         // pProfiles · the four-profile connection board — demo / paper / live·REAL-MONEY / shadow (CXVIEW).
         McCard("Connections", tool = "CLIENT switch is real · SYSTEM switch is absent", sub = "the four-profile board") {
+            SectionLabel("what it means", divider = false)
             Note(
                 "Two different switches, and the page never confuses them. \"Use for this dashboard\" (the CLIENT " +
-                    "card below) repoints THIS dashboard — real, instant. \"Switch the SYSTEM →\" is conn_activate: it " +
+                    "card below) repoints THIS dashboard (real, instant). \"Switch the SYSTEM →\" is conn_activate: it " +
                     "changes what the estate is doing, it needs a tool that does not exist, and the dashboard never calls it.",
                 INFO,
             )
+            SectionLabel("the profiles", divider = true)
             CONN_PROFILES.forEach { p ->
                 val applied = p.preset != "—" && p.preset == appliedPreset
                 ConnProfileTile(p, blocked = p.danger && !boardClean, applied = applied)
@@ -333,7 +336,7 @@ fun ConnectionsScreen(repo: MissionRepository) {
                 LawBlock(
                     "C-5 · the LIVE interlock",
                     "Until the go/no-go board is clean ($evidenced of ${if (gateCount == 0) 9 else gateCount}), the LIVE " +
-                        "profile cannot be armed by any path in this dashboard. Not greyed-out-but-clickable — refused, " +
+                        "profile cannot be armed by any path in this dashboard. Not greyed-out-but-clickable: refused, " +
                         "logged, and told to your face.",
                 )
             }
@@ -352,10 +355,10 @@ fun ConnectionsScreen(repo: MissionRepository) {
             KvRow("money path", sysov.text("money_path").uppercase(), if (sysov == null) UNK else switchTone(sysov.text("money_path")))
             Ribbon(
                 "The safe half already works. The dangerous half is not on the server.",
-                "svc_restart and config_apply are SYSTEM writes — restart the MCP process / apply a preset to the " +
+                "svc_restart and config_apply are SYSTEM writes: restart the MCP process / apply a preset to the " +
                     "RUNNING system. Neither is on the estate (all reads), and both are OUT OF SCOPE here: rendered " +
                     "read-only, never called. config_apply would replace the governed path (proposal → triad-config " +
-                    "compile → git → triadctl config verify) — do not build it without a signed decision.",
+                    "compile → git → triadctl config verify). Do not build it without a signed decision.",
                 SEV,
             )
             Note(
@@ -367,7 +370,7 @@ fun ConnectionsScreen(repo: MissionRepository) {
 
         // C-1 · the CLIENT tier — REAL controls that repoint THIS dashboard (AT-C2).
         McCard("CLIENT tier (C-1)", tool = "goLive · goDemo · listTools", sub = "this dashboard's own connection · real, instant") {
-            Note("CLIENT — the dashboard's own connection. Real. Works today. Zero server work:", GOOD)
+            Note("CLIENT, the dashboard's own connection. Real. Works today. Zero server work:", GOOD)
             OutlinedTextField(
                 value = endpoint,
                 onValueChange = { endpoint = it },
@@ -403,7 +406,7 @@ fun ConnectionsScreen(repo: MissionRepository) {
                 else -> "$toolCount tools (0 = failed handshake)"
             }
             KvRow(
-                "handshake — real initialize + tools/list", tcLabel,
+                "handshake: real initialize + tools/list", tcLabel,
                 when {
                     testing || toolCount == null -> UNK
                     (toolCount ?: 0) > 0 -> GOOD
@@ -412,11 +415,11 @@ fun ConnectionsScreen(repo: MissionRepository) {
             )
             Note(
                 "\"Use for this dashboard\" repoints THIS dashboard's adapter (goLive/goDemo), stores the bearer " +
-                    "locally. Test connection is a genuine initialize + tools/list handshake — it prints the tool " +
+                    "locally. Test connection is a genuine initialize + tools/list handshake that prints the tool " +
                     "count it got back (0 = failed handshake). All instant, all real (AT-C2).",
                 NEUTRAL,
             )
-            Note("SYSTEM — the running estate. Does NOT exist. Every button probes, then proposes:", WARN)
+            Note("SYSTEM, the running estate. Does NOT exist. Every button probes, then proposes:", WARN)
             Note(
                 "\"Switch the SYSTEM\" is conn_activate. Press it → the dashboard calls tools/list → the tool " +
                     "isn't there → it shows the full build spec and files the proposal via propose_action (real, " +
@@ -428,7 +431,7 @@ fun ConnectionsScreen(repo: MissionRepository) {
         // C-5 · the LIVE interlock — the most important thing in this build. (AT-C5)
         McCard("LIVE interlock (C-5)", tool = "get_go_no_go_status", sub = "the toggle is REFUSED, not greyed-out-but-clickable") {
             if (gateCount == 0) {
-                Note("— · get_go_no_go_status returned no items (tool unavailable). The board can't be read, so LIVE stays refused — never defaulted to clean.", UNK)
+                Note("— · get_go_no_go_status returned no items (tool unavailable). The board can't be read, so LIVE stays refused, never defaulted to clean.", UNK)
             } else {
                 MiniTable(
                     listOf("gate", "verdict", "evidence"),
@@ -439,30 +442,30 @@ fun ConnectionsScreen(repo: MissionRepository) {
                     },
                 )
             }
-            KvRow("gate 2 · key-safety probe", "UNKNOWN — EXECUTOR·CCXT has no health source", UNK)
+            KvRow("gate 2 · key-safety probe", "UNKNOWN: EXECUTOR·CCXT has no health source", UNK)
             Ribbon(
-                "conn_activate(\"live\") is HARD-REFUSED — go/no-go board is not clean ($evidenced of ${if (gateCount == 0) 9 else gateCount}).",
-                "The dashboard will not arm LIVE. Not greyed-out-but-clickable — refused, logged, and told to " +
+                "conn_activate(\"live\") is HARD-REFUSED: go/no-go board is not clean ($evidenced of ${if (gateCount == 0) 9 else gateCount}).",
+                "The dashboard will not arm LIVE. Not greyed-out-but-clickable: refused, logged, and told to " +
                     "your face. You cannot go live through a sole keyholder that nobody is watching. A dashboard " +
                     "that can put you on real money while the executor has no health source is not a control " +
-                    "plane — it is a loaded gun. Clear the board on Governance and LIVE unlocks here. Nowhere else.",
+                    "plane: it is a loaded gun. Clear the board on Governance and LIVE unlocks here. Nowhere else.",
                 SEV,
             )
-            Note("No clickable activate is rendered — the interlock refuses at the source. Refusal written to the local control ledger (C-6).", SEV)
+            Note("No clickable activate is rendered: the interlock refuses at the source. Refusal written to the local control ledger (C-6).", SEV)
         }
 
         // The SYSTEM control tools — PEND boxes (AT-C3: full build spec on absence).
         McCard("SYSTEM controls", tool = "propose_action", sub = "absent, spec'd, and proposed") {
-            Note("Read-only page. The only tool it calls today is propose_action (AT-C7). Every control below is a build spec that files a proposal — it EXECUTES NOTHING.", INFO)
+            Note("Read-only page. The only tool it calls today is propose_action (AT-C7). Every control below is a build spec that files a proposal: it EXECUTES NOTHING.", INFO)
         }
-        PendBox("conn_activate", "CRIT · the single most dangerous tool in the estate — repoints the SYSTEM profile (demo/shadow/paper/live). LIVE hard-refused until the go/no-go board is clean (C-5). ARMED: 10s + visible countdown + CONFIRM (C-4/AT-C8). Absent ⇒ probes tools/list, shows this spec, files propose_action.")
+        PendBox("conn_activate", "CRIT · the single most dangerous tool in the estate: repoints the SYSTEM profile (demo/shadow/paper/live). LIVE hard-refused until the go/no-go board is clean (C-5). ARMED: 10s + visible countdown + CONFIRM (C-4/AT-C8). Absent ⇒ probes tools/list, shows this spec, files propose_action.")
         PendBox("conn_profiles", "read · the profiles the system knows. Absent ⇒ proposes.")
         PendBox("mcp_servers", "read · the MCP servers the ESTATE runs (distinct from the dashboard's own registry). Absent ⇒ proposes.")
 
         // pLedger · C-6 — the recorded-actions log (every action, including the refusals).
         McCard("Control ledger", "C-6 · every action, including the refusals") {
             Note(
-                "Every control action is recorded — executed, armed, refused, or filed as a proposal. A control " +
+                "Every control action is recorded: executed, armed, refused, or filed as a proposal. A control " +
                     "plane without an audit trail is not a control plane.",
                 NEUTRAL,
             )
@@ -470,7 +473,7 @@ fun ConnectionsScreen(repo: MissionRepository) {
             Note(
                 "This build is read-only: it issues no executes / arms / toggles, so the local ledger stays empty " +
                     "by design. The estate's own control writes surface in Governance's proposals inbox " +
-                    "(propose_action, the one write the app makes — it executes nothing).",
+                    "(propose_action, the one write the app makes; it executes nothing).",
                 NEUTRAL,
             )
         }
@@ -565,7 +568,7 @@ private fun McpServerTile(s: McpServer, liveToolCount: Int?) {
         }
         Note(
             "Enable / disable → mcp_toggle · set / refresh token → mcp_token_issue / mcp_token_revoke · remove → " +
-                "mcp_servers — all SYSTEM control-writes that do not exist on the estate. This read-only mirror " +
+                "mcp_servers: all SYSTEM control-writes that do not exist on the estate. This read-only mirror " +
                 "renders them disabled and NEVER calls them; they are operator actions performed at triadctl.",
             UNK,
         )
@@ -613,9 +616,9 @@ fun McpScreen(repo: MissionRepository) {
         ),
     ) {
         Ribbon(
-            "Connections vs the server process — the distinction this page exists to hold.",
+            "Connections vs the server process: the distinction this page exists to hold.",
             "Turning a server OFF here stops THIS dashboard calling it. It does NOT stop the process. " +
-                "Stopping the process is mcp_toggle — a SYSTEM control that does not exist yet. CLIENT-tier is " +
+                "Stopping the process is mcp_toggle, a SYSTEM control that does not exist yet. CLIENT-tier is " +
                 "real and instant; SYSTEM-tier probes tools/list, finds nothing, and files a proposal.",
             INFO,
         )
@@ -635,9 +638,10 @@ fun McpScreen(repo: MissionRepository) {
 
         // The connected MCP window — CLIENT-tier, real.
         McCard("The connected MCP window (CLIENT-tier)", "list_docs · listTools") {
+            SectionLabel("the connection", divider = false)
             KvRow("endpoint", TriadApp.LIVE_ENDPOINT.substringBefore("?"), NEUTRAL)
             KvRow("tools exposed", "~77 (74 reads · run_select SELECT-only · 2 writes)", NEUTRAL)
-            KvRow("handshake", if (docCount > 0) "LIVE — list_docs returned $docCount docs" else "list_docs returned no rows", if (docCount > 0) GOOD else UNK)
+            KvRow("handshake", if (docCount > 0) "LIVE: list_docs returned $docCount docs" else "list_docs returned no rows", if (docCount > 0) GOOD else UNK)
             Row(Modifier.padding(top = 4.dp, bottom = 2.dp)) {
                 Button(
                     onClick = {
@@ -666,15 +670,16 @@ fun McpScreen(repo: MissionRepository) {
                     else -> BAD
                 },
             )
-            KvRow("auth", "Authorization: Bearer — stored locally by the dashboard", NEUTRAL)
+            KvRow("auth", "Authorization: Bearer, stored locally by the dashboard", NEUTRAL)
             // The connected server's own truth (read-only) — get_config_active + get_attestation.
             KvRow("estate applied preset", cfg.text("preset", cfg.text("name")), if (cfg == null) UNK else NEUTRAL)
             KvRow("config fingerprint", cfg.text("fingerprint").removePrefix("sha256:").take(12), if (cfg == null) UNK else NEUTRAL)
             KvRow("attestation manifest", att.text("manifest_sha").removePrefix("sha256:").take(12), if (att == null) UNK else NEUTRAL)
             KvRow("contracts version", att.text("contracts_version"), if (att == null) UNK else NEUTRAL)
+            SectionLabel("what's real", divider = true)
             Note(
                 "CLIENT controls that are REAL here: add / remove a server, enable / disable (the dashboard " +
-                    "stops calling it), set / refresh a bearer token, and Test connection — a genuine " +
+                    "stops calling it), set / refresh a bearer token, and Test connection: a genuine " +
                     "initialize + tools/list handshake that prints the tool count it got back (AT-C2).",
                 GOOD,
             )
@@ -689,13 +694,15 @@ fun McpScreen(repo: MissionRepository) {
         // headline CLIENT-plane panel: TriadMCP (connected, live tool-count) + UPONLY MCP (disabled, honest-
         // null). Placed right after the connected-window card, mirroring MCPVIEW paint() order pStance→pServers.
         McCard("MCP servers", tool = "CLIENT PLANE · real, works today", sub = "the dashboard's connections") {
+            SectionLabel("what it means", divider = false)
             Note(
-                "C-2 · this roster is real — these are the endpoints THIS dashboard knows, and which one it " +
+                "C-2 · this roster is real: these are the endpoints THIS dashboard knows, and which one it " +
                     "talks through. The connected server carries a live tools/list count; the rest are honestly " +
                     "untested (— · never · UNTESTED). But enable / disable, set token, and Add are SYSTEM " +
-                    "control-writes — this read-only mirror renders them disabled and never calls them.",
+                    "control-writes, and this read-only mirror renders them disabled and never calls them.",
                 NEUTRAL,
             )
+            SectionLabel("the servers", divider = true)
             MCP_SERVERS.forEach { srv -> McpServerTile(srv, toolCount) }
             Row(Modifier.padding(top = 8.dp)) {
                 Button(onClick = {}, enabled = false) { Text("+ Add an MCP server") }
@@ -707,8 +714,8 @@ fun McpScreen(repo: MissionRepository) {
             WhyBox("THE LAW · C-2 · CLIENT tier") {
                 LawBlock(
                     "C-2 · CLIENT tier",
-                    "These are the dashboard's OWN connections — which endpoints it talks to, with which token. " +
-                        "Turning a server off here would stop THIS dashboard calling it — it does NOT stop the " +
+                    "These are the dashboard's OWN connections: which endpoints it talks to, with which token. " +
+                        "Turning a server off here would stop THIS dashboard calling it: it does NOT stop the " +
                         "process. That needs mcp_toggle, a SYSTEM control that does not exist. This mirror renders " +
                         "the switch read-only.",
                 )
@@ -716,22 +723,24 @@ fun McpScreen(repo: MissionRepository) {
         }
 
         McCard("SYSTEM controls", tool = "propose_action", sub = "the estate's MCP, absent and proposed") {
-            Note("Read-only page; the only tool it calls today is propose_action (AT-C7). Each control below renders its full build spec and files a proposal — EXECUTES NOTHING.", INFO)
+            Note("Read-only page; the only tool it calls today is propose_action (AT-C7). Each control below renders its full build spec and files a proposal: EXECUTES NOTHING.", INFO)
         }
         PendBox("mcp_servers", "read · the MCP servers the ESTATE runs (not the dashboard's own registry). Absent ⇒ proposes.")
         PendBox("mcp_token_issue", "CRIT · mint a scoped bearer token. ARMED: 10s + CONFIRM (C-4). Absent ⇒ probes tools/list, then proposes.")
-        PendBox("mcp_token_revoke", "HIGH · revoke a token — refuses to revoke the one you are using. ARMED. Absent ⇒ proposes.")
-        PendBox("mcp_toggle", "HIGH · start / stop an MCP SERVER PROCESS — refuses self-lockout. This, not the CLIENT disable, is what stops the process. ARMED. Absent ⇒ proposes.")
+        PendBox("mcp_token_revoke", "HIGH · revoke a token: refuses to revoke the one you are using. ARMED. Absent ⇒ proposes.")
+        PendBox("mcp_toggle", "HIGH · start / stop an MCP SERVER PROCESS: refuses self-lockout. This, not the CLIENT disable, is what stops the process. ARMED. Absent ⇒ proposes.")
 
         // pLedger · C-6 — the recorded-actions log, wired to get_proposals (propose_action's real record).
         McCard("Control ledger", "C-6 · every action, including the refusals · get_proposals") {
+            SectionLabel("what it records", divider = false)
             Note(
-                "Every control action is recorded — executed, armed, refused, or filed as a proposal. A control " +
+                "Every control action is recorded: executed, armed, refused, or filed as a proposal. A control " +
                     "plane without an audit trail is not a control plane.",
                 NEUTRAL,
             )
+            SectionLabel("the record", divider = true)
             if (proposals.isEmpty()) {
-                Note("no control actions recorded — get_proposals is empty or unavailable (nothing fabricated).", UNK)
+                Note("no control actions recorded: get_proposals is empty or unavailable (nothing fabricated).", UNK)
             } else {
                 MiniTable(
                     listOf("action", "target", "status"),
@@ -761,7 +770,7 @@ fun McpScreen(repo: MissionRepository) {
         WhyBox("THE LAWS · C-1..C-6") {
             LawBlock(
                 "C-1..C-6",
-                "CLIENT vs SYSTEM is never confused — a dashboard disable is not a process stop · absent controls " +
+                "CLIENT vs SYSTEM is never confused: a dashboard disable is not a process stop · absent controls " +
                     "render their build spec · money/lockout controls ARM first · mcp_token_revoke refuses your own " +
                     "token and mcp_toggle refuses self-lockout · every action, including refusals, is logged.",
             )
@@ -773,7 +782,7 @@ fun McpScreen(repo: MissionRepository) {
         Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f).height(1.dp).background(Line))
             Text(
-                "SERVER READS — BEYOND THE PAGE SPEC", color = Unk, fontFamily = FontFamily.Monospace, fontSize = 9.sp,
+                "SERVER READS: BEYOND THE PAGE SPEC", color = Unk, fontFamily = FontFamily.Monospace, fontSize = 9.sp,
                 letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 8.dp),
             )
             Box(Modifier.weight(1f).height(1.dp).background(Line))
@@ -782,7 +791,7 @@ fun McpScreen(repo: MissionRepository) {
         McCard("MCP audit", tool = "get_mcp_audit_summary", sub = "calls, failures, and who may render green") {
             val audit = d["get_mcp_audit_summary"] as? JsonObject
             if (audit == null) {
-                Note("get_mcp_audit_summary not served — the audit is honestly UNKNOWN.", UNK)
+                Note("get_mcp_audit_summary not served: the audit is honestly UNKNOWN.", UNK)
             } else {
                 val totals = audit.obj("totals")
                 val failRate = totals.num("fail_rate")
@@ -831,7 +840,7 @@ fun McpScreen(repo: MissionRepository) {
                     )
                 }
                 Note(audit.text("rule", "a tool whose fail_rate exceeds 0.05 may not have its output rendered as green"), WARN)
-                Note("No by-caller split and no deny ledger in this envelope — caller attribution renders — until the server ships it.", UNK)
+                Note("No by-caller split and no deny ledger in this envelope: caller attribution renders — until the server ships it.", UNK)
             }
         }
     }
@@ -879,7 +888,7 @@ private val VioSoft = Color(0xFFEFEAFB)
 /** M-1 status vocabulary — a green dot must name its source (ST in the JS, exact texts). */
 private enum class NodeStatus(val label: String, val meaning: String, val tone: Tone) {
     MEASURED("MEASURED", "a real heartbeat from a named process", GOOD),
-    INFERRED("INFERRED", "derived from a table having rows — NOT process health", INFO),
+    INFERRED("INFERRED", "derived from a table having rows, not process health", INFO),
     IDLE("IDLE", "the process may be up; it has produced nothing", WARN),
     DOWN("DOWN", "the transport itself reports unavailable", BAD),
     UNKNOWN("UNKNOWN", "no health source exists at all", UNK),
@@ -963,7 +972,7 @@ private val ESTATE_NODES = listOf(
         "market", 20f, 54f, 164f, 58f, "MARKET", "Binance data", "klines · OI · funding",
         plane = "source", emits = "raw market", takes = "—",
         owns = "Checkup (03)", proc = null, healthSrc = "—", ext = true,
-        findings = listOf("The venue's market data — klines, open interest, funding. The tape everything reads."),
+        findings = listOf("The venue's market data: klines, open interest, funding. The tape everything reads."),
         status = { NodeStatus.UNKNOWN }, ev = { "the tape" },
     ),
     EstateNode(
@@ -1015,7 +1024,7 @@ private val ESTATE_NODES = listOf(
         owns = "Executor (02)", proc = "triad-venue-gateway", healthSrc = "—", keyholder = true,
         findings = listOf(
             "VGP = venue_gateway · native HMAC (CCXT off the write path) · clientOrderId TRIAD-owned · the sole keyholder, no health source",
-            "reconciler NEVER RUN · fill recorder MISSING (§1) — the return loop is open · run it once → labels become evidence + P1 F4",
+            "reconciler NEVER RUN · fill recorder MISSING (§1): the return loop is open · run it once → labels become evidence + P1 F4",
         ),
         status = { NodeStatus.UNKNOWN }, ev = { "up 5h31m · reconciler never run" },
     ),
@@ -1024,8 +1033,8 @@ private val ESTATE_NODES = listOf(
         plane = "external", emits = "fills · positions", takes = "orders", ext = true,
         owns = "Executor (02)", proc = null, healthSrc = "—",
         findings = listOf(
-            "venue crossed · 13 BUY · \$101.18 · 2 positions LIVE — ledger records 0 fills → positions invisible",
-            "No cancel-on-disconnect. Only ~\$100 equity keeps fills rare — an accident of size, not a control.",
+            "venue crossed · 13 BUY · \$101.18 · 2 positions LIVE, ledger records 0 fills → positions invisible",
+            "No cancel-on-disconnect. Only ~\$100 equity keeps fills rare: an accident of size, not a control.",
         ),
         status = { NodeStatus.UNKNOWN }, ev = { "13 BUY · 2 live · 0 fills recorded" },
     ),
@@ -1055,13 +1064,13 @@ private val ESTATE_NODES = listOf(
             "thousands of users · gated signals → each user's OWN rules + risk governor · executes with the USER'S OWN keys",
             "never: hold TRIAD's keys · feed anything upstream into the money path",
         ),
-        status = { NodeStatus.UNKNOWN }, ev = { "users' own keys — TRIAD's never travel" },
+        status = { NodeStatus.UNKNOWN }, ev = { "users' own keys, TRIAD's never travel" },
     ),
     EstateNode(
         "hyperliquid", 1180f, 290f, 272f, 50f, "EXTERNAL", "Hyperliquid · user accts", "TRIAD-fabric: display-only · no HL keys",
         plane = "external", emits = "user fills", takes = "user orders", ext = true,
         owns = "Connections (19)", proc = null, healthSrc = "—",
-        findings = listOf("Users execute on their own Hyperliquid accounts. TRIAD-fabric is display-only — no HL keys exist."),
+        findings = listOf("Users execute on their own Hyperliquid accounts. TRIAD-fabric is display-only: no HL keys exist."),
         status = { NodeStatus.UNKNOWN }, ev = { "display-only · no HL keys" },
     ),
     EstateNode(
@@ -1082,7 +1091,7 @@ private val ESTATE_NODES = listOf(
         subs = listOf(Sub("postgres (SoR)", "✓"), Sub("ledger", "✓"), Sub("migrations/ W-71", "⏳")),
         findings = listOf(
             "Postgres SoR · ledger · migrations · the only node with a real heartbeat (3 fresh ingest ages, W-30)",
-            "migrations/ holds the W-71 psql, UNAPPLIED — the cure: one command turns the trio green",
+            "migrations/ holds the W-71 psql, UNAPPLIED. The cure: one command turns the trio green",
         ),
         status = { if (it.lanes.isNotEmpty()) NodeStatus.MEASURED else NodeStatus.UNKNOWN },
         ev = {
@@ -1140,13 +1149,13 @@ private fun DistKind.color(): Color = when (this) { DistKind.KEYLESS -> Vio; Dis
 
 private val DIST_NODES = listOf(
     DistNode("relay", 24f, 40f, 232f, 92f, "TRIADRELAY · from above", "Distributor", "post-governor approved intents", "KEYLESS · one-way · two transforms", DistTone.RELAY),
-    DistNode("xform", 300f, 30f, 268f, 112f, "THE TWO PERMITTED TRANSFORMS", "① HMAC scatter", "② the USER GATE — live wallet → yes/no", "per the user's OWN rules · caps · risk", DistTone.TRANSFORM),
-    DistNode("uponly", 612f, 24f, 274f, 128f, "UpONLY PLATFORM", "thousands of users", "{user · venue · env · keys · caps}", "USERS' OWN KEYS — TRIAD's never travel", DistTone.CLIENT),
+    DistNode("xform", 300f, 30f, 268f, 112f, "THE TWO PERMITTED TRANSFORMS", "① HMAC scatter", "② the USER GATE: live wallet → yes/no", "per the user's OWN rules · caps · risk", DistTone.TRANSFORM),
+    DistNode("uponly", 612f, 24f, 274f, 128f, "UpONLY PLATFORM", "thousands of users", "{user · venue · env · keys · caps}", "USERS' OWN KEYS: TRIAD's never travel", DistTone.CLIENT),
     DistNode("ubn", 930f, 26f, 226f, 56f, "Binance", "user accts", "live·binance·uponly-user rows", tone = DistTone.VENUE),
     DistNode("uhl", 930f, 96f, 226f, 56f, "Hyperliquid", "user accts", "TRIAD-fabric · display-only", tone = DistTone.VENUE),
     DistNode("tg", 300f, 168f, 268f, 62f, "TELEGRAM · TG-01", "#signals (M1) · #lab (shadow)", "cards · lawful chip · DRYRUN/LIVE · decision_id", tone = DistTone.RELAY),
     DistNode("bank", 612f, 188f, 274f, 100f, "UpONLY DATABANK + MCP", "12M rows · 45d · multi-engine", "v_pop_* views · setting.bgzr.io/mcp", "XENG-01 board · BF-02 retro-judge", DistTone.MEASURE),
-    DistNode("sidecar", 24f, 240f, 250f, 66f, "FinGPT/Kronos sidecar fleet", "their box", "v3/v4 · kronos predict/score", "other engines' judges — never TRIAD's", DistTone.CLIENT, dash = true),
+    DistNode("sidecar", 24f, 240f, 250f, 66f, "FinGPT/Kronos sidecar fleet", "their box", "v3/v4 · kronos predict/score", "other engines' judges, never TRIAD's", DistTone.CLIENT, dash = true),
 )
 private val DIST_EDGES = listOf(
     DistEdge("relay", "xform", "", DistKind.KEYLESS),
@@ -1547,7 +1556,7 @@ private fun MapLegend() {
             ) {
                 StatusDot(st, dotSize = 9.dp)
                 Text(
-                    "${st.label} — ${st.meaning}", color = Ink2, fontFamily = TopoMono,
+                    "${st.label}: ${st.meaning}", color = Ink2, fontFamily = TopoMono,
                     fontSize = 9.5.sp, lineHeight = 12.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 6.dp),
                 )
@@ -1756,8 +1765,8 @@ private fun TxDiagramSays(busErr: String?) {
             fontSize = 14.sp, modifier = Modifier.padding(top = 5.dp, bottom = 7.dp),
         )
         Text("7 streams · dedupe by Nats-Msg-Id (120s) · DLQ per stream", color = Ink2, fontFamily = TopoMono, fontSize = 10.sp, lineHeight = 15.sp)
-        Text("MARKET · CONTEXT · CAND · DEC — live", color = Ink2, fontFamily = TopoMono, fontSize = 10.sp, lineHeight = 15.sp)
-        Text("INTENT · ORDERS · FILLS — empty", color = Ink2, fontFamily = TopoMono, fontSize = 10.sp, lineHeight = 15.sp)
+        Text("MARKET · CONTEXT · CAND · DEC: live", color = Ink2, fontFamily = TopoMono, fontSize = 10.sp, lineHeight = 15.sp)
+        Text("INTENT · ORDERS · FILLS: empty", color = Ink2, fontFamily = TopoMono, fontSize = 10.sp, lineHeight = 15.sp)
         Text(
             if (busErr != null) "get_bus_status → { error: \"transport: unavailable\", detail: \"nats\" }"
             else "get_bus_status → ok",
@@ -1782,7 +1791,7 @@ private fun TxSystemSays(laneCount: Int) {
             buildAnnotatedString {
                 append("direct ingest-registry heartbeats (W-30).\n")
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Ink)) { append("This is what is actually carrying every byte") }
-                append(" — and it is ")
+                append(", and it is ")
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Ink)) { append("not on the diagram") }
                 append(".")
             },
@@ -1827,7 +1836,7 @@ private fun NatsRootCauseRibbon() {
     ) {
         Text(
             buildAnnotatedString {
-                withStyle(b) { append("NATS was never provisioned — the root cause the whole audit returns to.") }
+                withStyle(b) { append("NATS was never provisioned: the root cause the whole audit returns to.") }
                 append(" No bus → no consumer dedupe → duplicate rows → inflated aggregates → a poisoned corpus. ")
                 withStyle(b) { append("One unprovisioned bus sits upstream of every number here.") }
             },
@@ -1891,7 +1900,7 @@ fun TopologyScreen(repo: MissionRepository) {
                 val open = expanded == i
                 EstateNodeRow(n, st, n.safeEv(m), expanded = open, onClick = { expanded = if (open) -1 else i }) {
                     // the node drawer — status ribbon, plane/emits/consumes, findings + control (M-3)
-                    Ribbon("${st.label} — ${st.meaning}", "health source: ${n.healthSrc}   ·   reads: ${n.safeEv(m)}", st.tone)
+                    Ribbon("${st.label}: ${st.meaning}", "health source: ${n.healthSrc}   ·   reads: ${n.safeEv(m)}", st.tone)
                     KvRow("plane", n.plane, NEUTRAL)
                     KvRow("emits", n.emits, INFO)
                     KvRow("consumes", n.takes, NEUTRAL)
@@ -1902,18 +1911,18 @@ fun TopologyScreen(repo: MissionRepository) {
                     if (n.proc != null) {
                         KvRow("process", n.proc, NEUTRAL)
                         KvRow("pid · uptime", "UNKNOWN", UNK)
-                        KvRow("restarts 24h", "UNKNOWN — a restart is indistinguishable from a crash loop", UNK)
+                        KvRow("restarts 24h", "UNKNOWN: a restart is indistinguishable from a crash loop", UNK)
                         Note(
-                            "There is no control path. svc_start, svc_stop and svc_restart are not on the server — " +
-                                "all 77 tools are reads. Each drawer control probes, finds nothing, and files the build " +
+                            "There is no control path. svc_start, svc_stop and svc_restart are not on the server. " +
+                                "All 77 tools are reads. Each drawer control probes, finds nothing, and files the build " +
                                 "proposal. It will not pretend to have restarted anything.",
                             SEV,
                         )
                         if (n.keyholder) {
                             Ribbon(
-                                "This is the sole keyholder — svc_stop is REFUSED while anything rests",
+                                "This is the sole keyholder: svc_stop is REFUSED while anything rests",
                                 "svc_stop on it, with a resting order and no cancel-on-disconnect, leaves an order live " +
-                                    "on a venue nobody is watching. The build spec refuses it while anything rests — the " +
+                                    "on a venue nobody is watching. The build spec refuses it while anything rests: the " +
                                     "refusal is written to the control ledger (C-6).",
                                 SEV,
                             )
@@ -1939,7 +1948,7 @@ fun TopologyScreen(repo: MissionRepository) {
             DistLegend()
             LawBlock(
                 "the never-blend law · account axis",
-                "uponly-user rows never aggregate with TRIAD-fabric — separate keys, caps, books. Labeled side-by-side views only.",
+                "uponly-user rows never aggregate with TRIAD-fabric: separate keys, caps, books. Labeled side-by-side views only.",
             )
         }
 
@@ -1979,7 +1988,7 @@ fun TopologyScreen(repo: MissionRepository) {
         McCard("\"services_up: $okTables / $tableCount\"", tool = "get_service_status × get_system_overview", sub = "those $tableCount are TABLES") {
             TopoVerdict(
                 "get_service_status returns ledger writers, not the 6 real processes.",
-                "Signal, Gateway, Executor, the venue gateway, Ollama, NATS — none appear. Six processes have no health source.",
+                "Signal, Gateway, Executor, the venue gateway, Ollama, NATS: none appear. Six processes have no health source.",
             )
             WhyAccordion {
                 if (m.svc.isEmpty()) {
@@ -2006,11 +2015,11 @@ fun TopologyScreen(repo: MissionRepository) {
                         }
                     }
                 }
-                Note("intents & orders are STALE (a writer stopped), not EMPTY — fills & outcomes are EMPTY (never started). Different bugs.", WARN)
+                Note("intents & orders are STALE (a writer stopped), not EMPTY. Fills & outcomes are EMPTY (never started). Different bugs.", WARN)
                 KvRow("system overview services_up", (m.servicesUp?.let { "$it / ${m.servicesTotal ?: "?"}" }) ?: "—", if (m.servicesUp == null) UNK else WARN)
                 LawBlock(
                     "M-1 · services_up counts tables, not services",
-                    "Six real processes have no health source. A 5-line heartbeat file each closes it — the cheapest fix on this page.",
+                    "Six real processes have no health source. A 5-line heartbeat file each closes it: the cheapest fix on this page.",
                 )
             }
             TopoPend("get_process_status", PEND_PROCESS_STATUS)
@@ -2024,14 +2033,14 @@ fun TopologyScreen(repo: MissionRepository) {
             )
             WhyAccordion {
                 Note(
-                    "EXECUTOR · CCXT — the sole keyholder · maker-only · UDS socket. The only component in the estate " +
+                    "EXECUTOR · CCXT: the sole keyholder · maker-only · UDS socket. The only component in the estate " +
                         "that holds exchange credentials. Per P2 the model cannot touch a venue; per the topology, " +
                         "everything funnels through this one process.",
                     SEV,
                 )
-                KvRow("health source", "NONE — not in any tool", BAD)
-                KvRow("go/no-go gate 2", "UNKNOWN — key-safety probe", UNK)
-                KvRow("orders sent, ever", "0 — never contacted a venue", NEUTRAL)
+                KvRow("health source", "NONE: not in any tool", BAD)
+                KvRow("go/no-go gate 2", "UNKNOWN: key-safety probe", UNK)
+                KvRow("orders sent, ever", "0, never contacted a venue", NEUTRAL)
                 LawBlock(
                     "M-5",
                     "The sole keyholder must be the most instrumented process in the estate. It is the least. Gate 2 " +

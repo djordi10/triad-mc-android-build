@@ -31,6 +31,7 @@ import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
+import agentic.triad.missioncontrol.ui.components.SectionLabel
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
@@ -135,7 +136,7 @@ fun ConfigScreen(repo: MissionRepository) {
         ),
     ) {
         Ribbon(
-            "Viewer + propose · R-C1 (the GUI cannot apply — ever)",
+            "Viewer + propose · R-C1 (the GUI cannot apply, ever)",
             "This is the applied baseline the server serves (get_config_preset), with the topbar from " +
                 "get_config_active. The levers are READ-ONLY here. Changing config is the governed path: " +
                 "change-plan → triad-config compile (bounds-checked) → git → triadctl config verify → apply. " +
@@ -156,10 +157,12 @@ fun ConfigScreen(repo: MissionRepository) {
         // editor affordances that operate on the CLIENT draft; the working Export change-plan is the
         // live ConfigDraftCard below. Nothing here applies to the running system (R-C1).
         McCard("The editor", tool = "config store · R-C1", sub = "draft over the applied baseline") {
+            SectionLabel("Draft state", divider = false)
             KvRow("mode", "DRAFT EDITOR · READ + PROPOSE · R-C1 (apply only via triadctl)", INFO)
             KvRow("applied profile", if (preset == "—") "—" else preset, NEUTRAL)
             KvRow("fingerprint", fpShort, NEUTRAL)
             KvRow("draft state", stateLabel, stateTone)
+            SectionLabel("Editor chips", divider = true)
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 Tag("applied-baseline ▾", NEUTRAL)
                 Tag("Save profile", NEUTRAL)
@@ -168,7 +171,7 @@ fun ConfigScreen(repo: MissionRepository) {
                 Tag("Export preset", INFO)
                 Tag("Export change-plan →", GOOD)
             }
-            Note("Full editor over the applied preset. Every control writes a draft; nothing applies from here (R-C1). Save profile / Discard / Import JSON / Export preset act on the client draft; Export change-plan produces the grouped ops for triad-config compile → triadctl config verify → apply — the live change-plan builder is the card below.", NEUTRAL)
+            Note("Full editor over the applied preset. Every control writes a draft; nothing applies from here (R-C1). Save profile / Discard / Import JSON / Export preset act on the client draft; Export change-plan produces the grouped ops for triad-config compile → triadctl config verify → apply. The live change-plan builder is the card below.", NEUTRAL)
         }
 
         McCard("Applied preset", tool = "get_config_active · get_config_preset", sub = "the served baseline") {
@@ -182,7 +185,7 @@ fun ConfigScreen(repo: MissionRepository) {
                 KvRow("author · ums", meta.text("author") + " · " + meta.text("ums"), NEUTRAL)
                 Note(meta.text("notes"), NEUTRAL)
             }
-            if (dirty) Note("Draft diverges from BASE — export a change-plan and run it through the compiler.", WARN)
+            if (dirty) Note("Draft diverges from BASE: export a change-plan and run it through the compiler.", WARN)
         }
 
         if (domains == null) {
@@ -197,15 +200,16 @@ fun ConfigScreen(repo: MissionRepository) {
                     Bar(name, n.coerceAtLeast(1.0), if (mcpBad) SEV else INFO, if (mcpBad) "⚠ example.com placeholder" else "")
                 }
                 HBarChart(levers, unit = "levers", labelWidth = 100)
-                Note("Every domain is a group of read-only levers. The fingerprint attests to all of them at once — one grouped apply = one fingerprint. Editing any lever is the governed path (change-plan → compile → verify → apply), never this viewer.", NEUTRAL)
+                Note("Every domain is a group of read-only levers. The fingerprint attests to all of them at once: one grouped apply = one fingerprint. Editing any lever is the governed path (change-plan → compile → verify → apply), never this viewer.", NEUTRAL)
             }
 
             // Trading settings — the 45bps fee law + RR floors + TTL bounds.
-            DomainCard("Trading settings — risk · execution", "domains.risk.* + domains.execution.*", domains.obj("risk")) {
+            DomainCard("Trading settings: risk · execution", "domains.risk.* + domains.execution.*", domains.obj("risk")) {
                 val risk = domains.obj("risk")
                 val exec = domains.obj("execution")
+                SectionLabel("Levers", divider = false)
                 KvRow("conviction threshold", num(risk, "conviction_threshold"), NEUTRAL)
-                KvRow("min stop width (bps)", num(risk, "min_stop_width_bps") + " — the 45bps fee law", WARN)
+                KvRow("min stop width (bps)", num(risk, "min_stop_width_bps") + " (the 45bps fee law)", WARN)
                 KvRow("net / gross RR floor", num(risk, "net_rr_floor") + " / " + num(risk, "gross_rr_floor"), NEUTRAL)
                 KvRow("risk % equity", num(risk, "risk_pct_equity"), NEUTRAL)
                 KvRow("size mult range", num(risk, "mult_min") + " – " + num(risk, "mult_max"), NEUTRAL)
@@ -214,11 +218,12 @@ fun ConfigScreen(repo: MissionRepository) {
                 KvRow("exit profile", exec.text("exit_profile"), INFO)
                 KvRow("tp exec arm", exec.text("tp_exec_arm"), INFO)
                 KvRow("time-stop mult", num(exec, "time_stop_mult"), INFO)
-                Note("Read-only levers. min_stop_width_bps carries the 45bps law; exit_profile flip is adoption-gated (paired CI) — the compiler refuses it without the evidence line.")
+                SectionLabel("The laws", divider = true)
+                Note("Read-only levers. min_stop_width_bps carries the 45bps law; exit_profile flip is adoption-gated (paired CI): the compiler refuses it without the evidence line.")
             }
 
             // Regimes — per-regime enable + size mult.
-            DomainCard("Regimes — enable · size_mult", "domains.regimes.{r}.*", domains.obj("regimes")) {
+            DomainCard("Regimes: enable · size_mult", "domains.regimes.{r}.*", domains.obj("regimes")) {
                 val regimes = domains.obj("regimes")
                 MiniTable(
                     listOf("regime", "enabled", "size_mult"),
@@ -236,13 +241,15 @@ fun ConfigScreen(repo: MissionRepository) {
             }
 
             // Intelligence / LLM.
-            DomainCard("LLM — serving · model", "domains.intelligence.*", domains.obj("intelligence")) {
+            DomainCard("LLM: serving · model", "domains.intelligence.*", domains.obj("intelligence")) {
                 val i = domains.obj("intelligence")
+                SectionLabel("Model", divider = false)
                 KvRow("serving", i.text("serving"), NEUTRAL)
                 KvRow("model tag", i.text("model_tag"), INFO)
                 KvRow("temperature · seed", num(i, "temperature") + " · " + num(i, "seed"), NEUTRAL)
                 KvRow("max tokens", num(i, "max_tokens"), NEUTRAL)
                 KvRow("deadline p95 / cap (s)", num(i, "deadline_p95_s") + " / " + num(i, "deadline_cap_s"), NEUTRAL)
+                SectionLabel("Ceremony", divider = true)
                 Note("model_tag changes require a registry entry + ceremony; a prompt_template bump triggers goldens + a corpus re-cut checklist.")
             }
 
@@ -257,8 +264,9 @@ fun ConfigScreen(repo: MissionRepository) {
             }
 
             // Personas.
-            DomainCard("Personas — the shadow books", "domains.personas.list[]", domains.obj("personas")) {
+            DomainCard("Personas: the shadow books", "domains.personas.list[]", domains.obj("personas")) {
                 val pl = domains.obj("personas").field("list").rows()
+                SectionLabel("The books", divider = false)
                 MiniTable(
                     listOf("persona", "enabled", "question"),
                     pl.map { p ->
@@ -270,23 +278,25 @@ fun ConfigScreen(repo: MissionRepository) {
                         )
                     },
                 )
+                SectionLabel("On disable", divider = true)
                 Note("Disabling a persona stops the writer, never deletes its rows.")
             }
 
             // Universe / symbols — count only (read-only, do not build the editable grid).
-            DomainCard("Universe — whitelist", "domains.symbols.*", domains.obj("symbols")) {
+            DomainCard("Universe: whitelist", "domains.symbols.*", domains.obj("symbols")) {
                 val sym = domains.obj("symbols")
                 val wl = sym.field("whitelist").rows()
                 KvRow("whitelist size", wl.size.toString(), NEUTRAL)
                 KvRow("blacklist", sym.text("blacklist"), UNK)
-                Note("Read-only viewer. Per-symbol enable/score/exposure_cap are levers — edit them through a change-plan, not here.")
+                Note("Read-only viewer. Per-symbol enable/score/exposure_cap are levers: edit them through a change-plan, not here.")
             }
 
             // ── the remaining domains, each a dedicated READ-ONLY viewer (no editable forms) ──
 
             // Detectors — flow triggers; dark ones stay shadow-only until GE-3 (toggle=on ≠ live).
-            DomainCard("Detectors — flow triggers (shadow-walled)", "domains.detectors.{d}.on", domains.obj("detectors")) {
+            DomainCard("Detectors: flow triggers (shadow-walled)", "domains.detectors.{d}.on", domains.obj("detectors")) {
                 val det = domains.obj("detectors")
+                SectionLabel("Triggers", divider = false)
                 MiniTable(
                     listOf("detector", "enabled", "note"),
                     (det?.keys ?: emptySet()).sorted().map { k ->
@@ -299,40 +309,46 @@ fun ConfigScreen(repo: MissionRepository) {
                         )
                     },
                 )
-                Note("Dark detectors stay shadow-only until GE-3 promotion — a detector reading 'on' is not the same as live. Read-only viewer.", WARN)
+                SectionLabel("Shadow wall", divider = true)
+                Note("Dark detectors stay shadow-only until GE-3 promotion: a detector reading 'on' is not the same as live. Read-only viewer.", WARN)
             }
 
             // Structures / Indicators / Timeframes — feature modules; disable = null-with-reason.
-            featureModuleCard("Structures — feature modules", "domains.structures.{m}.on", domains.obj("structures"))
-            featureModuleCard("Indicators — feature modules", "domains.indicators.{m}.on", domains.obj("indicators"))
-            featureModuleCard("Timeframes — feature modules", "domains.timeframes.{tf}.on", domains.obj("timeframes"))
+            featureModuleCard("Structures: feature modules", "domains.structures.{m}.on", domains.obj("structures"))
+            featureModuleCard("Indicators: feature modules", "domains.indicators.{m}.on", domains.obj("indicators"))
+            featureModuleCard("Timeframes: feature modules", "domains.timeframes.{tf}.on", domains.obj("timeframes"))
 
             // Users — operator / second approver / two-person ceremony / paging.
-            DomainCard("Users — operator · approver · ceremony", "domains.users.*", domains.obj("users")) {
+            DomainCard("Users: operator · approver · ceremony", "domains.users.*", domains.obj("users")) {
                 val u = domains.obj("users")
+                SectionLabel("Roles", divider = false)
                 KvRow("operator", u.text("operator"), NEUTRAL)
                 val approver = u.text("second_approver").ifBlank { "—" }
                 KvRow("second approver", approver, if (approver == "—") UNK else NEUTRAL)
                 KvRow("two-person ceremony", (u?.bool("ceremony_two_person") ?: false).yn(), if (u?.bool("ceremony_two_person") == true) GOOD else WARN)
                 KvRow("page alerts", (u?.bool("page_alerts") ?: false).yn(), NEUTRAL)
                 KvRow("journal email", u.text("journal_email").ifBlank { "—" }, UNK)
-                Note("Read-only. A second_approver + two-person ceremony are the money-touching guards — edit via change-plan, never here.")
+                SectionLabel("Guards", divider = true)
+                Note("Read-only. A second_approver + two-person ceremony are the money-touching guards: edit via change-plan, never here.")
             }
 
             // Aux — kronos / news / s7b individual switches + staleness bounds.
-            DomainCard("Aux — kronos · news · s7b + staleness", "domains.aux.*", domains.obj("aux")) {
+            DomainCard("Aux: kronos · news · s7b + staleness", "domains.aux.*", domains.obj("aux")) {
                 val a = domains.obj("aux")
+                SectionLabel("Switches", divider = false)
                 KvRow("kronos", (a.obj("kronos")?.bool("on") ?: a?.bool("kronos") ?: false).yn(), NEUTRAL)
                 KvRow("fingpt news", (a.obj("fingpt_news")?.bool("on") ?: a?.bool("fingpt_news") ?: false).yn(), NEUTRAL)
                 KvRow("s7b render", (a.obj("s7b_render")?.bool("on") ?: a?.bool("s7b_render") ?: false).yn(), NEUTRAL)
                 KvRow("kronos staleness (s)", num(a, "kronos_staleness_s"), NEUTRAL)
                 KvRow("news staleness (min)", num(a, "news_staleness_min"), NEUTRAL)
+                SectionLabel("Bounds", divider = true)
                 Note("Individual aux switches; staleness bounds are laws the compiler clamps. Read-only viewer.")
             }
 
             // Tuning / finetune — reward weights, T1 gate, sweep + promotion gates.
-            DomainCard("Fine-tuning — reward weights · T1 gate · sweep gates", "domains.tuning.* / domains.finetune.*", domains.obj("tuning") ?: domains.obj("finetune")) {
+            DomainCard("Fine-tuning: reward weights · T1 gate · sweep gates", "domains.tuning.* / domains.finetune.*", domains.obj("tuning") ?: domains.obj("finetune")) {
                 val t = domains.obj("tuning") ?: domains.obj("finetune")
+                SectionLabel("Weights", divider = false)
                 KvRow("reward w (pnl·cal·fmt·tr)", num(t, "w_pnl") + " · " + num(t, "w_cal") + " · " + num(t, "w_fmt") + " · " + num(t, "w_tr"), NEUTRAL)
                 KvRow("skip reward · miss penalty", num(t, "skip_good_reward") + " · " + num(t, "skip_miss_penalty"), NEUTRAL)
                 KvRow("payoff clip lo / hi", num(t, "payoff_clip_lo") + " / " + num(t, "payoff_clip_hi"), NEUTRAL)
@@ -341,12 +357,14 @@ fun ConfigScreen(repo: MissionRepository) {
                 KvRow("T1 validator-reject max %", num(t, "t1_validator_reject_max_pct"), NEUTRAL)
                 KvRow("sweep pbo max · dsr min", num(t, "sweep_pbo_max") + " · " + num(t, "sweep_dsr_prob_min"), NEUTRAL)
                 KvRow("edge min weeks · candidates", num(t, "edge_min_weeks") + " · " + num(t, "edge_min_candidates"), NEUTRAL)
-                Note("LRN-1/LRN-4 annotations: the T1 gate + sweep/promotion gates live here. Read-only — sweeps run through the governed path, not this viewer.")
+                SectionLabel("Gates", divider = true)
+                Note("LRN-1/LRN-4 annotations: the T1 gate + sweep/promotion gates live here. Read-only. Sweeps run through the governed path, not this viewer.")
             }
 
             // Edge — the W-33 levers; wired/unwired/conflict is the apply-map's business.
-            DomainCard("Edge — the W-33 levers", "domains.edge.*", domains.obj("edge")) {
+            DomainCard("Edge: the W-33 levers", "domains.edge.*", domains.obj("edge")) {
                 val e = domains.obj("edge")
+                SectionLabel("Levers", divider = false)
                 KvRow("side weight short", num(e, "side_weight_short"), NEUTRAL)
                 KvRow("session weight 12-14Z", num(e, "session_weight_12_14Z"), NEUTRAL)
                 KvRow("zone offset repair", num(e, "zone_offset_repair"), NEUTRAL)
@@ -356,11 +374,12 @@ fun ConfigScreen(repo: MissionRepository) {
                 KvRow("ladder split tp1", num(e, "ladder_split_tp1"), NEUTRAL)
                 KvRow("trail activate R · atr mult", num(e, "trail_activate_r") + " · " + num(e, "trail_atr_mult"), NEUTRAL)
                 KvRow("trail floor (bps)", num(e, "trail_floor_bps"), NEUTRAL)
+                SectionLabel("Apply-map", divider = true)
                 Note("W-33 edge levers. Wired / unwired / conflict is the apply-map's business (edge.v1.json), not this read-only viewer.")
             }
 
             // Logger — cadence / windows / tier-2 walled.
-            DomainCard("Logger — cadence · windows (tier-2 walled)", "domains.logger.*", domains.obj("logger")) {
+            DomainCard("Logger: cadence · windows (tier-2 walled)", "domains.logger.*", domains.obj("logger")) {
                 val l = domains.obj("logger")
                 KvRow("during cadence (min)", num(l, "during_cadence_min"), NEUTRAL)
                 KvRow("pre / post window (min)", num(l, "pre_window_min") + " / " + num(l, "post_window_min"), NEUTRAL)
@@ -375,20 +394,22 @@ fun ConfigScreen(repo: MissionRepository) {
         ConfigDraftCard(repo, domains, fpRaw)
 
         McCard("Operator actions", tool = "propose_action", sub = "proposals, never commands") {
+            SectionLabel("The actions", divider = false)
             KvRow("global circuit breaker", "halt new entries immediately; exits keep managing", WARN)
             KvRow("hard kill", "entries + requotes off, convert resting TPs to protective (two-step)", SEV)
-            KvRow("cancel all orders", "flatten the resting book (pre-live: none exist — payload still emitted)", WARN)
+            KvRow("cancel all orders", "flatten the resting book (pre-live: none exist, payload still emitted)", WARN)
             KvRow("pause symbol", "per-symbol entry pause, exits alive", NEUTRAL)
+            SectionLabel("Chips", divider = true)
             Row { Tag("circuit breaker", WARN); Tag("hard kill", SEV); Tag("cancel all", WARN); Tag("pause symbol", NEUTRAL) }
             Note("Every action emits a signed operator-action/1 payload {via:'config-gui', requires:'triadctl confirm'}. The executor honors only triadctl after its own confirm. The GUI cannot apply. Ever.")
         }
 
-        Note("Config-Store SYSTEM controls do not exist on the server yet — they render as PEND and would only propose.", UNK)
+        Note("Config-Store SYSTEM controls do not exist on the server yet: they render as PEND and would only propose.", UNK)
         PendBox("config_apply", "CRIT · apply a preset to the running system. ARMED (10s + CONFIRM); interlocked LIVE. Absent ⇒ probes tools/list, then files propose_action.")
         PendBox("conn_activate", "CRIT · repoint the SYSTEM profile (demo/shadow/paper/live). LIVE hard-refused until the go/no-go board is clean.")
         PendBox("svc_restart", "HIGH · stop(drain)+start a process. Refuses on executor/venue while anything rests. Absent ⇒ proposes.")
-        PendBox("cag_flush", "MED · evict the CAG cache. Absent ⇒ proposes. (Hit-rate 1.15% — flushing a cache that never hits changes nothing.)")
-        PendBox("llm_swap", "CRIT · load a model into a slot — the one control that would move the system, and the most dangerous. Absent ⇒ proposes.")
+        PendBox("cag_flush", "MED · evict the CAG cache. Absent ⇒ proposes. (Hit-rate 1.15%: flushing a cache that never hits changes nothing.)")
+        PendBox("llm_swap", "CRIT · load a model into a slot: the one control that would move the system, and the most dangerous. Absent ⇒ proposes.")
         PendBox("mcp_token_issue", "CRIT · mint a scoped bearer token. Absent ⇒ proposes. mcp_token_revoke refuses the token you are using.")
 
         WhyBox("THE LAW · R-C1") {
@@ -472,6 +493,7 @@ private fun ConfigDraftCard(repo: MissionRepository, domains: JsonObject?, baseF
         Note("Build the change IN THE APP: pick a lever, set a new value client-side, read the diff, then Export → proposal. The app files a config_change proposal (propose_action); it never applies. config_apply does not exist.", NEUTRAL)
 
         // ── pick a lever (client-side selection only) ──
+        SectionLabel("Pick a lever", divider = false)
         Row(Modifier.horizontalScroll(rememberScrollState())) {
             knobs.forEachIndexed { i, k ->
                 Box(Modifier.clickable { sel = i; result = null }) {
@@ -480,6 +502,7 @@ private fun ConfigDraftCard(repo: MissionRepository, domains: JsonObject?, baseF
             }
         }
 
+        SectionLabel("The diff", divider = true)
         KvRow("lever", "$dom.$key", NEUTRAL)
         KvRow("path", path, NEUTRAL)
         KvRow("old → new", oldRaw + "  →  " + newValue.ifBlank { "—" }, if (newValue.isBlank()) UNK else WARN)
@@ -488,6 +511,7 @@ private fun ConfigDraftCard(repo: MissionRepository, domains: JsonObject?, baseF
         OutlinedTextField(rationale, { rationale = it; result = null }, label = { Text("rationale + evidence (required)") })
 
         // ── change-plan preview: the grouped op, one fingerprint per apply ──
+        SectionLabel("Change-plan", divider = true)
         MiniTable(
             listOf("op", "path", "from → to"),
             listOf(row("replace" to INFO, path to NEUTRAL, (oldRaw + " → " + newValue.ifBlank { "—" }) to NEUTRAL)),
@@ -511,7 +535,7 @@ private fun ConfigDraftCard(repo: MissionRepository, domains: JsonObject?, baseF
         result?.let { (ok, msg) ->
             Ribbon(
                 if (ok) "Proposal filed · $msg" else "Propose failed",
-                if (ok) "proposal_id=$msg — it lands in the inbox for a human at triadctl. Nothing applied; the ceremony compiles + verifies it." else msg,
+                if (ok) "proposal_id=$msg. It lands in the inbox for a human at triadctl. Nothing applied; the ceremony compiles + verifies it." else msg,
                 if (ok) GOOD else BAD,
             )
         }
@@ -592,15 +616,15 @@ private fun deriveGovGates(
     val fills = sg.num("real_fills") ?: 0.0
     val liveLane = db.obj("lanes").num("live") ?: 0.0
     gates += if (!venueKnown) {
-        GovGate(1, "Venue campaign passed", "reconciler + fill→stop-arm exercised against a real async exchange; kill fired.", "UNKNOWN", UNK, "get_sim_gap / get_databank not served — cannot confirm a venue campaign.")
+        GovGate(1, "Venue campaign passed", "reconciler + fill→stop-arm exercised against a real async exchange; kill fired.", "UNKNOWN", UNK, "get_sim_gap / get_databank not served: cannot confirm a venue campaign.")
     } else if (fills == 0.0 && liveLane == 0.0) {
-        GovGate(1, "Venue campaign passed", "reconciler + fill→stop-arm exercised against a real async exchange; kill fired.", "NO", BAD, "fills ${fills.toInt()} · live-lane ${liveLane.toInt()} — nothing has ever reached a venue.")
+        GovGate(1, "Venue campaign passed", "reconciler + fill→stop-arm exercised against a real async exchange; kill fired.", "NO", BAD, "fills ${fills.toInt()} · live-lane ${liveLane.toInt()}: nothing has ever reached a venue.")
     } else {
-        GovGate(1, "Venue campaign passed", "reconciler + fill→stop-arm exercised against a real async exchange; kill fired.", "PENDING", NEUTRAL, "fills ${fills.toInt()} · live-lane ${liveLane.toInt()} — campaign not signed off.")
+        GovGate(1, "Venue campaign passed", "reconciler + fill→stop-arm exercised against a real async exchange; kill fired.", "PENDING", NEUTRAL, "fills ${fills.toInt()} · live-lane ${liveLane.toInt()}: campaign not signed off.")
     }
 
     // gate 2 · key-safety probe — no tool serves it
-    gates += GovGate(2, "Key-safety probe green", "boot makes a withdrawal-scoped call expecting rejection; a key that could withdraw fails boot.", "UNKNOWN", UNK, "no probe result in health, in mcp_audit, anywhere — never run, or never recorded.")
+    gates += GovGate(2, "Key-safety probe green", "boot makes a withdrawal-scoped call expecting rejection; a key that could withdraw fails boot.", "UNKNOWN", UNK, "no probe result in health, in mcp_audit, anywhere: never run, or never recorded.")
 
     // gate 3 · kill-switch fired for real
     gates += if (ks == null) {
@@ -608,8 +632,8 @@ private fun deriveGovGates(
     } else {
         val state = ks.text("state")
         val histN = ks.field("history").list().size
-        if (histN == 0) GovGate(3, "Kill-switch fired for real", "RB-3 kill drill on the live deployment; flatten confirmed on the venue, not just in sim.", "NO", BAD, "state:\"$state\" · history:[] — never fired for real.")
-        else GovGate(3, "Kill-switch fired for real", "RB-3 kill drill on the live deployment; flatten confirmed on the venue, not just in sim.", "PENDING", NEUTRAL, "$histN kill events in the ledger — drill not signed off.")
+        if (histN == 0) GovGate(3, "Kill-switch fired for real", "RB-3 kill drill on the live deployment; flatten confirmed on the venue, not just in sim.", "NO", BAD, "state:\"$state\" · history:[]. Never fired for real.")
+        else GovGate(3, "Kill-switch fired for real", "RB-3 kill drill on the live deployment; flatten confirmed on the venue, not just in sim.", "PENDING", NEUTRAL, "$histN kill events in the ledger: drill not signed off.")
     }
 
     // gate 4 · cancel-on-disconnect — no tool serves the venue dossier
@@ -619,9 +643,9 @@ private fun deriveGovGates(
     gates += if (!venueKnown) {
         GovGate(5, "Reconciler drills passed", "divergences between local state and fetch_open_orders / fetch_positions exercised and resolved.", "UNKNOWN", UNK, "get_sim_gap / get_databank not served.")
     } else if (fills == 0.0) {
-        GovGate(5, "Reconciler drills passed", "divergences between local state and fetch_open_orders / fetch_positions exercised and resolved.", "NO", BAD, "0 orders · 0 positions — nothing to reconcile.")
+        GovGate(5, "Reconciler drills passed", "divergences between local state and fetch_open_orders / fetch_positions exercised and resolved.", "NO", BAD, "0 orders · 0 positions: nothing to reconcile.")
     } else {
-        GovGate(5, "Reconciler drills passed", "divergences between local state and fetch_open_orders / fetch_positions exercised and resolved.", "PENDING", NEUTRAL, "${fills.toInt()} fills — drills not signed off.")
+        GovGate(5, "Reconciler drills passed", "divergences between local state and fetch_open_orders / fetch_positions exercised and resolved.", "PENDING", NEUTRAL, "${fills.toInt()} fills: drills not signed off.")
     }
 
     // gate 6 · calibration in band
@@ -629,11 +653,11 @@ private fun deriveGovGates(
     gates += if (tr == null && lim == null) {
         GovGate(6, "Calibration in band", "take-rate 10–60% (P6), reliability slope validated, threshold derived on fresh forward decisions.", "UNKNOWN", UNK, "get_take_rate / get_limits not served.")
     } else if (rate == null) {
-        GovGate(6, "Calibration in band", "take-rate 10–60% (P6), reliability slope validated, threshold derived on fresh forward decisions.", "UNKNOWN", UNK, "take_rate absent — cannot judge the band.")
+        GovGate(6, "Calibration in band", "take-rate 10–60% (P6), reliability slope validated, threshold derived on fresh forward decisions.", "UNKNOWN", UNK, "take_rate absent: cannot judge the band.")
     } else if (rate < 0.10 || rate > 0.60) {
         GovGate(6, "Calibration in band", "take-rate 10–60% (P6), reliability slope validated, threshold derived on fresh forward decisions.", "FAIL", BAD, "take-rate ${govPct(rate)} vs 10–60% · reliability slope absent · calibration_artifact_hash: null.")
     } else {
-        GovGate(6, "Calibration in band", "take-rate 10–60% (P6), reliability slope validated, threshold derived on fresh forward decisions.", "PENDING", NEUTRAL, "take-rate ${govPct(rate)} in band — slope + threshold still to validate.")
+        GovGate(6, "Calibration in band", "take-rate 10–60% (P6), reliability slope validated, threshold derived on fresh forward decisions.", "PENDING", NEUTRAL, "take-rate ${govPct(rate)} in band: slope + threshold still to validate.")
     }
 
     // gate 7 · edge proven forward (E-0)
@@ -643,13 +667,13 @@ private fun deriveGovGates(
         val enough = ab.bool("enough")
         val weeks = ab.int("weeks") ?: 0
         val windows = ab.field("windows").list().size
-        if (!enough) GovGate(7, "Edge proven forward (E-0)", "ΔB0 CI-positive AND M1−B0 CI-positive over ≥4 weeks / ≥300 forward candidates.", "FAIL", BAD, "windows $windows · weeks $weeks · enough false — M1−B0 is undefined.")
+        if (!enough) GovGate(7, "Edge proven forward (E-0)", "ΔB0 CI-positive AND M1−B0 CI-positive over ≥4 weeks / ≥300 forward candidates.", "FAIL", BAD, "windows $windows · weeks $weeks · enough false: M1−B0 is undefined.")
         else GovGate(7, "Edge proven forward (E-0)", "ΔB0 CI-positive AND M1−B0 CI-positive over ≥4 weeks / ≥300 forward candidates.", "PASS", GOOD, "windows $windows · weeks $weeks · enough true.")
     }
 
     // gate 8 · 14-day soak — the clock
     gates += if (sg == null) {
-        GovGate(8, "14-day soak clean", "non-compressible; zero highest-severity events (P-MIRROR breach or a fill without an armed stop).", "UNKNOWN", UNK, "get_sim_gap not served — cannot judge the soak detectors.")
+        GovGate(8, "14-day soak clean", "non-compressible; zero highest-severity events (P-MIRROR breach or a fill without an armed stop).", "UNKNOWN", UNK, "get_sim_gap not served: cannot judge the soak detectors.")
     } else {
         val subset = sg.bool("fills_subset")
         val rf = sg.num("real_fills") ?: 0.0
@@ -673,7 +697,7 @@ private fun deriveGovGates(
     }
 
     // gate 10 · missing
-    gates += GovGate(10, "— missing —", "the §16.6 anchor reads \"the ten gates to real money\". Nine are listed.", "MISSING", SEV, "the board lists $gngListed — it cannot count to ten.")
+    gates += GovGate(10, "— missing —", "the §16.6 anchor reads \"the ten gates to real money\". Nine are listed.", "MISSING", SEV, "the board lists $gngListed: it cannot count to ten.")
 
     gates
 }
@@ -745,7 +769,7 @@ fun GovernanceScreen(repo: MissionRepository) {
     ) {
         Ribbon(
             "UNTOLD · the board that decides whether real money flows returns questions, not answers",
-            "Governance can read the board and the proposals inbox, and replay them — but it applies nothing. " +
+            "Governance can read the board and the proposals inbox, and replay them, but it applies nothing. " +
                 "The ten §16.6 gates carry no PASS/FAIL field from get_go_no_go_status; each verdict below is " +
                 "COMPUTED here from the live ledger, and a gate whose source tool is not served renders honest " +
                 "UNKNOWN, never a flattering GREEN. Every operator action is a proposal (propose_action EXECUTES " +
@@ -766,7 +790,7 @@ fun GovernanceScreen(repo: MissionRepository) {
         McCard("The ten gates to real money", tool = "get_go_no_go_status × the live ledger", sub = "answered") {
             Ribbon(
                 "get_go_no_go_status returns the questions and not one answer",
-                "Its own description promises \"the §16.6 go/no-go items each with evidence or its absence\" — it " +
+                "Its own description promises \"the §16.6 go/no-go items each with evidence or its absence\": it " +
                     "ships nine lines of markdown, no status, no evidence, no verdict, and fails 98.6% of its calls " +
                     "(143 of 145 in mcp_audit). Here are the answers, computed from the ledger.",
                 SEV,
@@ -791,7 +815,7 @@ fun GovernanceScreen(repo: MissionRepository) {
                     "${unknownList.size} unknown (${unknownList.joinToString(", ")}) · " +
                     "${vacuousList.size} vacuous (${vacuousList.joinToString(", ")}) · " +
                     "${missingList.size} missing (${missingList.joinToString(", ")}). " +
-                    "$passing gates pass — and nothing in the system has said so.",
+                    "$passing gates pass, and nothing in the system has said so.",
                 SEV,
             )
             if (missingTen) {
@@ -802,7 +826,7 @@ fun GovernanceScreen(repo: MissionRepository) {
                     SEV,
                 )
             }
-            Note("§6.1 get_gate_evidence (go/no-go WITH a verdict + evidence field per gate) is not built — until it ships, these verdicts are derived here, honestly, from the ledger. 9-of-10 is a hard error.", UNK)
+            Note("§6.1 get_gate_evidence (go/no-go WITH a verdict + evidence field per gate) is not built: until it ships, these verdicts are derived here, honestly, from the ledger. 9-of-10 is a hard error.", UNK)
         }
 
         // ── Gate 8 — the clock (get_sim_gap) ──
@@ -826,14 +850,14 @@ fun GovernanceScreen(repo: MissionRepository) {
                 )
                 Ribbon(
                     "GATE 8 WILL GO GREEN IN FOURTEEN DAYS",
-                    "— not because nothing went wrong, but because both detectors are provably incapable of noticing. " +
+                    "Not because nothing went wrong, but because both detectors are provably incapable of noticing. " +
                         "\"Non-compressible\" reads as rigour and is in fact just waiting: fourteen days of a broken system " +
                         "produces exactly the same green as fourteen days of a healthy one.",
                     SEV,
                 )
             }
-            Note("§6.2 get_detector_liveness — the tool that would page Sev-1 on a can't-fire gate — is not built; the verdict above is derived honestly from get_sim_gap.", UNK)
-            WhyBox("THE LAW · G-2") { LawBlock("G-2", "A gate whose detector cannot fire is a clock, not a check. A red stops you; a vacuous green invites you through — and it is sitting on the last gate before real money.") }
+            Note("§6.2 get_detector_liveness (the tool that would page Sev-1 on a can't-fire gate) is not built; the verdict above is derived honestly from get_sim_gap.", UNK)
+            WhyBox("THE LAW · G-2") { LawBlock("G-2", "A gate whose detector cannot fire is a clock, not a check. A red stops you; a vacuous green invites you through, and it is sitting on the last gate before real money.") }
         }
 
         // ── the silence (get_alerts · get_proposals · get_kill_state · get_breaker_state) ──
@@ -851,25 +875,25 @@ fun GovernanceScreen(repo: MissionRepository) {
                 "\"native money-path alert rules over the ledger; a page fires only when money could be unprotected — quiet is correct pre-live (0 real fills).\"",
                 SEV,
             )
-            WhyBox("THE LAW · G-1") { LawBlock("G-1", "An alert scoped to a plane that does not exist is not an alert. The alert rules only watch the money path — and there is no money path, so none of it can fire.") }
+            WhyBox("THE LAW · G-1") { LawBlock("G-1", "An alert scoped to a plane that does not exist is not an alert. The alert rules only watch the money path, and there is no money path, so none of it can fire.") }
         }
 
         // ── what actually works — honest UNKNOWN over a flattering default ──
         McCard("What actually works", tool = "get_kill_state · get_attestation · get_config_active", sub = "and it is not nothing") {
             Note("Sixteen findings in this series are something broken. This is the panel that can say a few things are genuinely, provably right.")
             KvRow("control_path: false", if (ks != null || bs != null) "kill + breaker cannot act" else "—", if (ks != null || bs != null) GOOD else UNK)
-            KvRow("state: \"unknown\" — not \"disarmed\"", killState, if (ks != null) GOOD else UNK)
+            KvRow("state: \"unknown\", not \"disarmed\"", killState, if (ks != null) GOOD else UNK)
             KvRow("attestation is real", if (at == null) "—" else at.text("contracts_version") + " · " + at.text("manifest_sha").take(12) + "…", if (at != null) GOOD else UNK)
             KvRow("dirty: false", if (ca == null) "—" else ca.text("preset") + (if (ca.bool("dirty")) " · DRAFT" else " · clean"), if (ca != null && !ca.bool("dirty")) GOOD else UNK)
             KvRow("propose_action executes nothing", "genuinely advisory", GOOD)
             Ribbon(
                 "The governance design is excellent. The governance instrumentation is blind.",
-                "That is a far smaller problem than it looks — the fix is cheap. The proposal path is right, the " +
+                "That is a far smaller problem than it looks: the fix is cheap. The proposal path is right, the " +
                     "read/control separation is right, the attestation is right, the config discipline is right. What " +
                     "is missing is sixteen thresholds.",
                 INFO,
             )
-            WhyBox("THE LAW · G-4") { LawBlock("G-4", "Report UNKNOWN, never a flattering default. get_kill_state → { state: \"unknown\" } is the correct answer, and it is rare — the difference between this tool and get_alerts, which fails 36% and renders green.") }
+            WhyBox("THE LAW · G-4") { LawBlock("G-4", "Report UNKNOWN, never a flattering default. get_kill_state → { state: \"unknown\" } is the correct answer, and it is rare: the difference between this tool and get_alerts, which fails 36% and renders green.") }
         }
 
         // ── the pin (get_attestation × get_limits × get_config_active) ──
@@ -890,7 +914,7 @@ fun GovernanceScreen(repo: MissionRepository) {
                 )
                 Ribbon(
                     "EDGE-ACTIVATION-RULING: no threshold move without a pin",
-                    "Every artifact in this system is hashed, committed and verified — except the single number that " +
+                    "Every artifact in this system is hashed, committed and verified, except the single number that " +
                         "decides whether a trade happens. conviction_take_threshold: ${threshold?.toInt() ?: "—"} is live " +
                         "and gating every decision. calibration_artifact_hash: null. pinned: false.",
                     SEV,
@@ -898,20 +922,20 @@ fun GovernanceScreen(repo: MissionRepository) {
                 KvRow("unpinned_gating_money", (if (pinned) 0 else 1).toString(), if (pinned) GOOD else BAD)
                 Note("§6.4 get_pin_status (unpinned_gating_money as a release blocker) is not built; the pins above are read from get_limits / get_attestation / get_config_active.", UNK)
             }
-            WhyBox("THE LAW · G-6") { LawBlock("G-6", "Config is code (P12) — honoured, once. Everything fingerprinted, the manifest the fixed point. unpinned_gating_money > 0 is a release blocker.") }
+            WhyBox("THE LAW · G-6") { LawBlock("G-6", "Config is code (P12), honoured, once. Everything fingerprinted, the manifest the fixed point. unpinned_gating_money > 0 is a release blocker.") }
         }
 
         // ── the sixteen rules that don't exist ──
         McCard("Sixteen pages. Sixteen rules. Zero exist.", "every finding in this series, as a threshold") {
-            Note("Every finding in this series is an alert rule that does not exist — and each is a single threshold over data already in the ledger. Not one requires new plumbing.")
+            Note("Every finding in this series is an alert rule that does not exist, and each is a single threshold over data already in the ledger. Not one requires new plumbing.")
             GOV_RULES.forEachIndexed { i, (rule, value) ->
                 KvRow("${i + 1}. $rule", value, BAD)
             }
-            Note("§6.3 get_shadow_plane_alerts — the tool that would turn each finding into a firing rule — is not built. These sixteen are the findings; not one is a rule.", UNK)
+            Note("§6.3 get_shadow_plane_alerts (the tool that would turn each finding into a firing rule) is not built. These sixteen are the findings; not one is a rule.", UNK)
             Ribbon(
                 "firing: 16 · pages: 0",
                 "That is the whole governance failure in one line. The sixteen conditions are all true right now and " +
-                    "not one can produce a page — the alert rules are scoped to a money path that has never carried a fill.",
+                    "not one can produce a page: the alert rules are scoped to a money path that has never carried a fill.",
                 SEV,
             )
             WhyBox("THE LAW · G-7") { LawBlock("G-7", "Every finding must become a rule. A finding you have to open a browser to see is a finding nobody sees at 3 a.m.") }
@@ -944,12 +968,12 @@ fun GovernanceScreen(repo: MissionRepository) {
                     "renders it green. You cannot govern with instruments that are down this often and report clean the rest.",
                 SEV,
             )
-            WhyBox("THE LAW · G-3") { LawBlock("G-3", "A checklist must be answerable. A gate with no evidence field is a wish. get_go_no_go_status ships nine questions, no answers, no verdict — when it ships at all.") }
+            WhyBox("THE LAW · G-3") { LawBlock("G-3", "A checklist must be answerable. A gate with no evidence field is a wish. get_go_no_go_status ships nine questions, no answers, no verdict, when it ships at all.") }
         }
 
         McCard("Proposals inbox", tool = "get_proposals", sub = "replay only, never apply") {
             if (proposals.isEmpty()) {
-                Note("Inbox empty — no proposals filed. (propose_action would append one; it executes nothing.)", UNK)
+                Note("Inbox empty: no proposals filed. (propose_action would append one; it executes nothing.)", UNK)
             } else {
                 proposals.forEach { p ->
                     val disp = p.text("disposition")
@@ -1010,7 +1034,7 @@ private fun GovernanceProposeCard(repo: MissionRepository) {
     val kind = kinds[safeSel]
 
     McCard("File a proposal", tool = "propose_action", sub = "propose_action (executes nothing)") {
-        Note("G-5 · The inbox write is a proposal, not a command: it appends a record; a human runs it at triadctl after its own confirm. A proposal without a rationale is a command — write the why.", WARN)
+        Note("G-5 · The inbox write is a proposal, not a command: it appends a record; a human runs it at triadctl after its own confirm. A proposal without a rationale is a command: write the why.", WARN)
 
         Row(Modifier.horizontalScroll(rememberScrollState())) {
             kinds.forEachIndexed { i, k ->
@@ -1020,7 +1044,7 @@ private fun GovernanceProposeCard(repo: MissionRepository) {
             }
         }
         KvRow("kind", kind, NEUTRAL)
-        OutlinedTextField(rationale, { rationale = it; result = null }, label = { Text("rationale (required) — what you saw, what to run") })
+        OutlinedTextField(rationale, { rationale = it; result = null }, label = { Text("rationale (required): what you saw, what to run") })
 
         Button(
             enabled = !inFlight && rationale.isNotBlank(),
@@ -1040,7 +1064,7 @@ private fun GovernanceProposeCard(repo: MissionRepository) {
         result?.let { (ok, msg) ->
             Ribbon(
                 if (ok) "Proposal filed · $msg" else "Propose failed",
-                if (ok) "proposal_id=$msg — the inbox is no longer empty. Ratify/apply is the human ceremony, not the app." else msg,
+                if (ok) "proposal_id=$msg. The inbox is no longer empty. Ratify/apply is the human ceremony, not the app." else msg,
                 if (ok) GOOD else BAD,
             )
         }

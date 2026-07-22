@@ -87,6 +87,7 @@ import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.Ribbon
+import agentic.triad.missioncontrol.ui.components.SectionLabel
 import agentic.triad.missioncontrol.ui.components.Verdict
 import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.StatRow
@@ -161,7 +162,7 @@ private const val SPEC_MONEY_PATH =
         "  fast_exit:{independent,armed,triggered_24h,p99_ms},\n" +
         "  skips:{n,first_class,note} }\n\n" +
         "RULES\n" +
-        "· conv_from_prev is null (not 0) when upstream n == 0 — division by\n" +
+        "· conv_from_prev is null (not 0) when upstream n == 0, division by\n" +
         "  zero is an absence, not a collapse (O-3).\n" +
         "· chokepoint = FIRST stage where n[i-1] > 0 and conv < floor.\n" +
         "· floors come from limit_config + the take-rate band, never the GUI.\n" +
@@ -188,7 +189,7 @@ private const val SPEC_TRUTH_COVERAGE =
         "· verdict_rule is a STRING THE SERVER SHIPS, so the GUI cannot quietly\n" +
         "  redefine \"green\". Today: \"GREEN requires coverage >= 0.80 and reds == 0\".\n" +
         "· coverage_pct is law O-2 in one field.\n" +
-        "· unprobed[] is a work list — the fastest path from UNKNOWN to a\n" +
+        "· unprobed[] is a work list: the fastest path from UNKNOWN to a\n" +
         "  real verdict."
 
 // ── the top chrome hexes (web `.ovwrap .strip` + `#appbar .live` mode dot) ─────────────────────────
@@ -294,7 +295,7 @@ private class Model(d: Map<String, JsonElement?>) {
     val attClean = ck != null && !at.text("contracts_version", "").isEmpty() && !at.text("manifest_sha", "").isEmpty()
     val cfgDirty = ca.bool("dirty")
     val verdictRule =
-        "GREEN requires coverage ≥ 80% and reds = 0. Below that the verdict is UNKNOWN — regardless of how few reds there are."
+        "GREEN requires coverage ≥ 80% and reds = 0. Below that the verdict is UNKNOWN, regardless of how few reds there are."
     val truth: String = when {
         total == 0 -> "UNKNOWN"
         byRed > 0 || !attClean || cfgDirty -> "RED"
@@ -316,9 +317,9 @@ private class Model(d: Map<String, JsonElement?>) {
         else -> null
     }
     val unprotectedWhy: String = when {
-        re != null -> "Sev-1 counter — computed from the ledger, never null."
-        noFills -> "measured: ledger.fills is empty — 0 fills, therefore 0 unprotected"
-        else -> "not derivable without get_risk_envelope (§3.2) — RISK cannot be called green"
+        re != null -> "Sev-1 counter: computed from the ledger, never null."
+        noFills -> "measured: ledger.fills is empty, 0 fills, therefore 0 unprotected"
+        else -> "not derivable without get_risk_envelope (§3.2). RISK cannot be called green"
     }
     val fastExit: JsonObject? = re.obj("fast_exit")         // P3 lane — null while the tool is PEND
     val g = ex.obj("global")
@@ -375,7 +376,7 @@ private class Model(d: Map<String, JsonElement?>) {
     val chokeStage: Stage? = chokeIndex?.let { stages[it] }
     val chokeReason: String? = chokeStage?.let { s ->
         if (s.k == "takes")
-            "the model gate — take rate ${pct(takeRate, 2)} is below the 10–60% band. P6 says " +
+            "the model gate: take rate ${pct(takeRate, 2)} is below the 10–60% band. P6 says " +
                 "abstain is a success; a gate that abstains from everything is a defect, not conviction."
         else
             "${s.src} is losing ${pct(1.0 - (s.conv ?: 0.0), 1)} of what reaches it."
@@ -502,7 +503,7 @@ fun OverviewScreen(repo: MissionRepository) {
             // MissionNav.graph), so the Connection button cannot navigate — it points honestly at
             // the app bar's connection affordance instead of pretending to open a drawer.
             onConnection = {
-                Toast.makeText(ctx, "Connection lives in the app bar — tap the pulse dot, top right.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, "Connection lives in the app bar: tap the pulse dot, top right.", Toast.LENGTH_SHORT).show()
             },
         )
         OverviewStrip(M, live = repo.mode == Mode.LIVE, toolErrors = toolErrors, clock = clock)
@@ -520,12 +521,12 @@ fun OverviewScreen(repo: MissionRepository) {
         // the evidence rows behind each pill (kept as a detail card under the band)
         McCard("Stance", tool = "derived · O-1..O-8", sub = "the evidence") {
             KvRow(
-                "RISK — ${if (M.unprotected == 0) "0 unprotected" else if (M.unprotected == null) "not derivable" else "${M.unprotected} unprotected"}",
+                "RISK: ${if (M.unprotected == 0) "0 unprotected" else if (M.unprotected == null) "not derivable" else "${M.unprotected} unprotected"}",
                 M.risk, verdictTone(M.risk),
             )
-            KvRow("LOOP — ${M.chokeStage?.let { "choke @ ${it.k}" } ?: "no choke"}", M.loop, verdictTone(M.loop))
+            KvRow("LOOP: ${M.chokeStage?.let { "choke @ ${it.k}" } ?: "no choke"}", M.loop, verdictTone(M.loop))
             KvRow(
-                "TRUTH — ${if (M.total > 0) "${M.probed}/${M.total} probed · ${pct(M.coverage, 0)}" else "no checkup"}",
+                "TRUTH: ${if (M.total > 0) "${M.probed}/${M.total} probed · ${pct(M.coverage, 0)}" else "no checkup"}",
                 M.truth, verdictTone(M.truth),
             )
         }
@@ -537,6 +538,7 @@ fun OverviewScreen(repo: MissionRepository) {
             sub = "the spine",
         ) {
             Note("THE MONEY PATH · DETERMINISTIC CODE PROPOSES AND ENFORCES · THE MODEL ONLY JUDGES ENTRY (P1)")
+            SectionLabel("the spine", divider = false)
             val spine = M.stages.mapIndexed { i, st ->
                 val dead = st.v == 0 && i > 0 && (M.stages[i - 1].v ?: 0) > 0
                 val isChoke = M.chokeIndex == i
@@ -559,13 +561,14 @@ fun OverviewScreen(repo: MissionRepository) {
                 Triple("skips", n0(M.skips), if (M.tr == null) Tone.UNK else Tone.NEUTRAL),
                 Triple("positions", M.openN.toString(), if (M.posWrap == null) Tone.UNK else Tone.NEUTRAL),
             )
+            SectionLabel("the branches")
             // SKIPS branch — P6 abstain is first-class.
             KvRow("SKIPS (abstain · P6, first-class)", n0(M.skips), Tone.NEUTRAL)
             // FAST-EXIT lane — P3; INDEPENDENT once get_risk_envelope ships its fast_exit block,
             // p99 unavailable while Prometheus is absent (the JS `fe` read, verbatim).
             KvRow(
                 "FAST-EXIT LANE (P3 · nothing may suppress an exit)",
-                if (M.fastExit != null) "INDEPENDENT" else "p99 unavailable — Prometheus absent",
+                if (M.fastExit != null) "INDEPENDENT" else "p99 unavailable (Prometheus absent)",
                 if (M.fastExit != null) Tone.GOOD else Tone.UNK,
             )
             KvRow(
@@ -590,7 +593,7 @@ fun OverviewScreen(repo: MissionRepository) {
                 KvRow("⌁ chokepoint", if (M.tr == null) "UNKNOWN" else "none (take-rate in band)", if (M.tr == null) Tone.UNK else Tone.GOOD)
             }
             WhyBox("THE LAW · O-8") {
-                Note("O-8: the chokepoint is computed at the FIRST stage where conversion falls below its floor — the spine dies where conversion collapses, and names the top refusal reason. It is computed, not chosen.")
+                Note("O-8: the chokepoint is computed at the FIRST stage where conversion falls below its floor: the spine dies where conversion collapses, and names the top refusal reason. It is computed, not chosen.")
             }
             // §3.1 · get_money_path — 404 until built. The spine above is stitched client-side; this box
             // discloses that (O-3), and flips to a LIVE note the day the server ships the read.
@@ -605,8 +608,8 @@ fun OverviewScreen(repo: MissionRepository) {
         ) {
             Verdict(
                 when {
-                    M.unprotected == null -> "Protection unknown — no risk-envelope source."
-                    M.unprotected == 0 -> "Protected — 0 fills without an armed stop."
+                    M.unprotected == null -> "Protection unknown: no risk-envelope source."
+                    M.unprotected == 0 -> "Protected: 0 fills without an armed stop."
                     else -> "${M.unprotected} fills have no armed stop."
                 },
                 "The Sev-1 line: is any live position unprotected right now?",
@@ -616,6 +619,7 @@ fun OverviewScreen(repo: MissionRepository) {
                     else -> Tone.SEV
                 },
             )
+            SectionLabel("exposure", divider = false)
             StatRow(
                 Triple("open positions", M.openN.toString(), if (M.openN == 0) Tone.GOOD else Tone.NEUTRAL),
                 Triple("today", "${fmt(M.so.num("today_pnl_r"), 2)}R", Tone.NEUTRAL),
@@ -649,6 +653,7 @@ fun OverviewScreen(repo: MissionRepository) {
                 if (M.ex == null) Tone.UNK else if (M.capsOK) Tone.GOOD else Tone.BAD,
             )
             Note("cap ${n0(cap?.toLong())} quote · net cap ${n0(pf.num("max_net_exposure_quote")?.toLong())} · max open ${pf.int("max_open_positions") ?: "—"}")
+            SectionLabel("the rules")
             val dd = M.lim.obj("drawdown")
             val cd = M.lim.obj("cooldowns")
             MiniTable(
@@ -671,11 +676,12 @@ fun OverviewScreen(repo: MissionRepository) {
                     ),
                 ),
             )
+            SectionLabel("the switches")
             KvRow("breaker", M.br?.let { M.br.text("state").uppercase() } ?: "UNKNOWN", stateTone(M.br.text("state")))
             KvRow("kill", M.kl?.let { M.kl.text("state").uppercase() } ?: "UNKNOWN", stateTone(M.kl.text("state")))
             if (M.br.field("control_path") != null && !M.br.bool("control_path")) Tag("READ-ONLY MIRROR", Tone.INFO)
             WhyBox("THE LAW · O-5") {
-                Note("O-5: this page cannot arm, release, or flatten. When the ledger has no breaker events the chip reads UNKNOWN — it is never rendered as safe, and never as off. AT-OV8: the Sev-1 fills-without-armed-stop row is present in every state.")
+                Note("O-5: this page cannot arm, release, or flatten. When the ledger has no breaker events the chip reads UNKNOWN: it is never rendered as safe, and never as off. AT-OV8: the Sev-1 fills-without-armed-stop row is present in every state.")
             }
             // §3.2 · get_risk_envelope — the Sev-1 counter's home. Until it ships, the row above stitches
             // its zero from ledger.fills; this box names what it would carry (O-3 disclosure).
@@ -685,9 +691,9 @@ fun OverviewScreen(repo: MissionRepository) {
         // ── 1.4 TRUTH — how much of this is actually known? (coverage before verdict · O-2) ───────────
         McCard("Truth", tool = "get_checkup · get_attestation · get_config_active", sub = "how much of this is actually known?") {
             Verdict(
-                if (M.total == 0) "Truth coverage unknown — no checkup has run."
+                if (M.total == 0) "Truth coverage unknown: no checkup has run."
                 else "Coverage ${pct(M.coverage, 0)} · ${M.probed} of ${M.total} probed.",
-                "Coverage before verdict (O-2) — how much of this is actually measured.",
+                "Coverage before verdict (O-2): how much of this is actually measured.",
                 if (M.total == 0) Tone.UNK else if ((M.coverage ?: 0.0) >= COVERAGE_FLOOR) Tone.GOOD else Tone.BAD,
             )
             StatRow(
@@ -703,12 +709,13 @@ fun OverviewScreen(repo: MissionRepository) {
             if (M.byRed == 0 && M.byUnknown > 0) {
                 Ribbon(
                     "Zero reds is not good news here.",
-                    "${M.byUnknown} of ${M.total} probes have no source configured — they cannot go red, because nothing " +
+                    "${M.byUnknown} of ${M.total} probes have no source configured. They cannot go red, because nothing " +
                         "is looking at them. This is exactly the shape of a false green. The fix is a work list, not a colour: " +
                         "add them to configs/checkup.v1.json.",
                     Tone.UNK,
                 )
             }
+            SectionLabel("attestation", divider = false)
             KvRow("contracts", M.at.text("contracts_version"), if (M.at == null) Tone.UNK else Tone.NEUTRAL)
             KvRow("MANIFEST sha", "${sh(M.at.text("manifest_sha", ""), 16)}…", if (M.at == null) Tone.UNK else Tone.NEUTRAL)
             KvRow("limit_config sha", "${sh(M.at.text("limits_config_sha", ""), 16)}…", if (M.at == null) Tone.UNK else Tone.NEUTRAL)
@@ -719,13 +726,14 @@ fun OverviewScreen(repo: MissionRepository) {
             )
             KvRow("fingerprint", "${sh(M.ca.text("fingerprint", ""), 16)}…", if (M.ca == null) Tone.UNK else Tone.NEUTRAL)
             // Source planes — which truth surfaces are up, and the reason each absent one is dark.
+            SectionLabel("source planes")
             val planes = listOf(
                 Triple("ledger (DuckDB)", true, ""),
                 Triple("shadow bank (sqlite)", M.bankTotal != null, "TRIAD_DATABANK_DSN unset"),
                 Triple("TriadDTBNK (Postgres RO)", false, "TRIAD_MCP_DATABANK_RO_DSN unset"),
                 Triple("Prometheus", false, "Phase-0 observability not stood up"),
                 Triple("NATS", false, "not provisioned (spec §2)"),
-                Triple("venue session", false, "shadow lane — keyless by design"),
+                Triple("venue session", false, "shadow lane, keyless by design"),
             )
             MiniTable(
                 listOf("source plane", "state", "reason when absent"),
@@ -756,7 +764,7 @@ fun OverviewScreen(repo: MissionRepository) {
                 )
                 M.dup > 0 -> Ribbon(
                     "Bank integrity: ${n0(M.dup)} duplicate rows.",
-                    "${n0(M.bankTotal)} rows resolve only ${n0(M.bankDistinct)} distinct decisions — the counterfactual resolver is " +
+                    "${n0(M.bankTotal)} rows resolve only ${n0(M.bankDistinct)} distinct decisions: the counterfactual resolver is " +
                         "writing the same decision more than once. Every aggregate below is inflated by that factor. " +
                         "net_pnl_r = ${fmt(M.netPnlR, 2)}R is UNTRUSTED until the duplicate count is 0. This is a measurement defect.",
                     Tone.SEV,
@@ -768,7 +776,7 @@ fun OverviewScreen(repo: MissionRepository) {
                 )
             }
             WhyBox("THE LAW · O-6 · P8") {
-                Note("law · O-6 · net_r is never summed across books. B0, B1, M1 and K1 price the same candidate stream under different policies — their R is comparable, never additive. Forward-only (P8): every number here is counterfactual on data after the checkpoint cutoff.")
+                Note("law · O-6 · net_r is never summed across books. B0, B1, M1 and K1 price the same candidate stream under different policies: their R is comparable, never additive. Forward-only (P8): every number here is counterfactual on data after the checkpoint cutoff.")
             }
             val order = listOf("B0", "B1", "M1", "K1")
             if (M.books != null) {
@@ -792,12 +800,12 @@ fun OverviewScreen(repo: MissionRepository) {
                 }
                 if (edgeBars.isNotEmpty()) HBarChart(edgeBars, unit = "R")
             } else {
-                KvRow("scoreboard", "UNKNOWN — get_books_scoreboard unavailable", Tone.UNK)
+                KvRow("scoreboard", "UNKNOWN: get_books_scoreboard unavailable", Tone.UNK)
             }
             if (M.uncal) {
                 Ribbon(
                     "UNCALIBRATED (P7).",
-                    "get_calibration.status = absent. Conviction is vocabulary, not probability — B1 (conviction ≥ MED) cannot be " +
+                    "get_calibration.status = absent. Conviction is vocabulary, not probability: B1 (conviction ≥ MED) cannot be " +
                         "trusted as a policy until a reliability curve is measured and pinned.",
                     Tone.WARN,
                 )
@@ -807,7 +815,7 @@ fun OverviewScreen(repo: MissionRepository) {
             val m1 = M.books.obj("M1")
             val e0 = listOf(
                 Triple("ΔB0 CI-positive", b0.bool("ci_excludes_zero"), b0.text("ci")),
-                Triple("M1 − B0 CI-positive", false, if ((m1.int("n") ?: 0) > 0) "n=${m1.int("n")}" else "M1 n=0 — nothing to compare"),
+                Triple("M1 − B0 CI-positive", false, if ((m1.int("n") ?: 0) > 0) "n=${m1.int("n")}" else "M1 n=0, nothing to compare"),
                 Triple("≥ 4 forward weeks", false, "forward window not yet 4 weeks"),
                 Triple("≥ 300 forward candidates", M.decisions >= 300, "${n0(M.decisions)} decisions"),
             )
@@ -830,6 +838,7 @@ fun OverviewScreen(repo: MissionRepository) {
                 "Worst leg wins across FLOW · CAG · BANK (W-33 watchdog).",
                 statusTone(M.co.text("verdict")),
             )
+            SectionLabel("the SLO legs", divider = false)
             val legs = listOf("FLOW" to M.co.obj("flow"), "CAG" to M.co.obj("cag"), "BANK" to M.co.obj("bank"))
             MiniTable(
                 listOf("SLO", "state", "reason"),
@@ -840,10 +849,11 @@ fun OverviewScreen(repo: MissionRepository) {
                     listOf(
                         "VERDICT" to Tone.NEUTRAL,
                         M.co.text("verdict", "UNKNOWN") to statusTone(M.co.text("verdict")),
-                        "worst leg wins — W-33 continuity watchdog" to Tone.NEUTRAL,
+                        "worst leg wins (W-33 continuity watchdog)" to Tone.NEUTRAL,
                     ),
                 ),
             )
+            SectionLabel("the rates")
             StatRow(
                 Triple("take", n0(M.takes), if (M.inBand) Tone.GOOD else Tone.BAD),
                 Triple("skip", n0(M.skips), Tone.NEUTRAL),
@@ -855,13 +865,13 @@ fun OverviewScreen(repo: MissionRepository) {
                 HBarChart(M.detectors.map { Bar(it.text("detector_id"), (it.int("emitted_count") ?: 0).toDouble(), Tone.INFO) })
             }
             if (M.refusals.isNotEmpty()) {
-                Note("WHY THE PATH IS DEAD — REFUSAL CENSUS")
+                Note("WHY THE PATH IS DEAD: REFUSAL CENSUS")
                 HBarChart(
                     M.refusals.map { (k, n) -> Bar(k, n.toDouble(), if (k.startsWith("invalid_output")) Tone.SEV else Tone.WARN) },
                 )
             }
             WhyBox("THE LAW · P9") {
-                Note("invalid_output:* is a P9 surface (reject, never repair): the model is emitting geometry that fails stop_distance / ttl_bounds / net_rr_floor. That is a defect in the model or the prompt — not market noise.")
+                Note("invalid_output:* is a P9 surface (reject, never repair): the model is emitting geometry that fails stop_distance / ttl_bounds / net_rr_floor. That is a defect in the model or the prompt, not market noise.")
             }
         }
 
@@ -869,11 +879,12 @@ fun OverviewScreen(repo: MissionRepository) {
         McCard("Next", tool = "get_go_no_go_status · get_proposals", sub = "the one thing to do") {
             val blocking = if (M.chokeStage?.k == "takes")
                 "Nothing can be proven forward while the take rate is ${pct(M.takeRate, 2)}. Gate 7 (E-0) cannot accumulate " +
-                    "evidence, and gate 6 (calibration in band) is failing by definition — so gates 1–5 are not the binding " +
+                    "evidence, and gate 6 (calibration in band) is failing by definition, so gates 1–5 are not the binding " +
                     "constraint. Fix the gate, then run the venue campaign."
             else
-                "No computed blocker — re-read the ladder."
+                "No computed blocker: re-read the ladder."
             Ribbon("Blocking now (computed).", blocking, Tone.WARN)
+            SectionLabel("the gates", divider = false)
             val items = M.gng.arr("items")
             items.forEachIndexed { i, it ->
                 val raw = (it as? JsonPrimitive)?.content ?: return@forEachIndexed
@@ -883,10 +894,11 @@ fun OverviewScreen(repo: MissionRepository) {
                 GateRow(i + 1, head, if (rest.length > 90) rest.take(90) + "…" else rest, "ABSENT", Tone.UNK)
             }
             KvRow("gates evidenced", "0 / ${items.size}", if (M.gng == null) Tone.UNK else Tone.NEUTRAL)
+            SectionLabel("the inbox")
             val props = M.proposalsWrap.arr("proposals").rows()
             KvRow(
                 "proposals inbox",
-                if (M.proposalsWrap == null) "UNKNOWN" else if (props.isEmpty()) "0 (empty — a fact)" else "${props.size} pending",
+                if (M.proposalsWrap == null) "UNKNOWN" else if (props.isEmpty()) "0 (empty, a fact)" else "${props.size} pending",
                 if (M.proposalsWrap == null) Tone.UNK else if (props.isEmpty()) Tone.GOOD else Tone.WARN,
             )
             if (props.isNotEmpty()) {
@@ -906,6 +918,7 @@ fun OverviewScreen(repo: MissionRepository) {
         // ── 1.8 LATENCY — declared vs measured (O-1: every live cell is hatched, not green) ───────────
         McCard("Latency law", tool = "get_latency_budgets", sub = "declared vs measured") {
             KvRow("config version", M.lb.text("config_version"), if (M.lb == null) Tone.UNK else Tone.NEUTRAL)
+            SectionLabel("the budgets", divider = false)
             val latRows = M.lb.arr("rows").rows()
             if (latRows.isNotEmpty()) {
                 MiniTable(
@@ -921,8 +934,9 @@ fun OverviewScreen(repo: MissionRepository) {
                     },
                 )
             } else {
-                KvRow("rows", "UNKNOWN — get_latency_budgets unavailable", Tone.UNK)
+                KvRow("rows", "UNKNOWN: get_latency_budgets unavailable", Tone.UNK)
             }
+            SectionLabel("the deadlines")
             val rd = M.lb.obj("request_deadline")
             StatRow(
                 Triple("request deadline", "${rd.int("cap_ms") ?: "—"}ms", if (rd == null) Tone.UNK else Tone.NEUTRAL),
@@ -1229,7 +1243,7 @@ private fun EstateCard(M: Model) {
     ) {
         // bold ~19sp title, numbers live: "The estate — 1 of 12 nodes have a heartbeat"
         Text(
-            "The estate — ${M.measuredNodes} of ${M.pills.size} nodes have a heartbeat",
+            "The estate: ${M.measuredNodes} of ${M.pills.size} nodes have a heartbeat",
             color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 19.sp,
             letterSpacing = (-0.3).sp, lineHeight = 24.sp,
         )
@@ -1247,7 +1261,7 @@ private fun EstateCard(M: Model) {
                 withStyle(b) { append("${M.pills.size} nodes") }
                 append(". The system can measure ")
                 withStyle(b) { append("${M.measuredNodes}") }
-                append(". Everything else is inferred from whether a table has rows — ")
+                append(". Everything else is inferred from whether a table has rows: ")
                 withStyle(b) { append("that is not health, that is an autopsy.") }
                 append(" Tap any node to open the view that owns it.")
             },
@@ -1267,7 +1281,7 @@ private fun EstateCard(M: Model) {
         Box(Modifier.fillMaxWidth().padding(top = 13.dp).height(1.dp).background(Hairline))
         Text(
             if (M.busDown)
-                "NATS: transport unavailable — the bus on the diagram does not exist. " +
+                "NATS: transport unavailable. The bus on the diagram does not exist. " +
                     "${M.laneCount?.toString() ?: "—"} ingest lanes are carrying everything."
             else
                 "NATS: bus reachable · ${M.laneCount?.toString() ?: "—"} ingest lanes also carrying data.",
@@ -1306,7 +1320,7 @@ private fun stateTone(state: String): Tone = when (state.lowercase()) {
 @Composable
 private fun OvPendSpec(tool: String, spec: String, served: Boolean) {
     if (served) {
-        Note("$tool · LIVE — this panel now reads the server value directly, not the client-side stitch.", Tone.GOOD)
+        Note("$tool · LIVE: this panel now reads the server value directly, not the client-side stitch.", Tone.GOOD)
         return
     }
     // The full schema + rules used to sit open in every card — pages of mono the reader never needs. Fold
@@ -1321,7 +1335,7 @@ private fun OvPendSpec(tool: String, spec: String, served: Boolean) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "PEND · $tool NOT BUILT — stitched client-side",
+                "PEND · $tool NOT BUILT: stitched client-side",
                 color = Amber, fontFamily = EstateMono, fontSize = 10.sp, fontWeight = FontWeight.Bold,
                 letterSpacing = 0.8.sp, lineHeight = 14.sp, modifier = Modifier.weight(1f),
             )
@@ -1376,7 +1390,7 @@ private fun GateRow(n: Int, title: String, desc: String, status: String, tone: T
 @OptIn(ExperimentalLayoutApi::class)
 private fun TruthCensus(M: Model) {
     if (M.comps.isEmpty()) {
-        KvRow("census", "UNKNOWN — get_checkup returned no components", Tone.UNK)
+        KvRow("census", "UNKNOWN: get_checkup returned no components", Tone.UNK)
     } else {
         FlowRow(
             Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -1464,7 +1478,7 @@ private fun OvProposeAction(repo: MissionRepository) {
         return
     }
 
-    Note("The propose lane — a record for a human to execute via triadctl. It performs nothing (O-5). A proposal without a rationale is a command — write the why.", Tone.INFO)
+    Note("The propose lane: a record for a human to execute via triadctl. It performs nothing (O-5). A proposal without a rationale is a command. Write the why.", Tone.INFO)
     Row(Modifier.fillMaxWidth().padding(top = 6.dp).horizontalScroll(rememberScrollState())) {
         kinds.forEachIndexed { i, k ->
             Box(Modifier.clickable { sel = i; result = null }) {
@@ -1475,7 +1489,7 @@ private fun OvProposeAction(repo: MissionRepository) {
     KvRow("kind", kind, Tone.NEUTRAL)
     OutlinedTextField(
         rationale, { rationale = it; result = null },
-        label = { Text("rationale (required) — cite the evidence") },
+        label = { Text("rationale (required): cite the evidence") },
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
     )
     Button(
@@ -1508,7 +1522,7 @@ private fun OvProposeAction(repo: MissionRepository) {
     result?.let { (ok, msg) ->
         Ribbon(
             if (ok) "Proposal filed · $msg" else "Propose failed",
-            if (ok) "proposal_id=$msg — the inbox is no longer empty. Ratify/apply is the human ceremony at triadctl, not the app." else msg,
+            if (ok) "proposal_id=$msg. The inbox is no longer empty. Ratify/apply is the human ceremony at triadctl, not the app." else msg,
             if (ok) Tone.GOOD else Tone.BAD,
         )
     }
