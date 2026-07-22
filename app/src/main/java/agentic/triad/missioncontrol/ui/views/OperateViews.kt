@@ -3323,7 +3323,7 @@ fun CheckupScreen(repo: MissionRepository) {
         // no current card lacks an HTML counterpart on this page — nothing to append beyond the spec
         val ckPend = listOf("get_checkup_sources", "get_probe_depth", "get_checkup_history").filter { d[it] == null }
         CkOpsFooter(
-            "TRIAD Mission Control · view 08 · Checkup v1.0 · wiring: TRIAD-Checkup-Wiring-v1.0.md",
+            "TRIAD Mission Control · view 03 · Checkup v1.0 · wiring: TRIAD-Checkup-Wiring-v1.0.md",
             ckPend,
             CHECKUP_TOOLS.filter { d[it] == null && it !in ckPend },
             "C-1 green has a depth · C-2 verdict carries its denominator · C-3 unknown is a work item · " +
