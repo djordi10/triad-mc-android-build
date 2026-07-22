@@ -518,18 +518,8 @@ fun OverviewScreen(repo: MissionRepository) {
         // ── 1.1 STANCE — the dark `.stance` band (web pStance): the giant display word + cursor
         //    bar, the live narrative with bold runs, then the three RISK/LOOP/TRUTH tiles ──
         OverviewStancePanel(M)
-        // the evidence rows behind each pill (kept as a detail card under the band)
-        McCard("Stance", tool = "derived · O-1..O-8", sub = "the evidence") {
-            KvRow(
-                "RISK: ${if (M.unprotected == 0) "0 unprotected" else if (M.unprotected == null) "not derivable" else "${M.unprotected} unprotected"}",
-                M.risk, verdictTone(M.risk),
-            )
-            KvRow("LOOP: ${M.chokeStage?.let { "choke @ ${it.k}" } ?: "no choke"}", M.loop, verdictTone(M.loop))
-            KvRow(
-                "TRUTH: ${if (M.total > 0) "${M.probed}/${M.total} probed · ${pct(M.coverage, 0)}" else "no checkup"}",
-                M.truth, verdictTone(M.truth),
-            )
-        }
+        // (The RISK/LOOP/TRUTH evidence used to be restated here as a "Stance" detail card; it was a
+        //  verbatim duplicate of the three tiles in the stance band above, so it now lives only there.)
 
         // ── 1.2 MONEY PATH — the deterministic spine, chokepoint computed at the collapse (O-8) ──────
         McCard(
