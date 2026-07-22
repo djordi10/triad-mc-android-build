@@ -180,6 +180,7 @@ fun ConfigScreen(repo: MissionRepository) {
 
             // ── ENTRIES & RISK — the trading-behaviour levers, the meat ──
             SettingGroup(
+                eyebrow = "Trading rules",
                 title = "Entries & risk",
                 whatItControls = "What decides a trade, how big it is, and when it stops for the day.",
                 detailLabel = "ALL RISK · EXECUTION · REGIMES · EDGE LEVERS",
@@ -240,6 +241,7 @@ fun ConfigScreen(repo: MissionRepository) {
 
             // ── THE BRAIN — what AI / signals it judges each setup with ──
             SettingGroup(
+                eyebrow = "Intelligence",
                 title = "The brain",
                 whatItControls = "The model and cached signals it judges each setup with.",
                 detailLabel = "ALL INTELLIGENCE · CAG · AUX LEVERS",
@@ -284,6 +286,7 @@ fun ConfigScreen(repo: MissionRepository) {
 
             // ── WHAT IT WATCHES — which markets it trades and which patterns it reads ──
             SettingGroup(
+                eyebrow = "Market inputs",
                 title = "What it watches",
                 whatItControls = "Which markets it trades and which price patterns it reads.",
                 detailLabel = "ALL DETECTORS · STRUCTURES · INDICATORS · TIMEFRAMES · SYMBOLS",
@@ -326,6 +329,7 @@ fun ConfigScreen(repo: MissionRepository) {
 
             // ── LEARNING — how it tunes itself, and the gates a new model must pass ──
             SettingGroup(
+                eyebrow = "Self-tuning",
                 title = "Learning",
                 whatItControls = "How it tunes itself, and the gates a new model must clear before it counts.",
                 detailLabel = "ALL TUNING · SWEEP GATE LEVERS",
@@ -363,6 +367,7 @@ fun ConfigScreen(repo: MissionRepository) {
 
             // ── PEOPLE & SAFETY — who can touch money, and the guards ──
             SettingGroup(
+                eyebrow = "Access & safety",
                 title = "People & safety",
                 whatItControls = "Who can touch money, the two-person guard, and the shadow books.",
                 detailLabel = "ALL USER · PERSONA LEVERS",
@@ -404,6 +409,7 @@ fun ConfigScreen(repo: MissionRepository) {
 
             // ── PLUMBING — logging cadence + where this preset came from ──
             SettingGroup(
+                eyebrow = "Operations",
                 title = "Plumbing",
                 whatItControls = "Logging cadence, and where this preset came from.",
                 detailLabel = "ALL LOGGER + PRESET METADATA",
