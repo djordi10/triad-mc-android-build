@@ -39,6 +39,7 @@ import agentic.triad.missioncontrol.ui.components.Gauge
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.Histogram
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.LeverTable
 import agentic.triad.missioncontrol.ui.components.LineChart
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -1257,32 +1258,22 @@ fun TradeLogsScreen(repo: MissionRepository) {
                     val checksFailed = guardDerive(emptyList<JsonElement>()) { validator.field("checks_failed").list() }
                     val nullsL = guardDerive(emptyList<JsonObject>()) { dr.field("nulls").rows() }
                     val fabL = guardDerive(emptyList<JsonObject>()) { dr.field("fabricated").rows() }
-                    KvRow("decision_id", dr.text("decision_id"), NEUTRAL)
-                    KvRow(
-                        "verdict · slot · conviction",
-                        "${envl.text("verdict")} · ${envl.text("slot")} · ${envl.int("conviction") ?: "—"}",
-                        if (envl.text("verdict") == "take") GOOD else NEUTRAL,
-                    )
-                    KvRow(
-                        "abstain_reason",
-                        envl.text("abstain_reason"),
-                        if (envl.text("abstain_reason") in listOf("model", "take", "—")) NEUTRAL else WARN,
-                    )
-                    KvRow(
-                        "validator",
-                        if (validator.bool("passed")) "passed"
+                    val abstain = envl.text("abstain_reason")
+                    val validatorV = if (validator.bool("passed")) "passed"
                         else if (checksFailed.isEmpty()) "failed"
-                        else "failed · " + checksFailed.joinToString(",") { it.str() },
-                        if (validator.bool("passed")) GOOD else BAD,
-                    )
-                    KvRow("detector · setup · side", "${cand.text("detector_id")} · ${cand.text("setup_type")} · ${cand.text("direction")}", NEUTRAL)
-                    KvRow("entry zone", "${cand.obj("entry_zone").text("low")} – ${cand.obj("entry_zone").text("high")}", NEUTRAL)
-                    KvRow("stop · invalidation", "${cand.text("provisional_stop")} · ${cand.text("invalidation_price")}", NEUTRAL)
-                    KvRow("market", "${mkt.text("regime")} regime · spread ${mkt.text("spread_bps")} bps", NEUTRAL)
-                    KvRow(
-                        "input_hash",
-                        chain.text("input_hash").let { if (it.length > 18) it.take(18) + "…" else it },
-                        if (fabL.any { it.text("field") == "input_hash" }) BAD else NEUTRAL,
+                        else "failed · " + checksFailed.joinToString(",") { it.str() }
+                    LeverTable(
+                        listOf(
+                            Triple("decision_id", dr.text("decision_id"), NEUTRAL),
+                            Triple("verdict · slot · conviction", "${envl.text("verdict")} · ${envl.text("slot")} · ${envl.int("conviction") ?: "—"}", if (envl.text("verdict") == "take") GOOD else NEUTRAL),
+                            Triple("abstain_reason", abstain, if (abstain in listOf("model", "take", "—")) NEUTRAL else WARN),
+                            Triple("validator", validatorV, if (validator.bool("passed")) GOOD else BAD),
+                            Triple("detector · setup · side", "${cand.text("detector_id")} · ${cand.text("setup_type")} · ${cand.text("direction")}", NEUTRAL),
+                            Triple("entry zone", "${cand.obj("entry_zone").text("low")} to ${cand.obj("entry_zone").text("high")}", NEUTRAL),
+                            Triple("stop · invalidation", "${cand.text("provisional_stop")} · ${cand.text("invalidation_price")}", NEUTRAL),
+                            Triple("market", "${mkt.text("regime")} regime · spread ${mkt.text("spread_bps")} bps", NEUTRAL),
+                            Triple("input_hash", chain.text("input_hash").let { if (it.length > 18) it.take(18) + "…" else it }, if (fabL.any { it.text("field") == "input_hash" }) BAD else NEUTRAL),
+                        ),
                     )
                     if (fabL.isNotEmpty()) {
                         MiniTable(
