@@ -82,6 +82,7 @@ import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.Funnel
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.LeverTable
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
@@ -552,25 +553,27 @@ fun OverviewScreen(repo: MissionRepository) {
                 Triple("positions", M.openN.toString(), if (M.posWrap == null) Tone.UNK else Tone.NEUTRAL),
             )
             SectionLabel("the branches")
-            // SKIPS branch — P6 abstain is first-class.
-            KvRow("SKIPS (abstain · P6, first-class)", n0(M.skips), Tone.NEUTRAL)
-            // FAST-EXIT lane — P3; INDEPENDENT once get_risk_envelope ships its fast_exit block,
-            // p99 unavailable while Prometheus is absent (the JS `fe` read, verbatim).
-            KvRow(
-                "FAST-EXIT LANE (P3 · nothing may suppress an exit)",
-                if (M.fastExit != null) "INDEPENDENT" else "p99 unavailable (Prometheus absent)",
-                if (M.fastExit != null) Tone.GOOD else Tone.UNK,
-            )
-            KvRow(
-                "lanes (live / shadow)",
-                if (M.db == null) "UNKNOWN" else "${M.bankLive} / ${M.bankShadow}",
-                if (M.db == null) Tone.UNK else Tone.NEUTRAL,
-            )
+            // The abstain (P6), fast-exit (P3), lanes and by-class branches as one compact table.
             val byClass = M.db.obj("by_class")
-            KvRow(
-                "by class (REAL/GATED/MISSED)",
-                if (byClass == null) "UNKNOWN" else "${byClass.int("REAL") ?: "—"} / ${byClass.int("GATED") ?: "—"} / ${byClass.int("MISSED") ?: "—"}",
-                if (byClass == null) Tone.UNK else Tone.NEUTRAL,
+            LeverTable(
+                listOf(
+                    Triple("SKIPS (abstain · P6, first-class)", n0(M.skips), Tone.NEUTRAL),
+                    Triple(
+                        "FAST-EXIT LANE (P3 · nothing may suppress an exit)",
+                        if (M.fastExit != null) "INDEPENDENT" else "p99 unavailable (Prometheus absent)",
+                        if (M.fastExit != null) Tone.GOOD else Tone.UNK,
+                    ),
+                    Triple(
+                        "lanes (live / shadow)",
+                        if (M.db == null) "UNKNOWN" else "${M.bankLive} / ${M.bankShadow}",
+                        if (M.db == null) Tone.UNK else Tone.NEUTRAL,
+                    ),
+                    Triple(
+                        "by class (REAL/GATED/MISSED)",
+                        if (byClass == null) "UNKNOWN" else "${byClass.int("REAL") ?: "—"} / ${byClass.int("GATED") ?: "—"} / ${byClass.int("MISSED") ?: "—"}",
+                        if (byClass == null) Tone.UNK else Tone.NEUTRAL,
+                    ),
+                ),
             )
             if (M.chokeIndex != null) {
                 val topRefusals = M.refusals.take(3).joinToString(" · ") { "${it.first} ${n0(it.second)}" }

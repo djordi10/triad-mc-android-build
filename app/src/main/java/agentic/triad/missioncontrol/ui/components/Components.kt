@@ -705,7 +705,7 @@ fun PendBox(tool: String, spec: String) {
  * McCard can carve its body into named parts. Pass `divider = false` for the first section (no rule above).
  */
 @Composable
-fun SectionLabel(label: String, divider: Boolean = true, accent: Boolean = false) {
+fun SectionLabel(label: String, divider: Boolean = true, accent: Boolean = true) {
     Column(Modifier.fillMaxWidth().padding(top = if (divider) 14.dp else 6.dp)) {
         if (divider) Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
         // accent lifts the heading above the loose-eyebrow default: an emerald tick + darker, bolder ink
