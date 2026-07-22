@@ -272,8 +272,18 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
                         ) { Box(Modifier.size(10.dp).background(if (live) LiveOn else LiveOff, CircleShape)) }
                     }
                 }
-                // ── the collapsible status section — global stance strip + the per-view badge row.
-                //    Sits between the app bar and the chip nav, and slides away on scroll-down. ──
+                // ── #chiprow — the current segment's views; pinned directly under the app bar ──
+                Row(
+                    Modifier.fillMaxWidth().background(Paper).drawBottomHairline(Line)
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    View.bySegment(seg).forEach { v -> ViewChip(v, active = route == v.route) { nav.go(v.route) } }
+                }
+                // ── the collapsible status section — the global stance strip. Now sits BELOW the chip
+                //    nav (swapped), right above the content, and slides away on scroll-down. ──
                 AnimatedVisibility(visible = statusVisible) {
                     Column {
                         StanceStrip(
@@ -286,16 +296,6 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
                         // un-commenting; the hoist wiring (LocalViewStance) is left intact.
                         // if (viewStanceRow.isNotEmpty()) ViewStanceRow(viewStanceRow)
                     }
-                }
-                // ── #chiprow — the current segment's views; pinned right above the content ──
-                Row(
-                    Modifier.fillMaxWidth().background(Paper).drawBottomHairline(Line)
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, vertical = 9.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    View.bySegment(seg).forEach { v -> ViewChip(v, active = route == v.route) { nav.go(v.route) } }
                 }
             }
         },
