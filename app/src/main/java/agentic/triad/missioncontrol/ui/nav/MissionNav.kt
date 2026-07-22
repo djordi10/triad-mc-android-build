@@ -416,18 +416,33 @@ private fun StanceStrip(
     }
 }
 
-/** The per-view stats as a second header row, styled to match the global stance strip so the two read
- *  as one status section. Fed by [LocalViewStance], which [ViewScaffold] pushes the current view into. */
+/** The per-view stats as a second header row: a horizontal strip of compact [StanceBadge] pills (one
+ *  line each) so it stays tight under the global stance strip. Fed by [LocalViewStance], which
+ *  [ViewScaffold] pushes the current view into. */
 @Composable
 private fun ViewStanceRow(items: List<Stance>) {
     Row(
         Modifier.fillMaxWidth().background(Paper).drawBottomHairline(Line)
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        items.forEach { StanceChip(it.key.uppercase(), it.value, it.tone.fg()) }
+        items.forEach { StanceBadge(it) }
+    }
+}
+
+/** One per-view stat as a compact single-line pill: a dim mono key then the tone-coloured value. */
+@Composable
+private fun StanceBadge(s: Stance) {
+    Row(
+        Modifier.clip(RoundedCornerShape(7.dp)).border(1.dp, Line, RoundedCornerShape(7.dp))
+            .padding(horizontal = 9.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(s.key.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 8.5.sp, letterSpacing = 0.6.sp)
+        Text(s.value, color = s.tone.fg(), fontFamily = Mono, fontWeight = FontWeight.SemiBold, fontSize = 10.5.sp)
     }
 }
 
