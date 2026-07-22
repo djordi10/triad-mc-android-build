@@ -367,6 +367,7 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
 // ── 22 · Suite Symbols — 45-symbol directory + per-symbol view (ringkas · grids locked) ──────────────
 private val SUITE_SYMBOLS_TOOLS = listOf(
     "get_bank_priced", "get_decision_census", "get_detector_registry", "get_validator_rejects",
+    "get_scan_board",
 )
 
 /** One directory entry (snapshot seed from the doc's symgrid) — candidate volume + tradability class. */
@@ -405,16 +406,24 @@ fun SuiteSymbolsScreen(repo: MissionRepository) {
     val s by vm.state.collectAsState()
     var selected by remember { mutableStateOf<String?>(null) }
 
+    // ── live 24h scan board — the only per-symbol feed available without the databank DSN ──
+    val scan = s.data["get_scan_board"] as? kotlinx.serialization.json.JsonObject
+    val scanRows = scan.field("board").rows()
+    val scanBySym = scanRows.associateBy { it.text("symbol").removeSuffix("-USDT-PERP") }
+    val scanSymbols = scan.int("symbols")
+    val scanEmitting = scan.int("emitting")
+    val scanScreened = scan.int("screened")
+
     val here = selected
     if (here == null) {
         // ── the directory — all 45, ordered by candidate volume ──
         ViewScaffold(
             View.SUITE_SYMBOLS,
             stance = listOf(
-                Stance("symbols", "45", NEUTRAL),
-                Stance("with cands", "30", NEUTRAL),
+                Stance("symbols", (scanSymbols ?: 45).toString(), NEUTRAL),
+                Stance("emitting 24h", scanEmitting?.toString() ?: "—", if ((scanEmitting ?: 0) > 0) GOOD else UNK),
+                Stance("screened", scanScreened?.toString() ?: "30", NEUTRAL),
                 Stance("takes", "5 symbols", GOOD),
-                Stance("resolved", "25 symbols", INFO),
             ),
         ) {
             VerdictBanner(
@@ -424,20 +433,31 @@ fun SuiteSymbolsScreen(repo: MissionRepository) {
                 wordTone = GOOD,
                 title = "Symbols",
             )
-            McCard("Directory", tool = "get_decision_census", sub = "candidate volume & class") {
+            McCard("Directory", tool = "get_scan_board · get_decision_census", sub = "candidate volume & class") {
+                if (scan != null) {
+                    val feedAbsent = (scanEmitting ?: 0) == 0
+                    Note(
+                        "Live 24h feed: ${scanEmitting ?: 0} of ${scanScreened ?: "—"} screened symbols emitting" +
+                            (if (feedAbsent) " (feed absent right now)." else ".") +
+                            " The per-symbol counts below are the lifetime snapshot; a live per-symbol " +
+                            "profitability split needs the databank DSN.",
+                        if (feedAbsent) UNK else GOOD,
+                    )
+                }
                 Note("Ordered as indexed. Class = tradability tier (5 = takes flowing, 1 = dead feed).", NEUTRAL)
-                SYM_DIR.forEach { d -> SymDirRow(d) { selected = d.sym } }
+                SYM_DIR.forEach { d -> SymDirRow(d, scanBySym[d.sym]) { selected = d.sym } }
             }
             if (s.stale != null) Note("· ${s.stale}", WARN)
         }
     } else {
-        SymbolDetail(here, onBack = { selected = null })
+        SymbolDetail(here, scan = scanBySym[here], onBack = { selected = null })
     }
 }
 
-/** One directory row — clickable: bold symbol, candidate count, a class tag; a hairline closes it. */
+/** One directory row — clickable: bold symbol, candidate count, a class tag; a hairline closes it.
+ *  When the live scan board carries this symbol with fresh 24h candidates, a small live tag rides along. */
 @Composable
-private fun SymDirRow(d: SymDir, onTap: () -> Unit) {
+private fun SymDirRow(d: SymDir, scan: kotlinx.serialization.json.JsonObject?, onTap: () -> Unit) {
     androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth()) {
         androidx.compose.foundation.layout.Row(
             Modifier.fillMaxWidth()
@@ -456,6 +476,10 @@ private fun SymDirRow(d: SymDir, onTap: () -> Unit) {
                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 11.5.sp,
                 modifier = Modifier.weight(1f),
             )
+            scan?.int("cands_24h")?.takeIf { it > 0 }?.let {
+                Tag("24h $it", GOOD)
+                androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+            }
             Tag(classLabel(d), classTone(d.cls))
             Text(
                 "›", color = agentic.triad.missioncontrol.ui.theme.Unk,
@@ -469,9 +493,10 @@ private fun SymDirRow(d: SymDir, onTap: () -> Unit) {
     }
 }
 
-/** The per-symbol view (ringkas): aggregate verdict + census + split-register two-lens + LOCKED grids. */
+/** The per-symbol view (ringkas): aggregate verdict + census + split-register two-lens + LOCKED grids.
+ *  `scan` is this symbol's live get_scan_board row when present (the only per-symbol live read pre-DSN). */
 @Composable
-private fun SymbolDetail(sym: String, onBack: () -> Unit) {
+private fun SymbolDetail(sym: String, scan: kotlinx.serialization.json.JsonObject?, onBack: () -> Unit) {
     val d = SYM_DIR.first { it.sym == sym }
     val agg = AGG_BY_SYM[sym]
     ViewScaffold(
@@ -480,7 +505,7 @@ private fun SymbolDetail(sym: String, onBack: () -> Unit) {
             Stance("symbol", sym, NEUTRAL),
             Stance("class", "${d.cls}${if (d.takes) " · takes" else ""}", classTone(d.cls)),
             Stance("cands", if (d.cands > 0) "%,d".format(d.cands) else "0", NEUTRAL),
-            Stance("time", "dormant", WARN),
+            Stance("24h", scan?.int("cands_24h")?.toString() ?: "—", if ((scan?.int("cands_24h") ?: 0) > 0) GOOD else UNK),
         ),
     ) {
         // a plain back affordance — the directory is one tap up
@@ -505,6 +530,20 @@ private fun SymbolDetail(sym: String, onBack: () -> Unit) {
             wordTone = when (agg?.aVerdict) { "PROFIT" -> GOOD; "LOSING" -> BAD; null -> UNK; else -> WARN },
             title = sym,
         )
+
+        // ── live 24h scan (get_scan_board) — the one per-symbol read that works without the DSN ──
+        if (scan != null) {
+            val cands24 = scan.int("cands_24h") ?: 0
+            val reason = scan.text("screen_reason").ifBlank { "—" }
+            McCard("Live 24h scan", tool = "get_scan_board", sub = "feed state now") {
+                KvRow("candidates 24h", cands24.toString(), if (cands24 > 0) GOOD else UNK)
+                KvRow("regime", scan.text("regime").ifBlank { "—" }, NEUTRAL)
+                KvRow("spread", scan.num("spread_bps")?.let { "${fmt1(it)}bps" } ?: "—", NEUTRAL)
+                KvRow("screen reason", reason, if (reason == "none") GOOD else if (reason == "feed_absent") BAD else WARN)
+                if (reason == "feed_absent")
+                    Note("The market feed is absent for $sym right now, so no 24h candidates are being screened. The lifetime figures below are the snapshot.", UNK)
+            }
+        }
 
         McCard("Census", "get_decision_census") {
             KvRow("class", "${d.cls}${if (d.takes) " · takes flowing" else ""}", classTone(d.cls))
