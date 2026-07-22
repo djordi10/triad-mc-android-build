@@ -272,3 +272,49 @@ This is the same shape as SUITE's DSN gap: an infra switch on liko's side, zero 
 
 The one line that unblocks the most at once is still `TRIAD_DATABANK_DSN` (bucket C) — it lights
 up the whole bank half of SUITE plus the Shadow/Books reads with no app change.
+
+> **⚠ SUPERSEDED — read section 8.** The "set a sqlite `TRIAD_DATABANK_DSN` + run resolve"
+> framing in sections 0 / 1 / 3 / 4B was inferred from the tools' error strings alone. A later
+> read-only SSH recon into liko's Mac corrected it: the databank is **Postgres and healthy**, and
+> the deadness is a **guard-script bug**, not a missing DSN. Section 8 is the corrected picture.
+
+---
+
+## 8. CORRECTION — the databank is Postgres and healthy; the deadness was a guard bug
+
+Verified by read-only SSH into `Mac-Studio-liko.local` (via `ProxyCommand="cloudflared access ssh
+--hostname %h" liko@sshmac.transportech.ai`, 2026-07-22). This supersedes the DSN framing above.
+
+**1. The bank data exists and is healthy.** The MCP keeper launches the server with
+`TRIAD_MCP_DATABANK_RO_DSN=postgresql://dtbnk_reader:…@192.168.70.235/triaddtbnk`; the Postgres
+table `databank_shadow_trades` holds **411,174 rows**. Nothing needs building; no new datastore.
+
+**2. Why the bank tools still read dead — two real causes, neither is an unset DSN:**
+
+- **Transient load / 502 flap.** When the Mac is under load (observed load avg 8.74 right after a
+  reboot) the MCP proc is too swamped to answer heavy reads, so Cloudflare returns 502 and the
+  bank panels read absent. Load-driven, not config.
+- **A guard-script bug that turned a lock into "corruption" (the real culprit).** The live trading
+  stack continuously writes the 2.8 GB local SQLite file `~/triad/databank/triad.db`, so
+  `PRAGMA quick_check` transiently returns `Error: in prepare, database is locked (5)`. The cron
+  guard `~/triad/bin/sqlite_guard.sh` captured that on **stderr** (`2>&1`) and mis-read the lock as
+  corruption, then ran a destructive `.recover` on the 2.8 GB file — killing the writers, pegging
+  CPU/IO, and causing the 502s. Log proof: two `CORRUPT (… database is locked (5)) — auto-recovering`
+  events (2026-07-18, 2026-07-22), each followed by `RECOVERED ok` (it was never corrupt), plus four
+  `triad.db.corrupt-*` scar files.
+
+**3. Fix applied 2026-07-22 (user OK'd):** added a skip-branch to `sqlite_guard.sh` so a
+`database is locked` / `database is busy` result is logged and skipped instead of triggering
+`.recover`. Real-corruption recovery is untouched (lock = `SQLITE_BUSY`, a different error class
+from `disk image is malformed`). Backup `sqlite_guard.sh.bak-1784741547`; `bash -n` + logic
+dry-tested. It only reduces the guard's false-positive destructive recovery — no trading-stack
+change. This is liko's LIVE box; never bounce the stack.
+
+**4. One open thread (honest):** in this session the MCP tools `get_bank_priced` /
+`get_shadow_bank` / `get_bank_dedup` still returned `transport: unavailable ·
+TRIAD_DATABANK_DSN unset / not a sqlite DSN`, i.e. the deployed read-path for those tools cited the
+**sqlite** `TRIAD_DATABANK_DSN` (unset), not the healthy Postgres RO DSN. Whether the deployed
+build routes those specific tools to Postgres (as the keeper config implies) or to the sqlite lane
+needs one more check against the DEPLOYED server source (not the v5.18 branch). Until confirmed,
+treat "the bank data is healthy in Postgres" and "the deployed tools point at it" as two separate
+facts — the first is verified, the second is not yet.
