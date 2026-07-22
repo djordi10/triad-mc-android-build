@@ -312,6 +312,14 @@ fun AnalyticsScreen(repo: MissionRepository) {
             Stance("calibration", calib.text("status", "—").uppercase(), if (calib.text("status") == "absent") BAD else NEUTRAL),
         ),
     ) {
+        VerdictBanner(
+            word = "live + design",
+            said = "The workbench up top re-aggregates the live rowset every time you change a filter. " +
+                "The pipeline walk-through below (signals to learning) is a designed layout: its numbers are " +
+                "interim placeholders, marked pending, not live yet.",
+            wordTone = INFO,
+            title = "Analytics",
+        )
         McCard("Analytics workbench", "selections re-aggregate every chart") {
             Row(Modifier.fillMaxWidth().padding(bottom = 2.dp)) {
                 Tag("demo rowset: live per-cohort feed lands with get_vr_scoreboard", WARN)
@@ -521,31 +529,13 @@ fun AnalyticsScreen(repo: MissionRepository) {
 
         // ── 02 · ADJUDICATION ──────────────────────────────────────────────────────────────────────
         AnaSection("02 · Adjudication", "The model plane")
-        McCard("Conviction histogram", tool = "get_conviction_histogram", sub = "the scale is waking") {
-            val f = hist.obj("fresh")
-            KvRow("fresh buckets · threshold 60", "${f?.size ?: 0} · first crossings 63 · 65", if ((f?.size ?: 99) < 30) BAD else NEUTRAL)
-            Note("A drift monitor: decile occupancy gates the pin. The full histogram is above in the drift-tell card.")
-            Wire(hist != null, "get_conviction_histogram")
-        }
+        // (removed: duplicate of the conviction histogram in the workbench above.)
         McCard("Validity · semantic trend", "get_analytics.validity_pct") {
             KvRow("validity (live)", validity?.let { "${fmt(it, 0)}%" } ?: "—", validityTone(validity))
             Note("Format validity is near-100% by construction; the number worth training on is the semantic pass rate.")
             Wire(analytics != null, "get_analytics.validity_pct + checks_failed")
         }
-        McCard("Failure histogram (24h)", "get_analytics.checks_failed") {
-            if (checksFailedList.isEmpty()) {
-                Note("No failing checks in the window.", UNK)
-            } else {
-                HBarChart(
-                    checksFailedList.take(8).mapNotNull { e ->
-                        val p = e.list(); val n = p.getOrNull(1).str().toDoubleOrNull() ?: return@mapNotNull null
-                        Bar(p.getOrNull(0).str(), n, if (p.getOrNull(0).str() == "context_stale") BAD else WARN)
-                    },
-                    labelWidth = 120,
-                )
-            }
-            Wire(analytics != null, "get_analytics.checks_failed · stale = scheduler; ttl dies at grammar v1.1")
-        }
+        // (removed: duplicate of the failure histogram in the workbench above.)
         McCard("The takes ledger", "decisions verdict=take JOIN refusals") {
             SectionLabel("the takes", divider = false)
             KvRow("ETH · conv 63 · pt-1.0.1", "validator OK · governor 45bps", NEUTRAL)
@@ -624,15 +614,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             KvRow("P-REJ-GOV counterfactual", "R saved/cost per check", NEUTRAL)
             Wire(false, "refusals × persona P-REJ-GOV")
         }
-        McCard("Execution quality", "get_exec_quality") {
-            if (exec == null || exec.text("status", "") == "") {
-                KvRow("fills · maker · slip", "— · Prometheus unavailable", UNK)
-                Note("Empty by design pre-live; wires the day the first order exists.")
-            } else {
-                StatRow(Triple("fill alpha bps", fmt(exec.num("fill_alpha_bps"), 2), NEUTRAL), Triple("maker ratio", fmt(exec.num("maker_ratio"), 2), NEUTRAL))
-            }
-            Wire(exec != null, "get_exec_quality · honestly empty")
-        }
+        // (removed: duplicate of the exec-quality card in the workbench above.)
 
         // ── 04 · LEARNING + SYSTEM ────────────────────────────────────────────────────────────────
         AnaSection("04 · Learning + system", "The learning plane")
@@ -658,11 +640,8 @@ fun AnalyticsScreen(repo: MissionRepository) {
             Note("Pins only at 300+ fresh takes with occupied deciles (LRN-4); status absent is the honest read.")
             Wire(calib != null, "get_calibration · status absent is the honest read")
         }
-        McCard("Attribution ledger", "get_attribution_ledger") {
-            KvRow("windows · candidates", "${attr.int("weeks") ?: 0} wk · ${attr.int("total_candidates") ?: 0} cand", if (attr?.bool("enough") == true) GOOD else WARN)
-            KvRow("dB0 (edge moved) · d(M1-B0)", "weekly cadence", NEUTRAL)
-            Wire(attr != null, "get_attribution_ledger · empty-until-race is correct")
-        }
+        // (removed: duplicate of the attribution card in the workbench above; the referee's-ledger
+        //  preview at the end of this page keeps the one attribution surface here.)
         McCard("Drift monitors", "get_conviction_histogram + decisions stats") {
             KvRow("conviction shape", "bimodal, must spread", WARN)
             KvRow("rationale length", "stable", NEUTRAL)
@@ -698,16 +677,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             KvRow("wrong-stop share (MAE-based)", "REC-1 exact lane", NEUTRAL)
             Wire(false, "phases table → get_vr_scoreboard.mfe_hist")
         }
-        McCard("CAG economics", "get_cag_stats + audit lane") {
-            SectionLabel("the numbers", divider = false)
-            StatRow(
-                Triple("hits", "${cag.int("cache_hits") ?: "—"}", NEUTRAL),
-                Triple("rate", cag.num("hit_rate")?.let { "${fmt(it * 100, 1)}%" } ?: "—", WARN),
-            )
-            SectionLabel("what it means")
-            Note("Cache saves ~103s of model time at 0.95 audit agreement. Verify the memo key (checkpoint-scoped) before any slot flip (LRN-8).")
-            Wire(cag != null, "get_cag_stats + audit lane")
-        }
+        // (removed: CAG hits/rate duplicate the latency+CAG card in the workbench above.)
         McCard("Pipeline conversion", "run_select counts across views") {
             SectionLabel("the funnel", divider = false)
             HBarChart(
