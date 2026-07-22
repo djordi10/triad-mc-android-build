@@ -297,17 +297,18 @@ fun McCard(
  */
 @Composable
 fun StatTile(key: String, value: String, tone: Tone = Tone.NEUTRAL) {
-    Column(Modifier.padding(end = 22.dp, top = 4.dp, bottom = 4.dp)) {
+    Column(Modifier.padding(top = 6.dp, bottom = 6.dp)) {
         Text(value, color = if (tone == Tone.NEUTRAL) Ink else tone.fg(), fontFamily = Disp, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-        Text(key.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.sp, letterSpacing = 0.9.sp, modifier = Modifier.padding(top = 4.dp))
+        Text(key.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.sp, letterSpacing = 0.9.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
-/** A wrapped row of stat tiles. */
+/** A wrapped row of stat tiles — spaced generously so a dense set of tiles keeps breathing room. */
 @Composable
 fun StatRow(vararg tiles: Triple<String, String, Tone>) {
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(30.dp),
     ) { tiles.forEach { StatTile(it.first, it.second, it.third) } }
 }
 
