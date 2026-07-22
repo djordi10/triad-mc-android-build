@@ -201,12 +201,18 @@ fun ConfigScreen(repo: MissionRepository) {
                         listOf(
                             Triple("net / gross RR floor", num(risk, "net_rr_floor") + " / " + num(risk, "gross_rr_floor"), NEUTRAL),
                             Triple("size mult range", num(risk, "mult_min") + " to " + num(risk, "mult_max"), NEUTRAL),
+                            Triple("symbol exposure cap %", num(risk, "symbol_exposure_cap_pct"), NEUTRAL),
+                            Triple("correlation bucket cap %", num(risk, "correlation_bucket_cap_pct"), NEUTRAL),
+                            Triple("min stop atr mult", num(risk, "min_stop_atr_mult"), NEUTRAL),
+                            Triple("funding guard min", num(risk, "funding_guard_min"), NEUTRAL),
                             Triple("exit profile", exec.text("exit_profile"), INFO),
                             Triple("tp exec arm", exec.text("tp_exec_arm"), INFO),
                             Triple("time-stop mult", num(exec, "time_stop_mult"), INFO),
+                            Triple("entry TTL min / max (s)", num(exec, "ttl_min_s") + " / " + num(exec, "ttl_max_s"), NEUTRAL),
+                            Triple("requote max · be after tp1", num(exec, "requote_max") + " · " + (exec?.bool("be_after_tp1") ?: false).yn(), NEUTRAL),
                         ),
                     )
-                    Note("Read-only. exit_profile flip is adoption-gated (paired CI): the compiler refuses it without the evidence line.")
+                    Note("Read-only. exit_profile flip is adoption-gated (paired CI): the compiler refuses it without the evidence line. The entry-TTL bounds cap how long a resting entry lives; without them the validator falls back to the remaining TTL (1800s max).")
                     SectionLabel("Regimes", accent = true)
                     MiniTable(
                         listOf("regime", "enabled", "size_mult"),
@@ -260,14 +266,17 @@ fun ConfigScreen(repo: MissionRepository) {
                             Triple("temperature · seed", num(intel, "temperature") + " · " + num(intel, "seed"), NEUTRAL),
                             Triple("max tokens", num(intel, "max_tokens"), NEUTRAL),
                             Triple("deadline p95 / cap (s)", num(intel, "deadline_p95_s") + " / " + num(intel, "deadline_cap_s"), NEUTRAL),
+                            Triple("guided decoding", (intel?.bool("guided_decoding") ?: false).yn(), INFO),
+                            Triple("take band lo / hi", num(intel, "take_band_lo") + " / " + num(intel, "take_band_hi"), NEUTRAL),
                         ),
                     )
-                    Note("model_tag changes require a registry entry + ceremony; a prompt_template bump triggers goldens + a corpus re-cut checklist.")
+                    Note("model_tag changes require a registry entry + ceremony; a prompt_template bump triggers goldens + a corpus re-cut checklist. guided_decoding is the format law that guarantees the JSON contract; take_band lo/hi is the model's target take-rate window (the Governance P6 10-60% band).")
                     SectionLabel("CAG", accent = true)
                     LeverTable(
                         listOf(
                             Triple("zone IoU min", num(cag, "zone_iou_min"), NEUTRAL),
                             Triple("audit frac · min agree", num(cag, "audit_frac") + " · " + num(cag, "audit_min_agree"), NEUTRAL),
+                            Triple("mark drift bps · cag3 max", num(cag, "mark_drift_bps") + " · " + num(cag, "cag3_max"), NEUTRAL),
                         ),
                     )
                     SectionLabel("Aux signals", accent = true)
@@ -445,6 +454,19 @@ fun ConfigScreen(repo: MissionRepository) {
         // The safe half that "already works": build a config change IN THE APP, read the diff, and
         // file it as a proposal. It never applies — there is no config_apply ("NO TOOL WRITES IT").
         ConfigDraftCard(repo, domains, fpRaw)
+
+        // Operator actions — the estate's kill/halt controls. Read-only here (R-C1): each is a proposal
+        // filed on Governance and run at triadctl. Listed so the config viewer names their safety semantics.
+        McCard("Operator actions", tool = "propose_action (via Governance)", sub = "read-only here; each is a proposal") {
+            Note("This screen never fires these (R-C1). Each is filed as a proposal on Governance and run by a human at triadctl; the enforcing keys live server-side.", INFO)
+            LeverTable(listOf(
+                Triple("circuit breaker", "halts new entries; exits keep managing, never orphan a position", NEUTRAL),
+                Triple("hard kill", "converts resting TPs to protective stops, in a two-step confirm", NEUTRAL),
+                Triple("cancel all", "pulls every resting order; open positions keep their stops", NEUTRAL),
+                Triple("pause symbol", "stops new entries on one symbol; its open trades keep managing", NEUTRAL),
+            ))
+            Note("The guarantee across all four: exits keep managing, and a position is never orphaned.", GOOD)
+        }
 
         WhyBox("THE LAW · R-C1") {
             LawBlock(
@@ -1124,6 +1146,12 @@ private fun GovernanceProposeCard(repo: MissionRepository) {
         "add_gate_10",
         "ship_gate_evidence",
         "pin_the_calibration",
+        // the three finding-bound remediation templates (HTML openPropose): fix the 36%-failing alert tool,
+        // run the gate-2 key-safety probe, run the gate-3 kill drill. The first two are the only ones that
+        // change anything today.
+        "fix_get_alerts",
+        "run_key_safety_probe",
+        "run_kill_drill",
         "propose_halt",
         "other",
     )
