@@ -367,6 +367,137 @@ fun StatCard(vararg tiles: Triple<String, String, Tone>, label: String = "", too
 }
 
 /**
+ * THE CONFIG SEAL — the signature attestation readout for the Config Store. Deliberately NOT a [McCard]
+ * (no pine band) and NOT a [StatCard] number-row: one seal whose centrepiece is the fingerprint that
+ * attests every setting at once. The ring reads Emerald when the served preset is CLEAN, Amber when
+ * DIRTY, so integrity is legible before a single lever. The footer states the attestation in words:
+ * "N domains · M levers · one fingerprint" — turning an abstract sha256 into the safety fact it encodes.
+ */
+@Composable
+fun ConfigSeal(
+    fingerprint: String,
+    clean: Boolean,
+    domains: Int,
+    levers: Int,
+    preset: String,
+    sub: String = "",
+) {
+    val ring = if (clean) Emerald else Amber
+    val ringSoft = if (clean) EmeraldSoft else AmberSoft
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(shape)
+            .background(Card).border(2.dp, ring.copy(alpha = 0.55f), shape),
+    ) {
+        // seal head: eyebrow + wax-status chip (the ring colour = the integrity state)
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 14.dp, top = 14.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "ATTESTED CONFIG", color = Ink2, fontFamily = Mono, fontSize = 9.5.sp,
+                letterSpacing = 1.4.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.background(ringSoft, RoundedCornerShape(12.dp)).padding(horizontal = 9.dp, vertical = 4.dp),
+            ) {
+                Box(Modifier.size(7.dp).background(ring, CircleShape))
+                Text(
+                    if (clean) "CLEAN" else "DIRTY", color = ring, fontFamily = Mono, fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, modifier = Modifier.padding(start = 6.dp),
+                )
+            }
+        }
+        // the fingerprint — the centrepiece, big mono, with the seal ring as a left bar
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.width(3.dp).height(26.dp).background(ring, RoundedCornerShape(2.dp)))
+            Text(
+                fingerprint, color = Ink, fontFamily = Mono, fontSize = 19.sp,
+                fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp,
+                modifier = Modifier.padding(start = 11.dp),
+            )
+        }
+        // preset + author line
+        Text(
+            preset + (if (sub.isNotEmpty()) "   ·   $sub" else ""),
+            color = Ink2, fontSize = 12.sp, lineHeight = 17.sp,
+            modifier = Modifier.padding(start = 30.dp, end = 16.dp, top = 6.dp),
+        )
+        // attestation footer — the seal's meaning in words
+        Box(Modifier.fillMaxWidth().padding(top = 13.dp).height(1.dp).background(Line))
+        Text(
+            "$domains domains · $levers levers · one fingerprint",
+            color = ring, fontFamily = Mono, fontSize = 10.sp, letterSpacing = 0.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 11.dp, bottom = 14.dp),
+        )
+    }
+}
+
+/**
+ * HOW IT'S SET TO TRADE — a dark pine fact-banner (mirrors the Topology headline) that renders a
+ * plain-language summary of the live config: a bold [headline] sentence, then ▸ bullet [facts]. The
+ * caller derives the sentences from the served preset's levers (honest: a fact is absent when its lever
+ * is). Turns the Config Store's data dump into something a human reads in one glance.
+ */
+@Composable
+fun TradeSummaryBanner(headline: String, facts: List<String>) {
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            .background(Pine, RoundedCornerShape(14.dp))
+            .padding(horizontal = 15.dp, vertical = 14.dp),
+    ) {
+        Text(
+            "HOW IT'S SET TO TRADE", color = EmeraldBright, fontFamily = Mono, fontSize = 9.5.sp,
+            letterSpacing = 1.4.sp, fontWeight = FontWeight.SemiBold,
+        )
+        if (headline.isNotEmpty()) {
+            Text(
+                headline, color = Color.White, fontSize = 14.5.sp, lineHeight = 21.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 9.dp),
+            )
+        }
+        facts.forEach { line ->
+            Row(Modifier.padding(top = 7.dp)) {
+                Text("▸", color = EmeraldBright, fontFamily = Mono, fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
+                Text(line, color = PineTextDim, fontFamily = Mono, fontSize = 11.sp, lineHeight = 15.sp)
+            }
+        }
+    }
+}
+
+/**
+ * A FUNCTION GROUP for the Config Store — leads with what the group controls in plain words, surfaces the
+ * few levers that matter as [surfaced] content, and hides the full raw lever dump behind a [WhyBox]
+ * disclosure ([detail]). So the page reads meaning-first (what it does) with the exhaustive detail one
+ * tap away, instead of dumping every domain's jargon inline. No pine band — a group is quieter than a card.
+ */
+@Composable
+fun SettingGroup(
+    title: String,
+    whatItControls: String,
+    detailLabel: String = "ALL LEVERS",
+    surfaced: @Composable ColumnScope.() -> Unit,
+    detail: @Composable ColumnScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(shape)
+            .background(Card).border(1.dp, Line, shape)
+            .padding(horizontal = 16.dp, vertical = 15.dp),
+    ) {
+        Text(title, fontFamily = Disp, fontWeight = FontWeight.Bold, color = Ink, fontSize = 16.sp, letterSpacing = (-0.3).sp)
+        Text(whatItControls, color = Ink2, fontSize = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 3.dp))
+        Column(Modifier.padding(top = 12.dp)) { surfaced() }
+        WhyBox(detailLabel) { detail() }
+    }
+}
+
+/**
  * A chip/tag — the web `.tag`: mono 9.5px bold on a soft tone background, a rounded 12px pill. Used
  * for verdicts (FIRED / VIOLATED / HONORED / UNKNOWN) and inline status.
  */

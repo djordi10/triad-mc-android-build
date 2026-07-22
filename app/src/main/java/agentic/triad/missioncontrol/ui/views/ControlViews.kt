@@ -21,19 +21,21 @@ import agentic.triad.missioncontrol.data.MissionRepository
 import agentic.triad.missioncontrol.mcp.ProposeAction
 import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.Bar
+import agentic.triad.missioncontrol.ui.components.ConfigSeal
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.SettingGroup
+import agentic.triad.missioncontrol.ui.components.TradeSummaryBanner
+import agentic.triad.missioncontrol.ui.components.VerdictBanner
 import agentic.triad.missioncontrol.ui.components.GateItem
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
-import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.SectionLabel
 import agentic.triad.missioncontrol.ui.components.Stance
-import agentic.triad.missioncontrol.ui.components.StatCard
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone
@@ -74,32 +76,22 @@ private fun row(vararg cells: Pair<String, Tone>) = cells.toList()
 
 private val CONFIG_TOOLS = listOf("get_config_active", "get_config_preset")
 
-/** One read-only domain group: title, its preset path, and a small set of headline levers. */
+/** The rows of a feature-module domain (structures/indicators/timeframes): each key is a module with
+ *  an `on` flag. Rendered bare (no card chrome) so it can sit inside a SettingGroup's detail disclosure.
+ *  Disabling a module makes its packet field go null-with-reason, never fabricated. */
 @Composable
-private fun DomainCard(title: String, path: String, dom: JsonObject?, body: @Composable () -> Unit) {
-    McCard(title, path) {
-        if (dom == null) {
-            Note("— · domain absent from the served preset (honest unavailable, never fabricated).", UNK)
-        } else {
-            body()
-        }
+private fun featureModuleRows(dom: JsonObject?) {
+    if (dom == null) {
+        Note("domain absent from the served preset (honest unavailable, never fabricated).", UNK)
+        return
     }
-}
-
-/** A feature-module domain (structures/indicators/timeframes): each key is a module with an `on`
- *  flag. Disabling a module makes its packet field go null-with-reason — never fabricated. */
-@Composable
-private fun featureModuleCard(title: String, path: String, dom: JsonObject?) {
-    DomainCard(title, path, dom) {
-        MiniTable(
-            listOf("module", "enabled"),
-            (dom?.keys ?: emptySet()).sorted().map { k ->
-                val on = dom.obj(k)?.bool("on") ?: false
-                row(k to NEUTRAL, (if (on) "on" else "off") to if (on) GOOD else UNK)
-            },
-        )
-        Note("Feature-module switches feed the packet assembler; disabling a module = its packet field goes null-with-reason, never fabricated. Read-only viewer.")
-    }
+    MiniTable(
+        listOf("module", "enabled"),
+        dom.keys.sorted().map { k ->
+            val on = dom.obj(k)?.bool("on") ?: false
+            row(k to NEUTRAL, (if (on) "on" else "off") to if (on) GOOD else UNK)
+        },
+    )
 }
 
 @Composable
@@ -136,248 +128,267 @@ fun ConfigScreen(repo: MissionRepository) {
             Stance("apply path", "R-C1 · triadctl only", INFO),
         ),
     ) {
-        Ribbon(
-            "Viewer + propose · R-C1 (the GUI cannot apply, ever)",
-            "This is the applied baseline the server serves (get_config_preset), with the topbar from " +
-                "get_config_active. The levers are READ-ONLY here. Changing config is the governed path: " +
-                "change-plan → triad-config compile (bounds-checked) → git → triadctl config verify → apply. " +
-                "One grouped apply = one fingerprint.",
-            INFO,
+        // ── HERO: the view title + one plain sentence on what this page is ──
+        VerdictBanner(
+            word = stateLabel,
+            said = "The one settings bundle the system trades on. Look and propose here; " +
+                "changes apply only through the governed CLI ceremony, never this screen (R-C1).",
+            wordTone = stateTone,
+            title = "Configuration",
         )
 
-        StatCard(
-            Triple("preset", if (preset == "—") "—" else preset, NEUTRAL),
-            Triple("state", stateLabel, stateTone),
-            Triple("fingerprint", fpShort, NEUTRAL),
-            Triple("domains", (domains?.size ?: 0).toString(), if (domains == null) UNK else NEUTRAL),
-            Triple("apply path", "triadctl only", INFO),
+        // ── THE SEAL: the fingerprint as one attestation over every setting (signature element) ──
+        ConfigSeal(
+            fingerprint = fpShort,
+            clean = !dirty,
+            domains = domains?.size ?: 0,
+            levers = leverCount(domains),
+            preset = if (preset == "—") "unnamed preset" else preset,
+            sub = if (meta != null) "by " + meta.text("author") else "",
         )
 
-        // ── the editor topbar chrome (mirrors CFGSTORE's SHELL top bar, config_00) ──
-        // A viewer + propose surface: the profile selector + Save/Discard/Import/Export chips are the
-        // editor affordances that operate on the CLIENT draft; the working Export change-plan is the
-        // live ConfigDraftCard below. Nothing here applies to the running system (R-C1).
-        McCard("The editor", tool = "config store · R-C1", sub = "draft over the applied baseline") {
-            Row(Modifier.horizontalScroll(rememberScrollState())) {
-                Tag("applied-baseline ▾", NEUTRAL)
-                Tag("Save profile", NEUTRAL)
-                Tag("Discard", NEUTRAL)
-                Tag("Import JSON", NEUTRAL)
-                Tag("Export preset", INFO)
-                Tag("Export change-plan →", GOOD)
-            }
-            Note("Client-draft affordances. The working change-plan builder is the card below.", NEUTRAL)
-        }
-
-        McCard("Applied preset", tool = "get_config_active · get_config_preset", sub = "metadata of the served baseline") {
-            KvRow("schema", active.text("schema"), NEUTRAL)
-            KvRow("source", active.text("src"), NEUTRAL)
-            if (meta != null) {
-                KvRow("preset file", presetEnv.text("file"), NEUTRAL)
-                KvRow("author · ums", meta.text("author") + " · " + meta.text("ums"), NEUTRAL)
-                Note(meta.text("notes"), NEUTRAL)
-            }
-            if (dirty) Note("Draft diverges from BASE: export a change-plan and run it through the compiler.", WARN)
+        // ── HOW IT'S SET TO TRADE: the missing plain-language context, synthesised from live levers ──
+        val (tradeHeadline, tradeFacts) = tradeSummary(domains)
+        if (tradeHeadline.isNotEmpty() || tradeFacts.isNotEmpty()) {
+            TradeSummaryBanner(tradeHeadline, tradeFacts)
         }
 
         if (domains == null) {
-            Note("— · get_config_preset returned no domains (tool unavailable or empty). Nothing fabricated.", UNK)
+            Note("get_config_preset returned no domains (tool unavailable or empty). Nothing fabricated.", UNK)
         } else {
-            // ── the domains grid — lever counts per domain (mirrors pPreset's domain chips) ──
-            McCard("The thing that would be promoted", tool = "get_config_preset · domains.*", sub = "${domains.size} domains") {
-                val levers = domains.keys.sorted().map { name ->
-                    val dom = domains.obj(name)
-                    val n = (dom?.size ?: 0).toDouble()
-                    val mcpBad = name == "mcp" && (dom.text("http_url").contains("example.com"))
-                    Bar(name, n.coerceAtLeast(1.0), if (mcpBad) SEV else INFO, if (mcpBad) "⚠ example.com placeholder" else "")
-                }
-                HBarChart(levers, unit = "levers", labelWidth = 100)
-                Note("Every domain is a group of read-only levers. The fingerprint attests to all of them at once: one grouped apply = one fingerprint. Editing any lever is the governed path (change-plan → compile → verify → apply), never this viewer.", NEUTRAL)
-            }
+            // The domains, grouped by what they DO (not by internal domain name). Each group leads with a
+            // plain "what it controls" line + the few levers that matter; the full raw lever dump is one
+            // tap away in the WhyBox. Meaning first, exhaustive detail on demand.
 
-            // Trading settings — the 45bps fee law + RR floors + TTL bounds.
-            DomainCard("Trading settings: risk · execution", "domains.risk.* + domains.execution.*", domains.obj("risk")) {
-                val risk = domains.obj("risk")
-                val exec = domains.obj("execution")
-                SectionLabel("Levers", divider = false)
-                KvRow("conviction threshold", num(risk, "conviction_threshold"), NEUTRAL)
-                KvRow("min stop width (bps)", num(risk, "min_stop_width_bps") + " (the 45bps fee law)", WARN)
-                KvRow("net / gross RR floor", num(risk, "net_rr_floor") + " / " + num(risk, "gross_rr_floor"), NEUTRAL)
-                KvRow("risk % equity", num(risk, "risk_pct_equity"), NEUTRAL)
-                KvRow("size mult range", num(risk, "mult_min") + " – " + num(risk, "mult_max"), NEUTRAL)
-                KvRow("global exposure cap %", num(risk, "global_exposure_cap_pct"), NEUTRAL)
-                KvRow("dd daily / weekly %", num(risk, "dd_daily_pct") + " / " + num(risk, "dd_weekly_pct"), NEUTRAL)
-                KvRow("exit profile", exec.text("exit_profile"), INFO)
-                KvRow("tp exec arm", exec.text("tp_exec_arm"), INFO)
-                KvRow("time-stop mult", num(exec, "time_stop_mult"), INFO)
-                SectionLabel("The laws", divider = true)
-                Note("Read-only levers. min_stop_width_bps carries the 45bps law; exit_profile flip is adoption-gated (paired CI): the compiler refuses it without the evidence line.")
-            }
+            val risk = domains.obj("risk")
+            val exec = domains.obj("execution")
+            val regimes = domains.obj("regimes")
+            val edge = domains.obj("edge")
+            val intel = domains.obj("intelligence")
+            val cag = domains.obj("cag")
+            val aux = domains.obj("aux")
+            val det = domains.obj("detectors")
+            val sym = domains.obj("symbols")
+            val tune = domains.obj("tuning") ?: domains.obj("finetune")
+            val users = domains.obj("users")
+            val personas = domains.obj("personas")
+            val logger = domains.obj("logger")
 
-            // Regimes — per-regime enable + size mult.
-            DomainCard("Regimes: enable · size_mult", "domains.regimes.{r}.*", domains.obj("regimes")) {
-                val regimes = domains.obj("regimes")
-                MiniTable(
-                    listOf("regime", "enabled", "size_mult"),
-                    (regimes?.keys ?: emptySet()).map { r ->
-                        val rd = regimes.obj(r)
-                        val on = rd?.bool("enabled") ?: false
-                        val entries = rd?.bool("entries_allowed") ?: false
-                        row(
-                            r to NEUTRAL,
-                            (if (on) "on" else "off") to if (on) GOOD else UNK,
-                            (num(rd, "size_mult") + (if (!entries) " · no entries" else "")) to if (entries) NEUTRAL else WARN,
-                        )
-                    },
-                )
-            }
+            val detOn = det?.keys?.count { det.obj(it)?.bool("on") == true } ?: 0
+            val detTot = det?.size ?: 0
+            val wl = sym.field("whitelist").rows()
+            val personaList = personas.field("list").rows()
+            val personaOn = personaList.count { it.bool("enabled") }
 
-            // Intelligence / LLM.
-            DomainCard("LLM: serving · model", "domains.intelligence.*", domains.obj("intelligence")) {
-                val i = domains.obj("intelligence")
-                SectionLabel("Model", divider = false)
-                KvRow("serving", i.text("serving"), NEUTRAL)
-                KvRow("model tag", i.text("model_tag"), INFO)
-                KvRow("temperature · seed", num(i, "temperature") + " · " + num(i, "seed"), NEUTRAL)
-                KvRow("max tokens", num(i, "max_tokens"), NEUTRAL)
-                KvRow("deadline p95 / cap (s)", num(i, "deadline_p95_s") + " / " + num(i, "deadline_cap_s"), NEUTRAL)
-                SectionLabel("Ceremony", divider = true)
-                Note("model_tag changes require a registry entry + ceremony; a prompt_template bump triggers goldens + a corpus re-cut checklist.")
-            }
+            // ── ENTRIES & RISK — the trading-behaviour levers, the meat ──
+            SettingGroup(
+                title = "Entries & risk",
+                whatItControls = "What decides a trade, how big it is, and when it stops for the day.",
+                detailLabel = "ALL RISK · EXECUTION · REGIMES · EDGE LEVERS",
+                surfaced = {
+                    KvRow("conviction threshold", num(risk, "conviction_threshold"), NEUTRAL)
+                    KvRow("min stop width", num(risk, "min_stop_width_bps") + " bps · the 45bps fee law", WARN)
+                    KvRow("risk % equity · exposure cap %", num(risk, "risk_pct_equity") + " · " + num(risk, "global_exposure_cap_pct"), NEUTRAL)
+                    KvRow("daily / weekly DD halt %", num(risk, "dd_daily_pct") + " / " + num(risk, "dd_weekly_pct"), NEUTRAL)
+                },
+                detail = {
+                    SectionLabel("Risk & execution", divider = false)
+                    KvRow("conviction threshold", num(risk, "conviction_threshold"), NEUTRAL)
+                    KvRow("min stop width (bps)", num(risk, "min_stop_width_bps") + " · 45bps fee law", WARN)
+                    KvRow("net / gross RR floor", num(risk, "net_rr_floor") + " / " + num(risk, "gross_rr_floor"), NEUTRAL)
+                    KvRow("risk % equity", num(risk, "risk_pct_equity"), NEUTRAL)
+                    KvRow("size mult range", num(risk, "mult_min") + " to " + num(risk, "mult_max"), NEUTRAL)
+                    KvRow("global exposure cap %", num(risk, "global_exposure_cap_pct"), NEUTRAL)
+                    KvRow("dd daily / weekly %", num(risk, "dd_daily_pct") + " / " + num(risk, "dd_weekly_pct"), NEUTRAL)
+                    KvRow("exit profile", exec.text("exit_profile"), INFO)
+                    KvRow("tp exec arm", exec.text("tp_exec_arm"), INFO)
+                    KvRow("time-stop mult", num(exec, "time_stop_mult"), INFO)
+                    Note("Read-only. exit_profile flip is adoption-gated (paired CI): the compiler refuses it without the evidence line.")
+                    SectionLabel("Regimes")
+                    MiniTable(
+                        listOf("regime", "enabled", "size_mult"),
+                        (regimes?.keys ?: emptySet()).map { r ->
+                            val rd = regimes.obj(r)
+                            val on = rd?.bool("enabled") ?: false
+                            val entries = rd?.bool("entries_allowed") ?: false
+                            row(
+                                r to NEUTRAL,
+                                (if (on) "on" else "off") to if (on) GOOD else UNK,
+                                (num(rd, "size_mult") + (if (!entries) " · no entries" else "")) to if (entries) NEUTRAL else WARN,
+                            )
+                        },
+                    )
+                    SectionLabel("Edge · W-33 levers")
+                    KvRow("side weight short", num(edge, "side_weight_short"), NEUTRAL)
+                    KvRow("session weight 12-14Z", num(edge, "session_weight_12_14Z"), NEUTRAL)
+                    KvRow("zone offset repair", num(edge, "zone_offset_repair"), NEUTRAL)
+                    KvRow("entry confirm", (edge.obj("entry_confirm")?.bool("on") ?: edge?.bool("entry_confirm") ?: false).yn(), NEUTRAL)
+                    KvRow("aux agree gate", (edge.obj("aux_agree_gate")?.bool("on") ?: edge?.bool("aux_agree_gate") ?: false).yn(), NEUTRAL)
+                    KvRow("ladder tp1 · tp2 (R)", num(edge, "ladder_tp1_r") + " · " + num(edge, "ladder_tp2_r"), NEUTRAL)
+                    KvRow("ladder split tp1", num(edge, "ladder_split_tp1"), NEUTRAL)
+                    KvRow("trail activate R · atr mult", num(edge, "trail_activate_r") + " · " + num(edge, "trail_atr_mult"), NEUTRAL)
+                    KvRow("trail floor (bps)", num(edge, "trail_floor_bps"), NEUTRAL)
+                    Note("Wired / unwired / conflict is the apply-map's business (edge.v1.json), not this read-only viewer.")
+                },
+            )
 
-            // CAG.
-            DomainCard("CAG", "domains.cag.*", domains.obj("cag")) {
-                val c = domains.obj("cag")
-                KvRow("cag2 enabled", (c?.bool("cag2_enabled") ?: false).yn(), NEUTRAL)
-                KvRow("ttl (s)", num(c, "ttl_s"), NEUTRAL)
-                KvRow("zone IoU min", num(c, "zone_iou_min"), NEUTRAL)
-                KvRow("audit frac · min agree", num(c, "audit_frac") + " · " + num(c, "audit_min_agree"), NEUTRAL)
-                Note("Bounds are laws; the compiler clamps.")
-            }
+            // ── THE BRAIN — what AI / signals it judges each setup with ──
+            SettingGroup(
+                title = "The brain",
+                whatItControls = "The model and cached signals it judges each setup with.",
+                detailLabel = "ALL INTELLIGENCE · CAG · AUX LEVERS",
+                surfaced = {
+                    KvRow("serving · model", intel.text("serving") + " · " + intel.text("model_tag"), INFO)
+                    KvRow("cag2 enabled · ttl (s)", (cag?.bool("cag2_enabled") ?: false).yn() + " · " + num(cag, "ttl_s"), NEUTRAL)
+                },
+                detail = {
+                    SectionLabel("LLM", divider = false)
+                    KvRow("serving", intel.text("serving"), NEUTRAL)
+                    KvRow("model tag", intel.text("model_tag"), INFO)
+                    KvRow("temperature · seed", num(intel, "temperature") + " · " + num(intel, "seed"), NEUTRAL)
+                    KvRow("max tokens", num(intel, "max_tokens"), NEUTRAL)
+                    KvRow("deadline p95 / cap (s)", num(intel, "deadline_p95_s") + " / " + num(intel, "deadline_cap_s"), NEUTRAL)
+                    Note("model_tag changes require a registry entry + ceremony; a prompt_template bump triggers goldens + a corpus re-cut checklist.")
+                    SectionLabel("CAG")
+                    KvRow("cag2 enabled", (cag?.bool("cag2_enabled") ?: false).yn(), NEUTRAL)
+                    KvRow("ttl (s)", num(cag, "ttl_s"), NEUTRAL)
+                    KvRow("zone IoU min", num(cag, "zone_iou_min"), NEUTRAL)
+                    KvRow("audit frac · min agree", num(cag, "audit_frac") + " · " + num(cag, "audit_min_agree"), NEUTRAL)
+                    SectionLabel("Aux signals")
+                    KvRow("kronos", (aux.obj("kronos")?.bool("on") ?: aux?.bool("kronos") ?: false).yn(), NEUTRAL)
+                    KvRow("fingpt news", (aux.obj("fingpt_news")?.bool("on") ?: aux?.bool("fingpt_news") ?: false).yn(), NEUTRAL)
+                    KvRow("s7b render", (aux.obj("s7b_render")?.bool("on") ?: aux?.bool("s7b_render") ?: false).yn(), NEUTRAL)
+                    KvRow("kronos staleness (s)", num(aux, "kronos_staleness_s"), NEUTRAL)
+                    KvRow("news staleness (min)", num(aux, "news_staleness_min"), NEUTRAL)
+                    Note("Bounds are laws the compiler clamps.")
+                },
+            )
 
-            // Personas.
-            DomainCard("Personas: the shadow books", "domains.personas.list[]", domains.obj("personas")) {
-                val pl = domains.obj("personas").field("list").rows()
-                SectionLabel("The books", divider = false)
-                MiniTable(
-                    listOf("persona", "enabled", "question"),
-                    pl.map { p ->
-                        val on = p.bool("enabled")
-                        row(
-                            p.text("id") to NEUTRAL,
-                            (if (on) "on" else "off") to if (on) GOOD else UNK,
-                            p.text("question") to NEUTRAL,
-                        )
-                    },
-                )
-                SectionLabel("On disable", divider = true)
-                Note("Disabling a persona stops the writer, never deletes its rows.")
-            }
+            // ── WHAT IT WATCHES — which markets it trades and which patterns it reads ──
+            SettingGroup(
+                title = "What it watches",
+                whatItControls = "Which markets it trades and which price patterns it reads.",
+                detailLabel = "ALL DETECTORS · STRUCTURES · INDICATORS · TIMEFRAMES · SYMBOLS",
+                surfaced = {
+                    KvRow("universe whitelist", wl.size.toString() + " symbols", NEUTRAL)
+                    KvRow("detectors live", "$detOn of $detTot on", if (detOn == 0) UNK else NEUTRAL)
+                },
+                detail = {
+                    SectionLabel("Universe", divider = false)
+                    KvRow("whitelist size", wl.size.toString(), NEUTRAL)
+                    KvRow("blacklist", sym.text("blacklist"), UNK)
+                    Note("Per-symbol enable/score/exposure_cap are levers: edit them through a change-plan, not here.")
+                    SectionLabel("Detectors (shadow-walled)")
+                    MiniTable(
+                        listOf("detector", "enabled", "note"),
+                        (det?.keys ?: emptySet()).sorted().map { k ->
+                            val on = det.obj(k)?.bool("on") ?: false
+                            val dark = k.contains("choch") || k.contains("bos") || k.contains("dark")
+                            row(
+                                k to NEUTRAL,
+                                (if (on) "on" else "off") to if (on) GOOD else UNK,
+                                (if (dark) "shadow-only until GE-3 (on is not live)" else "") to if (dark) WARN else NEUTRAL,
+                            )
+                        },
+                    )
+                    Note("A dark detector reading 'on' is not the same as live: it stays shadow-only until GE-3 promotion.", WARN)
+                    SectionLabel("Structures")
+                    featureModuleRows(domains.obj("structures"))
+                    SectionLabel("Indicators")
+                    featureModuleRows(domains.obj("indicators"))
+                    SectionLabel("Timeframes")
+                    featureModuleRows(domains.obj("timeframes"))
+                    Note("Feature-module switches feed the packet assembler; disabling one makes its packet field go null-with-reason, never fabricated.")
+                },
+            )
 
-            // Universe / symbols — count only (read-only, do not build the editable grid).
-            DomainCard("Universe: whitelist", "domains.symbols.*", domains.obj("symbols")) {
-                val sym = domains.obj("symbols")
-                val wl = sym.field("whitelist").rows()
-                KvRow("whitelist size", wl.size.toString(), NEUTRAL)
-                KvRow("blacklist", sym.text("blacklist"), UNK)
-                Note("Read-only viewer. Per-symbol enable/score/exposure_cap are levers: edit them through a change-plan, not here.")
-            }
+            // ── LEARNING — how it tunes itself, and the gates a new model must pass ──
+            SettingGroup(
+                title = "Learning",
+                whatItControls = "How it tunes itself, and the gates a new model must clear before it counts.",
+                detailLabel = "ALL TUNING · SWEEP GATE LEVERS",
+                surfaced = {
+                    KvRow("T1 min labeled", num(tune, "t1_min_labeled"), WARN)
+                    KvRow("sweep pbo max · dsr min", num(tune, "sweep_pbo_max") + " · " + num(tune, "sweep_dsr_prob_min"), NEUTRAL)
+                },
+                detail = {
+                    SectionLabel("Reward weights", divider = false)
+                    KvRow("reward w (pnl·cal·fmt·tr)", num(tune, "w_pnl") + " · " + num(tune, "w_cal") + " · " + num(tune, "w_fmt") + " · " + num(tune, "w_tr"), NEUTRAL)
+                    KvRow("skip reward · miss penalty", num(tune, "skip_good_reward") + " · " + num(tune, "skip_miss_penalty"), NEUTRAL)
+                    KvRow("payoff clip lo / hi", num(tune, "payoff_clip_lo") + " / " + num(tune, "payoff_clip_hi"), NEUTRAL)
+                    SectionLabel("T1 gate")
+                    KvRow("T1 min labeled", num(tune, "t1_min_labeled"), WARN)
+                    KvRow("T1 lora r · alpha · epochs", num(tune, "t1_lora_r") + " · " + num(tune, "t1_lora_alpha") + " · " + num(tune, "t1_epochs"), NEUTRAL)
+                    KvRow("T1 validator-reject max %", num(tune, "t1_validator_reject_max_pct"), NEUTRAL)
+                    SectionLabel("Sweep & promotion gates")
+                    KvRow("sweep pbo max · dsr min", num(tune, "sweep_pbo_max") + " · " + num(tune, "sweep_dsr_prob_min"), NEUTRAL)
+                    KvRow("edge min weeks · candidates", num(tune, "edge_min_weeks") + " · " + num(tune, "edge_min_candidates"), NEUTRAL)
+                    Note("Sweeps run through the governed path, not this viewer.")
+                },
+            )
 
-            // ── the remaining domains, each a dedicated READ-ONLY viewer (no editable forms) ──
+            // ── PEOPLE & SAFETY — who can touch money, and the guards ──
+            SettingGroup(
+                title = "People & safety",
+                whatItControls = "Who can touch money, the two-person guard, and the shadow books.",
+                detailLabel = "ALL USER · PERSONA LEVERS",
+                surfaced = {
+                    KvRow("operator", users.text("operator"), NEUTRAL)
+                    val approver = users.text("second_approver").ifBlank { "none" }
+                    KvRow("second approver", approver, if (approver == "none") UNK else NEUTRAL)
+                    KvRow("two-person ceremony", (users?.bool("ceremony_two_person") ?: false).yn(), if (users?.bool("ceremony_two_person") == true) GOOD else WARN)
+                },
+                detail = {
+                    SectionLabel("Roles & guards", divider = false)
+                    KvRow("operator", users.text("operator"), NEUTRAL)
+                    val approver = users.text("second_approver").ifBlank { "none" }
+                    KvRow("second approver", approver, if (approver == "none") UNK else NEUTRAL)
+                    KvRow("two-person ceremony", (users?.bool("ceremony_two_person") ?: false).yn(), if (users?.bool("ceremony_two_person") == true) GOOD else WARN)
+                    KvRow("page alerts", (users?.bool("page_alerts") ?: false).yn(), NEUTRAL)
+                    KvRow("journal email", users.text("journal_email").ifBlank { "none" }, UNK)
+                    Note("A second_approver + two-person ceremony are the money-touching guards.")
+                    SectionLabel("Personas (shadow books) · $personaOn of ${personaList.size} on")
+                    MiniTable(
+                        listOf("persona", "enabled", "question"),
+                        personaList.map { p ->
+                            val on = p.bool("enabled")
+                            row(
+                                p.text("id") to NEUTRAL,
+                                (if (on) "on" else "off") to if (on) GOOD else UNK,
+                                p.text("question") to NEUTRAL,
+                            )
+                        },
+                    )
+                    Note("Disabling a persona stops the writer, never deletes its rows.")
+                },
+            )
 
-            // Detectors — flow triggers; dark ones stay shadow-only until GE-3 (toggle=on ≠ live).
-            DomainCard("Detectors: flow triggers (shadow-walled)", "domains.detectors.{d}.on", domains.obj("detectors")) {
-                val det = domains.obj("detectors")
-                SectionLabel("Triggers", divider = false)
-                MiniTable(
-                    listOf("detector", "enabled", "note"),
-                    (det?.keys ?: emptySet()).sorted().map { k ->
-                        val on = det.obj(k)?.bool("on") ?: false
-                        val dark = k.contains("choch") || k.contains("bos") || k.contains("dark")
-                        row(
-                            k to NEUTRAL,
-                            (if (on) "on" else "off") to if (on) GOOD else UNK,
-                            (if (dark) "dark · shadow-only until GE-3 (on ≠ live)" else "—") to if (dark) WARN else NEUTRAL,
-                        )
-                    },
-                )
-                SectionLabel("Shadow wall", divider = true)
-                Note("Dark detectors stay shadow-only until GE-3 promotion: a detector reading 'on' is not the same as live. Read-only viewer.", WARN)
-            }
-
-            // Structures / Indicators / Timeframes — feature modules; disable = null-with-reason.
-            featureModuleCard("Structures: feature modules", "domains.structures.{m}.on", domains.obj("structures"))
-            featureModuleCard("Indicators: feature modules", "domains.indicators.{m}.on", domains.obj("indicators"))
-            featureModuleCard("Timeframes: feature modules", "domains.timeframes.{tf}.on", domains.obj("timeframes"))
-
-            // Users — operator / second approver / two-person ceremony / paging.
-            DomainCard("Users: operator · approver · ceremony", "domains.users.*", domains.obj("users")) {
-                val u = domains.obj("users")
-                SectionLabel("Roles", divider = false)
-                KvRow("operator", u.text("operator"), NEUTRAL)
-                val approver = u.text("second_approver").ifBlank { "—" }
-                KvRow("second approver", approver, if (approver == "—") UNK else NEUTRAL)
-                KvRow("two-person ceremony", (u?.bool("ceremony_two_person") ?: false).yn(), if (u?.bool("ceremony_two_person") == true) GOOD else WARN)
-                KvRow("page alerts", (u?.bool("page_alerts") ?: false).yn(), NEUTRAL)
-                KvRow("journal email", u.text("journal_email").ifBlank { "—" }, UNK)
-                SectionLabel("Guards", divider = true)
-                Note("Read-only. A second_approver + two-person ceremony are the money-touching guards: edit via change-plan, never here.")
-            }
-
-            // Aux — kronos / news / s7b individual switches + staleness bounds.
-            DomainCard("Aux: kronos · news · s7b + staleness", "domains.aux.*", domains.obj("aux")) {
-                val a = domains.obj("aux")
-                SectionLabel("Switches", divider = false)
-                KvRow("kronos", (a.obj("kronos")?.bool("on") ?: a?.bool("kronos") ?: false).yn(), NEUTRAL)
-                KvRow("fingpt news", (a.obj("fingpt_news")?.bool("on") ?: a?.bool("fingpt_news") ?: false).yn(), NEUTRAL)
-                KvRow("s7b render", (a.obj("s7b_render")?.bool("on") ?: a?.bool("s7b_render") ?: false).yn(), NEUTRAL)
-                KvRow("kronos staleness (s)", num(a, "kronos_staleness_s"), NEUTRAL)
-                KvRow("news staleness (min)", num(a, "news_staleness_min"), NEUTRAL)
-                SectionLabel("Bounds", divider = true)
-                Note("Individual aux switches; staleness bounds are laws the compiler clamps. Read-only viewer.")
-            }
-
-            // Tuning / finetune — reward weights, T1 gate, sweep + promotion gates.
-            DomainCard("Fine-tuning: reward weights · T1 gate · sweep gates", "domains.tuning.* / domains.finetune.*", domains.obj("tuning") ?: domains.obj("finetune")) {
-                val t = domains.obj("tuning") ?: domains.obj("finetune")
-                SectionLabel("Weights", divider = false)
-                KvRow("reward w (pnl·cal·fmt·tr)", num(t, "w_pnl") + " · " + num(t, "w_cal") + " · " + num(t, "w_fmt") + " · " + num(t, "w_tr"), NEUTRAL)
-                KvRow("skip reward · miss penalty", num(t, "skip_good_reward") + " · " + num(t, "skip_miss_penalty"), NEUTRAL)
-                KvRow("payoff clip lo / hi", num(t, "payoff_clip_lo") + " / " + num(t, "payoff_clip_hi"), NEUTRAL)
-                KvRow("T1 min labeled", num(t, "t1_min_labeled"), WARN)
-                KvRow("T1 lora r · alpha · epochs", num(t, "t1_lora_r") + " · " + num(t, "t1_lora_alpha") + " · " + num(t, "t1_epochs"), NEUTRAL)
-                KvRow("T1 validator-reject max %", num(t, "t1_validator_reject_max_pct"), NEUTRAL)
-                KvRow("sweep pbo max · dsr min", num(t, "sweep_pbo_max") + " · " + num(t, "sweep_dsr_prob_min"), NEUTRAL)
-                KvRow("edge min weeks · candidates", num(t, "edge_min_weeks") + " · " + num(t, "edge_min_candidates"), NEUTRAL)
-                SectionLabel("Gates", divider = true)
-                Note("LRN-1/LRN-4 annotations: the T1 gate + sweep/promotion gates live here. Read-only. Sweeps run through the governed path, not this viewer.")
-            }
-
-            // Edge — the W-33 levers; wired/unwired/conflict is the apply-map's business.
-            DomainCard("Edge: the W-33 levers", "domains.edge.*", domains.obj("edge")) {
-                val e = domains.obj("edge")
-                SectionLabel("Levers", divider = false)
-                KvRow("side weight short", num(e, "side_weight_short"), NEUTRAL)
-                KvRow("session weight 12-14Z", num(e, "session_weight_12_14Z"), NEUTRAL)
-                KvRow("zone offset repair", num(e, "zone_offset_repair"), NEUTRAL)
-                KvRow("entry confirm", (e.obj("entry_confirm")?.bool("on") ?: e?.bool("entry_confirm") ?: false).yn(), NEUTRAL)
-                KvRow("aux agree gate", (e.obj("aux_agree_gate")?.bool("on") ?: e?.bool("aux_agree_gate") ?: false).yn(), NEUTRAL)
-                KvRow("ladder tp1 · tp2 (R)", num(e, "ladder_tp1_r") + " · " + num(e, "ladder_tp2_r"), NEUTRAL)
-                KvRow("ladder split tp1", num(e, "ladder_split_tp1"), NEUTRAL)
-                KvRow("trail activate R · atr mult", num(e, "trail_activate_r") + " · " + num(e, "trail_atr_mult"), NEUTRAL)
-                KvRow("trail floor (bps)", num(e, "trail_floor_bps"), NEUTRAL)
-                SectionLabel("Apply-map", divider = true)
-                Note("W-33 edge levers. Wired / unwired / conflict is the apply-map's business (edge.v1.json), not this read-only viewer.")
-            }
-
-            // Logger — cadence / windows / tier-2 walled.
-            DomainCard("Logger: cadence · windows (tier-2 walled)", "domains.logger.*", domains.obj("logger")) {
-                val l = domains.obj("logger")
-                KvRow("during cadence (min)", num(l, "during_cadence_min"), NEUTRAL)
-                KvRow("pre / post window (min)", num(l, "pre_window_min") + " / " + num(l, "post_window_min"), NEUTRAL)
-                KvRow("tier-2 enrichment", (l.obj("tier2_enrichment")?.bool("on") ?: l?.bool("tier2_enrichment") ?: false).yn(), WARN)
-                Note("Tier-2 enrichment stays walled. Read-only viewer.", WARN)
-            }
+            // ── PLUMBING — logging cadence + where this preset came from ──
+            SettingGroup(
+                title = "Plumbing",
+                whatItControls = "Logging cadence, and where this preset came from.",
+                detailLabel = "ALL LOGGER + PRESET METADATA",
+                surfaced = {
+                    KvRow("during cadence (min)", num(logger, "during_cadence_min"), NEUTRAL)
+                    KvRow("schema · source", active.text("schema") + " · " + active.text("src"), NEUTRAL)
+                },
+                detail = {
+                    SectionLabel("Logger", divider = false)
+                    KvRow("during cadence (min)", num(logger, "during_cadence_min"), NEUTRAL)
+                    KvRow("pre / post window (min)", num(logger, "pre_window_min") + " / " + num(logger, "post_window_min"), NEUTRAL)
+                    KvRow("tier-2 enrichment", (logger.obj("tier2_enrichment")?.bool("on") ?: logger?.bool("tier2_enrichment") ?: false).yn(), WARN)
+                    Note("Tier-2 enrichment stays walled.", WARN)
+                    SectionLabel("This preset")
+                    KvRow("schema", active.text("schema"), NEUTRAL)
+                    KvRow("source", active.text("src"), NEUTRAL)
+                    if (meta != null) {
+                        KvRow("preset file", presetEnv.text("file"), NEUTRAL)
+                        KvRow("author · ums", meta.text("author") + " · " + meta.text("ums"), NEUTRAL)
+                        Note(meta.text("notes"), NEUTRAL)
+                    }
+                    if (dirty) Note("Draft diverges from BASE: export a change-plan and run it through the compiler.", WARN)
+                },
+            )
         }
 
         // ── the control surface (v5.18) — client draft → change-plan → EXPORT as a proposal ──
@@ -398,6 +409,77 @@ fun ConfigScreen(repo: MissionRepository) {
 // ── small local formatting helpers (keep readers honest — em-dash on absence) ──
 private fun num(o: JsonObject?, k: String): String = o.field(k).str()
 private fun Boolean.yn(): String = if (this) "true" else "false"
+
+/** Trim a trailing ".0" so a JSON float reads as a whole number (60.0 → 60) in prose. */
+private fun trimNum(s: String): String = if (s.endsWith(".0")) s.dropLast(2) else s
+
+/**
+ * "How it's set to trade" — a plain-language summary synthesised from the served preset's key levers.
+ * HONEST: every clause is appended only when its source lever is actually present (em-dash / blank →
+ * dropped, never fabricated). Returns a headline sentence + a list of ▸ fact lines for [TradeSummaryBanner].
+ */
+private fun tradeSummary(domains: JsonObject?): Pair<String, List<String>> {
+    if (domains == null) return "" to emptyList()
+    val risk = domains.obj("risk")
+    val exec = domains.obj("execution")
+    val intel = domains.obj("intelligence")
+    val regimes = domains.obj("regimes")
+    val detectors = domains.obj("detectors")
+
+    // a lever's value, or null when absent — so a clause can be dropped honestly.
+    fun v(o: JsonObject?, k: String): String? {
+        val s = num(o, k)
+        return if (s == "—" || s.isBlank()) null else trimNum(s)
+    }
+
+    val conv = v(risk, "conviction_threshold")
+    val riskPct = v(risk, "risk_pct_equity")
+    val headline = when {
+        conv != null && riskPct != null -> "Takes trades at conviction $conv or higher, risking $riskPct% of equity on each."
+        conv != null -> "Takes trades at conviction $conv or higher."
+        riskPct != null -> "Risks $riskPct% of equity on each trade."
+        else -> "The served preset defines how the system trades."
+    }
+
+    val facts = mutableListOf<String>()
+
+    val riskBits = mutableListOf<String>()
+    v(risk, "min_stop_width_bps")?.let { riskBits += "${it}bps minimum stop" }
+    v(risk, "net_rr_floor")?.let { riskBits += "net RR floor $it" }
+    v(risk, "global_exposure_cap_pct")?.let { riskBits += "exposure capped at $it%" }
+    if (riskBits.isNotEmpty()) facts += riskBits.joinToString(" · ")
+
+    val ddD = v(risk, "dd_daily_pct")
+    val ddW = v(risk, "dd_weekly_pct")
+    if (ddD != null || ddW != null) {
+        val halt = listOfNotNull(ddD?.let { "$it% daily" }, ddW?.let { "$it% weekly" }).joinToString(" / ")
+        facts += "Halts trading at $halt drawdown"
+    }
+
+    val exit = exec.text("exit_profile")
+    if (exit != "—" && exit.isNotBlank()) facts += "Exit profile: $exit"
+
+    val regOn = regimes?.keys?.count { regimes.obj(it)?.bool("enabled") == true }
+    val regTot = regimes?.size
+    val detOn = detectors?.keys?.count { detectors.obj(it)?.bool("on") == true }
+    val detTot = detectors?.size
+    val watchBits = mutableListOf<String>()
+    if (regOn != null && regTot != null) watchBits += "$regOn of $regTot regimes armed"
+    if (detOn != null && detTot != null) watchBits += "$detOn of $detTot detectors live"
+    if (watchBits.isNotEmpty()) facts += watchBits.joinToString(" · ")
+
+    val serving = intel.text("serving")
+    val model = intel.text("model_tag")
+    if (serving != "—" && serving.isNotBlank()) {
+        facts += "Judged by $serving" + (if (model != "—" && model.isNotBlank()) " · $model" else "")
+    }
+
+    return headline to facts
+}
+
+/** Total lever count across every domain — what the one fingerprint attests to. */
+private fun leverCount(domains: JsonObject?): Int =
+    domains?.keys?.sumOf { (domains.obj(it)?.size ?: 0) } ?: 0
 
 /**
  * The Config-Store control surface (v5.18): build a config change IN THE APP over the served preset,
@@ -460,10 +542,9 @@ private fun ConfigDraftCard(repo: MissionRepository, domains: JsonObject?, baseF
         }
     }
 
-    McCard("Client draft → change-plan → proposal", tool = "get_config_preset · propose_action", sub = "the safe half, never applies") {
-        // The design's ceremony note, verbatim.
-        Note("proposal → triad-config compile → git → triadctl config verify; NO TOOL WRITES IT", WARN)
-        Note("Build the change IN THE APP: pick a lever, set a new value client-side, read the diff, then Export → proposal. The app files a config_change proposal (propose_action); it never applies. config_apply does not exist.", NEUTRAL)
+    McCard("Propose a change", tool = "get_config_preset · propose_action", sub = "the one real action here, and it never applies", writes = true) {
+        Note("Pick a lever, set a new value, read the diff, then file it as a proposal. It lands in the operator's inbox; the change only takes effect after the governed ceremony compiles and verifies it. This screen never applies (R-C1).", NEUTRAL)
+        Note("proposal → triad-config compile → git → triadctl config verify · no tool writes it", WARN)
 
         // ── pick a lever (client-side selection only) ──
         SectionLabel("Pick a lever", divider = false)
