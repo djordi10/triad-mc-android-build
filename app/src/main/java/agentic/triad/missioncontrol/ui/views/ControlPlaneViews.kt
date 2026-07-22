@@ -557,7 +557,7 @@ private fun McpServerTile(s: McpServer, liveToolCount: Int?) {
             add(Lever("last test", if (probed) "live window" else "never", if (probed) NEUTRAL else UNK))
             add(Lever("status", statusLabel, statusTone))
         })
-        // CONTROL-WRITES — the SYSTEM plane. Rendered disabled; NEVER invoked (C-2).
+        // CLIENT-tier controls — real in the web app, rendered disabled in this read-only mirror (C-2).
         Row(Modifier.padding(top = 8.dp)) {
             Button(onClick = {}, enabled = false, modifier = Modifier.padding(end = 8.dp)) {
                 Text(if (s.on) "Disable" else "Enable")
@@ -569,9 +569,10 @@ private fun McpServerTile(s: McpServer, liveToolCount: Int?) {
             }
         }
         Note(
-            "Enable / disable → mcp_toggle · set / refresh token → mcp_token_issue / mcp_token_revoke · remove → " +
-                "mcp_servers: all SYSTEM control-writes that do not exist on the estate. This read-only mirror " +
-                "renders them disabled and NEVER calls them; they are operator actions performed at triadctl.",
+            "These are CLIENT-tier controls, real in the web app: enable / disable stops THIS dashboard calling " +
+                "the server (it does NOT stop the process), and set-token / add / remove edit the dashboard's own " +
+                "registry. This read-only mirror renders them disabled. Stopping the server PROCESS is a different, " +
+                "SYSTEM control (mcp_toggle) that does not exist on the estate.",
             UNK,
         )
     }
@@ -696,8 +697,9 @@ fun McpScreen(repo: MissionRepository) {
             Note(
                 "C-2 · this roster is real: these are the endpoints THIS dashboard knows, and which one it " +
                     "talks through. The connected server carries a live tools/list count; the rest are honestly " +
-                    "untested (— · never · UNTESTED). But enable / disable, set token, and Add are SYSTEM " +
-                    "control-writes, and this read-only mirror renders them disabled and never calls them.",
+                    "untested (— · never · UNTESTED). enable / disable, set token, and Add are CLIENT-tier controls " +
+                    "(real in the web app: they change which servers this dashboard talks to, not the estate); this " +
+                    "read-only mirror renders them disabled.",
                 NEUTRAL,
             )
             SectionLabel("the servers", divider = true)
@@ -706,7 +708,7 @@ fun McpScreen(repo: MissionRepository) {
                 Button(onClick = {}, enabled = false) { Text("+ Add an MCP server") }
             }
             Note(
-                "+ Add an MCP server → mcp_servers, a SYSTEM control-write. Rendered disabled; never invoked (C-2).",
+                "+ Add an MCP server edits the dashboard's own registry: a CLIENT-tier control, real in the web app. Rendered disabled in this read-only mirror (C-2).",
                 UNK,
             )
             WhyBox("THE LAW · C-2 · CLIENT tier") {
@@ -978,6 +980,7 @@ private val ESTATE_NODES = listOf(
         subs = listOf(Sub("feeds", "✓"), Sub("engine", "✓"), Sub("contracts/", "·")),
         findings = listOf(
             "PROPOSES · detectors → candidates (geometry + filter fields) · sets every rate · 21,890 candidates",
+            "45,692 context packets exist and have no view: P4 replay is dead at the first hop",
             "never: touch the model · reach the venue",
         ),
         status = { laneStatus(it, "ledger.candidates", NodeStatus.IDLE) },
@@ -1076,6 +1079,7 @@ private val ESTATE_NODES = listOf(
         subs = listOf(Sub("resolver", "✗"), Sub("shadow_sync", "✗"), Sub("mcp :8801", "✗"), Sub("watchdog/boards/corpus", "·")),
         findings = listOf(
             "keeper trio (resolver · shadow_sync · mcp :8801) CRASH-LOOP on unapplied W-71 → the triad-mc 502",
+            "provenance broken: chain_verified:false (P4 violated) · input_hash=0×64 on 1,825 decisions · refusal_id 100% null",
             "read-only by law · never touches money · ledger.outcomes EMPTY · every live number reads from here",
         ),
         status = { NodeStatus.DOWN }, ev = { "trio crash-loop · W-71 unapplied" },
@@ -1833,7 +1837,9 @@ private fun NatsRootCauseRibbon() {
         Text(
             buildAnnotatedString {
                 withStyle(b) { append("NATS was never provisioned: the root cause the whole audit returns to.") }
-                append(" No bus → no consumer dedupe → duplicate rows → inflated aggregates → a poisoned corpus. ")
+                append(" No bus → no consumer dedupe → §7.2 idempotency violated → ")
+                withStyle(b) { append("164 duplicate candidates → 8 double-adjudicated → 5,277 excess bank rows → inflation 2.93×") }
+                append(", and net_pnl_r is counterfeit on the duplicated sample. ")
                 withStyle(b) { append("One unprovisioned bus sits upstream of every number here.") }
             },
             color = Sev, fontSize = 12.sp, lineHeight = 18.sp,
