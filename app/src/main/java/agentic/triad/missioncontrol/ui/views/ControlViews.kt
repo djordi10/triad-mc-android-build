@@ -146,7 +146,6 @@ fun ConfigScreen(repo: MissionRepository) {
         )
 
         StatCard(
-            "Applied baseline",
             Triple("preset", if (preset == "—") "—" else preset, NEUTRAL),
             Triple("state", stateLabel, stateTone),
             Triple("fingerprint", fpShort, NEUTRAL),

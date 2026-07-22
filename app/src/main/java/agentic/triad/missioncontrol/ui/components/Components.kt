@@ -319,28 +319,30 @@ fun StatRow(vararg tiles: Triple<String, String, Tone>) {
  * bank summary) so metrics read as their own kind of surface, distinct from prose/table cards.
  */
 @Composable
-fun StatCard(label: String, vararg tiles: Triple<String, String, Tone>, tool: String = "") {
+fun StatCard(vararg tiles: Triple<String, String, Tone>, label: String = "", tool: String = "") {
     val shape = RoundedCornerShape(14.dp)
     Column(
         Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(shape).background(Card).border(1.dp, Line, shape),
     ) {
-        // eyebrow + provenance — a light label row, no pine band (that is the content-card chrome).
-        Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 13.dp, bottom = 11.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                label.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.5.sp, letterSpacing = 1.sp,
-                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
-            )
-            if (tool.isNotEmpty()) {
+        // optional light eyebrow + provenance row (no pine band — that is the content-card chrome).
+        if (label.isNotEmpty() || tool.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 13.dp, bottom = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    "reads · $tool", color = Emerald, fontFamily = Mono, fontSize = 8.5.sp, letterSpacing = 0.3.sp,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.End, lineHeight = 12.sp,
+                    label.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.5.sp, letterSpacing = 1.sp,
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
                 )
+                if (tool.isNotEmpty()) {
+                    Text(
+                        "reads · $tool", color = Emerald, fontFamily = Mono, fontSize = 8.5.sp, letterSpacing = 0.3.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End, lineHeight = 12.sp,
+                    )
+                }
             }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
         // the ruled metrics: big numbers separated by vertical hairlines — the signature.
         Row(
             Modifier.fillMaxWidth().height(IntrinsicSize.Min).horizontalScroll(rememberScrollState())
