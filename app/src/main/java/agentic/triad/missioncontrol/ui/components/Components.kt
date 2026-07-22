@@ -313,6 +313,58 @@ fun StatRow(vararg tiles: Triple<String, String, Tone>) {
 }
 
 /**
+ * A METRICS-LEDGER card — deliberately NOT the dark-header content [McCard]. A light panel whose
+ * signature is the big Archivo numbers ruled apart by vertical hairlines (a trading-terminal readout),
+ * under a quiet mono eyebrow + provenance. Use it for a row of measured values (a config baseline, a
+ * bank summary) so metrics read as their own kind of surface, distinct from prose/table cards.
+ */
+@Composable
+fun StatCard(label: String, tool: String = "", vararg tiles: Triple<String, String, Tone>) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(shape).background(Card).border(1.dp, Line, shape),
+    ) {
+        // eyebrow + provenance — a light label row, no pine band (that is the content-card chrome).
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 13.dp, bottom = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.5.sp, letterSpacing = 1.sp,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+            )
+            if (tool.isNotEmpty()) {
+                Text(
+                    "reads · $tool", color = Emerald, fontFamily = Mono, fontSize = 8.5.sp, letterSpacing = 0.3.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End, lineHeight = 12.sp,
+                )
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+        // the ruled metrics: big numbers separated by vertical hairlines — the signature.
+        Row(
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min).horizontalScroll(rememberScrollState())
+                .padding(vertical = 15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            tiles.forEachIndexed { i, t ->
+                if (i > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(Line))
+                Column(Modifier.padding(horizontal = 17.dp)) {
+                    Text(
+                        t.second, color = if (t.third == Tone.NEUTRAL) Ink else t.third.fg(),
+                        fontFamily = Disp, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp,
+                    )
+                    Text(
+                        t.first.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.sp,
+                        letterSpacing = 0.9.sp, modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * A chip/tag — the web `.tag`: mono 9.5px bold on a soft tone background, a rounded 12px pill. Used
  * for verdicts (FIRED / VIOLATED / HONORED / UNKNOWN) and inline status.
  */

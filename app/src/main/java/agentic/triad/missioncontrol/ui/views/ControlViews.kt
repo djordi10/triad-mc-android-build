@@ -33,6 +33,7 @@ import agentic.triad.missioncontrol.ui.components.PendBox
 import agentic.triad.missioncontrol.ui.components.Ribbon
 import agentic.triad.missioncontrol.ui.components.SectionLabel
 import agentic.triad.missioncontrol.ui.components.Stance
+import agentic.triad.missioncontrol.ui.components.StatCard
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.Tone
@@ -144,15 +145,14 @@ fun ConfigScreen(repo: MissionRepository) {
             INFO,
         )
 
-        McCard("Applied baseline", tool = "get_config_preset · get_config_active", sub = "read-only · apply only via triadctl") {
-            StatRow(
-                Triple("preset", if (preset == "—") "—" else preset, NEUTRAL),
-                Triple("state", stateLabel, stateTone),
-                Triple("fingerprint", fpShort, NEUTRAL),
-                Triple("domains", (domains?.size ?: 0).toString(), if (domains == null) UNK else NEUTRAL),
-                Triple("apply path", "triadctl only", INFO),
-            )
-        }
+        StatCard(
+            "Applied baseline", "get_config_preset · get_config_active",
+            Triple("preset", if (preset == "—") "—" else preset, NEUTRAL),
+            Triple("state", stateLabel, stateTone),
+            Triple("fingerprint", fpShort, NEUTRAL),
+            Triple("domains", (domains?.size ?: 0).toString(), if (domains == null) UNK else NEUTRAL),
+            Triple("apply path", "triadctl only", INFO),
+        )
 
         // ── the editor topbar chrome (mirrors CFGSTORE's SHELL top bar, config_00) ──
         // A viewer + propose surface: the profile selector + Save/Discard/Import/Export chips are the
