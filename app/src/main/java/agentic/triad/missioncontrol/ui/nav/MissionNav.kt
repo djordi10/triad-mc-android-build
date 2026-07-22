@@ -281,7 +281,10 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
                             onRefresh = { stanceTick++ },
                             onPropose = { nav.go(ROUTE_PROPOSE) },
                         )
-                        if (viewStanceRow.isNotEmpty()) ViewStanceRow(viewStanceRow)
+                        // Per-view stance badges (STANCE/PRESET/FINGERPRINT/…) hidden app-wide for now —
+                        // the hero VerdictBanner on each view now carries the verdict. Restore by
+                        // un-commenting; the hoist wiring (LocalViewStance) is left intact.
+                        // if (viewStanceRow.isNotEmpty()) ViewStanceRow(viewStanceRow)
                     }
                 }
                 // ── #chiprow — the current segment's views; pinned right above the content ──
