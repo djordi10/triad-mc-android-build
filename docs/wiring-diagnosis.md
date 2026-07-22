@@ -273,23 +273,39 @@ This is the same shape as SUITE's DSN gap: an infra switch on liko's side, zero 
 The one line that unblocks the most at once is still `TRIAD_DATABANK_DSN` (bucket C) — it lights
 up the whole bank half of SUITE plus the Shadow/Books reads with no app change.
 
-> **⚠ SUPERSEDED — read section 8.** The "set a sqlite `TRIAD_DATABANK_DSN` + run resolve"
-> framing in sections 0 / 1 / 3 / 4B was inferred from the tools' error strings alone. A later
-> read-only SSH recon into liko's Mac corrected it: the databank is **Postgres and healthy**, and
-> the deadness is a **guard-script bug**, not a missing DSN. Section 8 is the corrected picture.
+> **⚠ SEE SECTION 8 for the resolved picture.** Sections 0 / 1 / 3 / 4B say "set a sqlite
+> `TRIAD_DATABANK_DSN`". After a read-only SSH recon that first looked like it disproved this
+> (Postgres is healthy), reading the DEPLOYED server source resolved it: the bank tools ARE
+> sqlite-only and `TRIAD_DATABANK_DSN` IS unset on the server — so those sections are
+> **directionally correct**. But they are incomplete: the local sqlite is already populated
+> (2.84M rows, bridge-fed from Postgres — no "resolve" step needed), and a separate guard-script
+> bug was periodically destroying it. Section 8 has the full, verified picture.
 
 ---
 
-## 8. CORRECTION — the databank is Postgres and healthy; the deadness was a guard bug
+## 8. RESOLVED — the data is present; the bank tools just point at an unset sqlite DSN (plus a guard bug)
 
 Verified by read-only SSH into `Mac-Studio-liko.local` (via `ProxyCommand="cloudflared access ssh
---hostname %h" liko@sshmac.transportech.ai`, 2026-07-22). This supersedes the DSN framing above.
+--hostname %h" liko@sshmac.transportech.ai`, 2026-07-22) **plus reading the DEPLOYED server source**
+(`~/triad/TriadLearning`, branch `feat/tg-daily-scoreboard`). The investigation flip-flopped once;
+this is the landed conclusion.
 
-**1. The bank data exists and is healthy.** The MCP keeper launches the server with
-`TRIAD_MCP_DATABANK_RO_DSN=postgresql://dtbnk_reader:…@192.168.70.235/triaddtbnk`; the Postgres
-table `databank_shadow_trades` holds **411,174 rows**. Nothing needs building; no new datastore.
+**1. The bank data exists — in two places.** Postgres `triaddtbnk.databank_shadow_trades` (read via
+`TRIAD_MCP_DATABANK_RO_DSN`, ~411k rows) is the source of truth, and a `pg_to_sqlite_bridge` feeds a
+**local sqlite** `~/triad/databank/triad.db` that holds **2,839,451 rows** in `databank_shadow_trades`.
+Nothing needs building; no data is missing.
 
-**2. Why the bank tools still read dead — two real causes, neither is an unset DSN:**
+**2. Which datastore the bank tools actually read (the crux).** In the deployed source
+(`src/triad_core/mcp/families/shadow.py`), `get_bank_priced` / `get_shadow_bank` / `get_bank_dedup`
+read the **local sqlite only**, via `_bank_con()` → `TRIAD_DATABANK_DSN`. There is **no Postgres
+fallback** in these tools — the PG path (`TRIAD_MCP_DATABANK_RO_DSN`, line ~385) belongs to a
+different tool, `get_l3_reconciliation`. (The earlier recon note "bank.py reads PG first" conflated
+the two.) So the bank tools are dead for a simple reason: **`TRIAD_DATABANK_DSN` is unset on the
+running `triad_core.mcp.server`**, so `_bank_con()` returns None and the tools answer
+`unavailable · TRIAD_DATABANK_DSN unset or file missing` — even though the 2.84M-row sqlite is right
+there. The launch chain (`~/triad/bin/triad_mcp_autoupdate.sh`) exports only PATH; no DSN is set.
+
+**3. Two more factors that made it read dead (both now benign or fixed):**
 
 - **Transient load / 502 flap.** When the Mac is under load (observed load avg 8.74 right after a
   reboot) the MCP proc is too swamped to answer heavy reads, so Cloudflare returns 502 and the
@@ -303,18 +319,20 @@ table `databank_shadow_trades` holds **411,174 rows**. Nothing needs building; n
   events (2026-07-18, 2026-07-22), each followed by `RECOVERED ok` (it was never corrupt), plus four
   `triad.db.corrupt-*` scar files.
 
-**3. Fix applied 2026-07-22 (user OK'd):** added a skip-branch to `sqlite_guard.sh` so a
+**4. Guard fix applied 2026-07-22 (user OK'd):** added a skip-branch to `sqlite_guard.sh` so a
 `database is locked` / `database is busy` result is logged and skipped instead of triggering
 `.recover`. Real-corruption recovery is untouched (lock = `SQLITE_BUSY`, a different error class
 from `disk image is malformed`). Backup `sqlite_guard.sh.bak-1784741547`; `bash -n` + logic
 dry-tested. It only reduces the guard's false-positive destructive recovery — no trading-stack
 change. This is liko's LIVE box; never bounce the stack.
 
-**4. One open thread (honest):** in this session the MCP tools `get_bank_priced` /
-`get_shadow_bank` / `get_bank_dedup` still returned `transport: unavailable ·
-TRIAD_DATABANK_DSN unset / not a sqlite DSN`, i.e. the deployed read-path for those tools cited the
-**sqlite** `TRIAD_DATABANK_DSN` (unset), not the healthy Postgres RO DSN. Whether the deployed
-build routes those specific tools to Postgres (as the keeper config implies) or to the sqlite lane
-needs one more check against the DEPLOYED server source (not the v5.18 branch). Until confirmed,
-treat "the bank data is healthy in Postgres" and "the deployed tools point at it" as two separate
-facts — the first is verified, the second is not yet.
+**5. To light up the SUITE bank panels (the one remaining step — deferred to 2026-07-23):** set
+`TRIAD_DATABANK_DSN=sqlite:////Users/liko/triad/databank/triad.db` in the `triad_core.mcp.server`
+launch environment (add the `export` in `~/triad/bin/triad_mcp_autoupdate.sh` before its relaunch,
+or set it in the launchd plist) and let the `*/10` autoupdate cron pkill+relaunch pick it up. **No
+data migration or `triad-databank-resolve` is needed** — the local sqlite is already bridge-fed
+(2.84M rows). The guard fix (point 4) is what keeps that sqlite intact once it is the live read
+target. This changes what the MCP serves and needs a server restart, so it is more consequential
+than the guard patch: back up the launch config first, and ideally do it with liko's awareness.
+Once set, `get_bank_priced` / `get_shadow_bank` / `get_bank_dedup` — and the SUITE Overview + Symbols
+bank tables — light up with no app change.
