@@ -20,23 +20,29 @@ Status: ⬜ todo · 🔨 in progress · ✅ done (verified on emulator)
 | B1-4 | **Kill the meta intro** | "TRIAD Analytics — Every card below shows a real number…" paragraph: if the numbers are real, don't explain that they're real. Remove it (and trim the WIRED/WIRE-PENDING legend note). | ✅ |
 | B1-5 | **Shorten MUZZLED** | Even the distilled version is too long. Target: "N proposed, N blocked by safety checks. Good signals, but they break the risk rules." Core intent only. | ✅ |
 
-## Batch 2 — thread 1 content sweep (the tricky, iterative one)
+## Batch 2 — thread 1 content sweep — ✅ DONE (all 11 view files)
 
-Distill prose across all views to plain, human-first sentences. **Case-by-case**: some prose should be cut
-to the core, some just needs the jargon moved to a detail section, some paragraphs should be **removed
-entirely** (like B1-4 — if a thing is self-evident, don't narrate it). Decide per card.
+Distilled prose + removed every user-facing em-dash across all views, one file at a time (build + spot-verify
++ commit per file/wave). Voice: plain human-first sentence, jargon relocated or dropped, self-evident asides
+deleted; conservative on the forensic model/control prose (punctuation fixed, wording kept). Commits:
+`f0e7ae8` AnalyseViews, `2e4e410` ModelLearnViews, `def3e9a` OperateViews, `0f9769f` wave-2 (the other 8).
 
-Cards/views still carrying long prose or em-dashes (non-exhaustive, fill in as swept):
-- Overview (OPERATE): "The estate — 1 of 14 nodes…" prose + em-dashes ⬜
-- Analytics remaining Notes (Latency+CAG, Conviction drift-tell, Payoff, workbench definition-law) ⬜
-- Intelligence: funnel Note, validator prose ⬜
-- Strategy, ModelLearn, Control, SUITE prose blocks ⬜
-- Global em-dash cleanup in user-facing copy ⬜
+**Intentionally KEPT with em-dashes** (verbatim artifacts, not prose): §16.6 verbatim quotes + get_alerts
+quote (ControlViews), the PEND build-spec dumps (ControlPlaneViews/Strategy/PromptStudio), and prompt-template
+body text (PromptStudio). All other user-facing prose em-dashes are gone; remaining `—` in the tree are code
+comments and `"—"` null-placeholders.
 
-## Batch 3 — thread 2 rollout (section labels inside multi-part cards) — pattern approved
+## Batch 3 — thread 2 SectionLabel rollout — ✅ DONE
 
-`SectionLabel` component built + approved on Exec quality (THE NUMBERS / WHY IT'S EMPTY). Roll out to other
-multi-part cards where the parts aren't obviously separate (image 6 "sole keyholder", image 7 cards, etc.). ⬜
+`SectionLabel` rolled out to multi-part cards across every view (data group / meaning split, contextual first
+labels + "what it means"). ~150 labels total. Exceptions by design: Topology uses its own `SrcHeading`,
+OperateViews uses `ExecCard` (self-segments), ReaderWriter has a local `SectionLabel(text)` composable.
+
+## Follow-ups / open
+
+- Density check: thread-2 labels are applied to every data+explanation card (~19 in Analytics alone). If it
+  reads too busy on review, dial back to only the genuinely-ambiguous cards (cheap: delete SectionLabel lines).
+- The kept-verbatim em-dashes above: convert if a strict zero-em-dash policy is wanted.
 
 ---
 
