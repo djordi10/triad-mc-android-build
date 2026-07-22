@@ -186,6 +186,16 @@ private const val SPEC_TRACK_WATCH =
         "· This tool must window the SQLite bank by resolved_at and return\n" +
         "  n + wins + WR + Wilson CI PER WINDOW. Without it every recency\n" +
         "  column on this page is a fossil."
+private const val SPEC_COMBO_REGISTRY =
+    "get_combo_registry  ->  wiring §5.3     ** the named combos as cohorts **\n" +
+        "{ combos:[ { id:\"OB+volume\", legs:[\"order_block\",\"volume\"],\n" +
+        "    emitting, rows, cohort } ] }\n\n" +
+        "RULES  (S-1)\n" +
+        "· Each named combo must be REGISTERED as its own shadow_track and\n" +
+        "  resolved by triad-cf/1 before a win rate exists. Until then the\n" +
+        "  combo rows show NOT EMITTING / 0 rows / PEND, never a fabricated WR.\n" +
+        "· A combo is not a detector: it is a conjunction of legs, and the\n" +
+        "  bank cannot group by it until the registry gives it a cohort id."
 private const val SPEC_DETECTOR_SPLIT =
     "get_detector_split  ->  wiring §5.2     ** per-detector outcomes **\n" +
         "{ by_detector:[ { detector_id:\"sweep_reclaim\",\n" +
@@ -474,6 +484,7 @@ fun StrategyScreen(repo: MissionRepository) {
                 },
             )
             Note("The combos you named (OB+volume, FVG+volume, sweep+volume) are not cohorts in the bank yet. Each must be registered as its own shadow_track and resolved by triad-cf/1 before a win rate exists (get_combo_registry PEND).", UNK)
+            PfPendSpec("get_combo_registry", SPEC_COMBO_REGISTRY)
 
             WhyBox("THE LAW · S-1") {
                 LawBlock(

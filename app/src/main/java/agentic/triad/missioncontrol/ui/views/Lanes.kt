@@ -123,6 +123,7 @@ private data class Lane(
     val guard: String,
     val toMakeReal: String,
     val absent: Boolean,
+    val desc: String = "",
 )
 
 @Composable
@@ -227,30 +228,35 @@ fun LanesScreen(repo: MissionRepository) {
             "L-1 · live binds only to applied: INTERLOCKED to go/no-go ($gatesEvidenced of $gateCount)",
             "close all 9 gates on the go/no-go board; the dashboard REFUSES to propose until then",
             absent = false,
+            desc = "Real money on the applied preset, real venue, real keys.",
         ),
         Lane(
             "paper", "proven", "applied 🔒", "mainnet", "no", NEUTRAL,
             "L-3 · a pointer, not a copy: resolves to the strategy alone",
             "nothing: it already tracks the applied preset by arithmetic (paper follows live)",
             absent = false,
+            desc = "The demo OF live: the same applied strategy with simulated fills.",
         ),
         Lane(
             "shadow-of-live", "proven", "applied 🔒", "none", "no", NEUTRAL,
             "L-4 · a lens, not a profile: resolves to the strategy alone",
             "nothing: it is the same strategy read through a shadow overlay",
             absent = false,
+            desc = "Collects REAL / GATED / MISSED through a shadow overlay, no venue.",
         ),
         Lane(
             "live playground", "candidate", "candidate", "testnet", "no", UNK,
             "L-1 · would bind to a candidate preset, but none exists",
             "a candidate preset must exist first (get_preset_lineage → candidate: null)",
             absent = true,
+            desc = "Real testnet fills and real latency, on a candidate that does not exist yet.",
         ),
         Lane(
             "shadow playground", "candidate", "candidate", "none", "no", UNK,
             "L-4 · a lens over a candidate, but none exists",
             "a candidate preset must exist first (get_preset_lineage → candidate: null)",
             absent = true,
+            desc = "No venue: the safest place a candidate can live, once one exists.",
         ),
     )
 
@@ -432,6 +438,7 @@ fun LanesScreen(repo: MissionRepository) {
                     Tag(if (open) "▾" else "▸", NEUTRAL)
                 }
                 if (open) {
+                    if (lane.desc.isNotEmpty()) Note(lane.desc, if (lane.absent) UNK else NEUTRAL)
                     LeverTable(buildList<Lever> {
                         add(Lever("binding", lane.binds, if (lane.absent) UNK else NEUTRAL))
                         add(Lever("env", lane.env, NEUTRAL))

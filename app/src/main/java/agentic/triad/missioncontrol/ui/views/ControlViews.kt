@@ -1009,6 +1009,7 @@ fun GovernanceScreen(repo: MissionRepository) {
                 add(Lever("dirty: false", if (ca == null) "—" else ca.text("preset") + (if (ca.bool("dirty")) " · DRAFT" else " · clean"), if (ca != null && !ca.bool("dirty")) GOOD else UNK))
                 add(Lever("propose_action executes nothing", "genuinely advisory", GOOD))
             })
+            Note("The kill switch reads state:\"unknown\" because its configured.armed is false: it is correctly reporting that nothing has armed it, not that it is disarmed after a decision. UNKNOWN is the honest answer, not a green.", NEUTRAL)
             Ribbon(
                 "The governance design is excellent. The governance instrumentation is blind.",
                 "That is a far smaller problem than it looks: the fix is cheap. The proposal path is right, the " +

@@ -415,6 +415,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
                 }
                 HBarChart(failBars, labelWidth = 132)
                 Note("The tallest bar names the check that kills the most trades. Semantic pass = 1 − econ-fails/decisions.")
+                Note("context_stale does not count as a semantic failure: it is scheduler debt, curriculum-banned. The ttl_bounds check disappears entirely at grammar v1.1.", UNK)
             }
         }
         McCard("Conviction histogram", tool = "get_conviction_histogram", sub = "the drift tell") {
@@ -488,6 +489,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
                 Triple("win avg", "1.59R", GOOD),
                 Triple("CAG hits", cag.let { val h = it.int("cache_hits"); val t = it.int("total"); if (h != null && t != null) "$h/$t" else "22/1229" }, WARN),
             )
+            Note("Scope: 26 symbols · 8 cohorts · conviction 63/65 · ladder live.", NEUTRAL)
         }
 
         // ── 01 · SIGNALS ───────────────────────────────────────────────────────────────────────────
@@ -1274,6 +1276,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
                     },
                 )
                 Note("Status is toned by lane: win/open ⇒ GOOD/INFO, loss ⇒ BAD, rejected/missed ⇒ WARN; pnl_r toned by sign. A null entry/exit/pnl_r on a rejected row is a real absence (the gate fired before a fill), never a fabricated zero (T-3).")
+                Note("Data-quality caveat: ts renders HH:MM with no date and no timezone, so rows cannot be sorted across days; and the acct column shows a persona that has never traded (LIVE-MAIN on a book with 0 fills).", UNK)
                 Note("Tap a row id to load its full get_trade_row chain in the detail card below.", INFO)
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp),
