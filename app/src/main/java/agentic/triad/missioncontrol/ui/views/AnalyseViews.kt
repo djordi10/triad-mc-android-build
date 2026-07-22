@@ -314,7 +314,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
     ) {
         McCard("Analytics workbench", "selections re-aggregate every chart") {
             Row(Modifier.fillMaxWidth().padding(bottom = 2.dp)) {
-                Tag("demo rowset — live per-cohort feed lands with get_vr_scoreboard", WARN)
+                Tag("demo rowset: live per-cohort feed lands with get_vr_scoreboard", WARN)
             }
             AnaFilterGroup("cohort", listOf("TRIAD-A", "VR-BASE", "P-LADDER", "P-CONFIRM"), fCohort) { fCohort = it }
             AnaFilterGroup("symbol", listOf("ALL", "ETH", "BTC", "SOL", "LINK", "XRP", "AVAX", "SUI", "DOGE", "BNB"), fSymbol) { fSymbol = it }
@@ -328,14 +328,15 @@ fun AnalyticsScreen(repo: MissionRepository) {
                 Triple("net (selection)", "${fmt(netSel, 1)}R", pnlTone(netSel)),
                 Triple("validity (live)", validity?.let { "${fmt(it, 0)}%" } ?: "—", validityTone(validity)),
             )
-            Note("Definition law: positive-outcome rate = pnl_r > 0 · full-win = pnl_r ≥ 1.9 · net_r never summed across cohorts · every WR renders with its Wilson CI against BE 28.6% (single-TP).", INFO)
+            SectionLabel("the definitions")
+            Note("Definitions: positive outcome = pnl_r > 0, full win = pnl_r ≥ 1.9. Never sum net_r across cohorts. Every win rate shows its Wilson CI against breakeven (BE 28.6%, single-TP).", INFO)
         }
         McCard("Equity curve", tool = "rowset", sub = "selected cohort") {
             val eq = guardDerive(emptyList<Double>()) {
                 var acc = 0.0
                 selResolved.map { acc += it.r; acc }
             }
-            if (eq.size >= 2) LineChart(eq) else Note("Fewer than two resolved rows in the selection — no curve to draw.", UNK)
+            if (eq.size >= 2) LineChart(eq) else Note("Fewer than two resolved rows in the selection, so there is no curve to draw.", UNK)
             Note("Cumulative R over resolved rows in selection order.")
         }
         McCard("Outcome mix", "rowset") {
@@ -348,18 +349,20 @@ fun AnalyticsScreen(repo: MissionRepository) {
                 ),
                 labelWidth = 96,
             )
-            Note("The mix for the current selection — $rowsN rows: $win win · $loss loss · $nf no_fill (a donut in the web, an honest bar split here).")
+            Note("The current selection holds $rowsN rows: $win win · $loss loss · $nf no_fill.")
         }
         McCard("Win rate by symbol · Wilson CI vs breakeven", "rowset") {
             val bars = guardDerive(emptyList<Bar>()) {
                 anaWrBars(selResolved) { it.sym }.sortedByDescending { it.value }.take(9)
             }
             if (bars.isEmpty()) Note("No resolved rows in the selection.", UNK) else HBarChart(bars, unit = "%", labelWidth = 72)
-            Note("BE 28.6% — a bar toned green clears breakeven on the CI-low side, red fails on the CI-high side, amber straddles. The label is (wins/n).")
+            Note("A green bar clears breakeven even on the low side of its confidence interval, red fails even on the high side, amber straddles. BE 28.6%; label is (wins/n).")
         }
         McCard("Win rate by stop-width bucket", "rowset") {
+            SectionLabel("the buckets", divider = false)
             val bars = guardDerive(emptyList<Bar>()) { anaWrBars(selResolved) { "${it.sb}bps" }.sortedBy { it.label.removeSuffix("bps").toIntOrNull() ?: 0 } }
             if (bars.isEmpty()) Note("No resolved rows in the selection.", UNK) else HBarChart(bars, unit = "%", labelWidth = 72)
+            SectionLabel("what it means")
             Note("The scale law: wider structural stops clear breakeven, sub-floor stops bleed. BE 28.6%.")
         }
         McCard("Win rate by side", "rowset") {
@@ -373,6 +376,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             Note("WR% by 6-hour UTC block. BE 28.6%.")
         }
         McCard("Payoff distribution (selection)", "rowset") {
+            SectionLabel("the payoff", divider = false)
             val neg = selResolved.count { it.r < 0 }
             val p105 = selResolved.count { it.r in 1.0..1.5 }
             val p195 = selResolved.count { it.r in 1.5..2.1 }
@@ -386,11 +390,12 @@ fun AnalyticsScreen(repo: MissionRepository) {
                 ),
                 labelWidth = 72,
             )
+            SectionLabel("what it means")
             Note("The ladder signature: mass at +1.05 and +1.95 replaces the single +2.5 spike.")
         }
         McCard("Failure histogram", tool = "get_analytics.checks_failed", sub = "validity→semantic (A-adj)") {
             if (checksFailedList.isEmpty()) {
-                Note("No failing checks in the window — or the ledger has no rows.", UNK)
+                Note("No failing checks in the window, or the ledger has no rows.", UNK)
             } else {
                 // Failure histogram — [check, fires] pairs as a horizontal bar chart (web: hBars(checks_failed)).
                 val failBars = checksFailedList.take(10).mapNotNull { e ->
@@ -400,10 +405,11 @@ fun AnalyticsScreen(repo: MissionRepository) {
                     Bar(name, n, if (name == "context_stale") BAD else WARN)
                 }
                 HBarChart(failBars, labelWidth = 132)
-                Note("semantic = 1 − econ-fails/decisions; the top check names the dominant kill.")
+                Note("The tallest bar names the check that kills the most trades. Semantic pass = 1 − econ-fails/decisions.")
             }
         }
         McCard("Conviction histogram", tool = "get_conviction_histogram", sub = "the drift tell") {
+            SectionLabel("the histogram", divider = false)
             val fresh = hist.obj("fresh")
             val cache = hist.obj("cache")
             val freshMode = fresh?.entries?.maxByOrNull { (it.value.str()).toDoubleOrNull() ?: 0.0 }
@@ -417,11 +423,13 @@ fun AnalyticsScreen(repo: MissionRepository) {
                 }
                 Histogram(convBars, thresholdIndex = 60, voidRange = 36..62)
             } else {
-                Note("Conviction histogram empty — no fresh buckets this window.", UNK)
+                Note("Conviction histogram empty: no fresh buckets this window.", UNK)
             }
+            SectionLabel("the buckets")
             KvRow("fresh buckets", "${fresh?.size ?: 0}", NEUTRAL)
             KvRow("cache buckets", "${cache?.size ?: 0}", NEUTRAL)
             if (freshMode != null) KvRow("fresh mode", "${freshMode.key} → ${freshMode.value.str()}", WARN)
+            SectionLabel("what it means")
             Note("Every zero-bucket is a non-answer (error / timeout / validator kill), not a low-conviction trade.")
         }
         McCard("Latency + CAG", "get_analytics.latency · get_cag_stats") {
@@ -521,7 +529,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
         }
         McCard("Validity · semantic trend", "get_analytics.validity_pct") {
             KvRow("validity (live)", validity?.let { "${fmt(it, 0)}%" } ?: "—", validityTone(validity))
-            Note("Post-grammar format-validity saturates by construction — the trainable number is semantic-pass.")
+            Note("Format validity is near-100% by construction; the number worth training on is the semantic pass rate.")
             Wire(analytics != null, "get_analytics.validity_pct + checks_failed")
         }
         McCard("Failure histogram (24h)", "get_analytics.checks_failed") {
@@ -536,29 +544,35 @@ fun AnalyticsScreen(repo: MissionRepository) {
                     labelWidth = 120,
                 )
             }
-            Wire(analytics != null, "get_analytics.checks_failed — stale = scheduler; ttl dies at grammar v1.1")
+            Wire(analytics != null, "get_analytics.checks_failed · stale = scheduler; ttl dies at grammar v1.1")
         }
         McCard("The takes ledger", "decisions verdict=take JOIN refusals") {
+            SectionLabel("the takes", divider = false)
             KvRow("ETH · conv 63 · pt-1.0.1", "validator OK · governor 45bps", NEUTRAL)
             KvRow("ETH · conv 65 · same zone", "validator OK · governor 45bps", NEUTRAL)
+            SectionLabel("what it means")
             Note("Both stopped at check 6 (stop_bounds.min_width_bps): a 6bps zone-stop vs the fee floor.")
             Wire(false, "run_select: decisions verdict=take JOIN refusals")
         }
         McCard("Take-band gauge", "decisions verdict mix") {
+            SectionLabel("take rate", divider = false)
             if (takePct != null) Gauge(takePct, 10.0, 60.0, "take-band", "%")
             KvRow("take rate", takePct?.let { "${fmt(it, 2)}%" } ?: "—", if (inBand) GOOD else WARN)
+            SectionLabel("what it means")
             Note("Pre-T1 this stays green by decree; post-T1 it is the skip-collapse tripwire (LRN-1).")
             Wire(takeRate != null, "decisions verdict mix (get_take_rate)")
         }
 
         // ── 03 · TRADING ───────────────────────────────────────────────────────────────────────────
-        AnaSection("03 · Trading", "The outcome plane — bank truth")
+        AnaSection("03 · Trading", "The outcome plane: bank truth")
         McCard("The funnel (all cohorts)", "get_shadow_bank.by_outcome") {
+            SectionLabel("the funnel", divider = false)
             HBarChart(
                 listOf(Bar("win", 1482.0, GOOD), Bar("loss", 1522.0, BAD), Bar("no_fill", 2617.0, UNK), Bar("gap", 2195.0, WARN), Bar("expired", 192.0, WARN)),
                 labelWidth = 72,
             )
-            Note("Never sum across cohorts as P&L — the +988R aggregate is a cross-book sum. gap = kline gaps, named honestly.")
+            SectionLabel("what it means")
+            Note("Never add these across cohorts as P&L: the +988R total is a cross-book sum. gap = kline gaps.")
             Wire(false, "get_shadow_bank.by_outcome + cohort group_by")
         }
         McCard("Cohort scoreboard", tool = "triad_variant_resolver → get_vr_scoreboard", sub = "the adoption table") {
@@ -566,7 +580,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             KvRow("paired dEV (P-LADDER − VR-BASE)", "200+ pairs · CI-positive", NEUTRAL)
             KvRow("REC-2 touch ratio", "gate 1.35", NEUTRAL)
             KvRow("REC-1 convertible share", "per widestop", NEUTRAL)
-            Wire(false, "get_vr_scoreboard — the single most valuable missing feed")
+            Wire(false, "get_vr_scoreboard · the single most valuable missing feed")
         }
         McCard("Win rate", tool = "bank slice by side", sub = "by side (latest window)") {
             HBarChart(listOf(anaWrBar("LONG", 16, 48), anaWrBar("SHORT", 7, 41)), unit = "%", labelWidth = 64)
@@ -574,26 +588,34 @@ fun AnalyticsScreen(repo: MissionRepository) {
             Wire(false, "bank slice by side")
         }
         McCard("Win rate", tool = "bank slice by stop_bps", sub = "by stop width") {
+            SectionLabel("by stop width", divider = false)
             HBarChart(listOf(anaWrBar("≤15bps", 15, 63), anaWrBar("15-30", 6, 16), anaWrBar("30-60", 1, 5), anaWrBar(">60", 1, 5)), unit = "%", labelWidth = 64)
-            Note("The 45bps floor redraws this chart — sub-floor buckets stop existing. BE 28.6%.")
+            SectionLabel("what it means")
+            Note("The 45bps floor redraws this chart: sub-floor buckets stop existing. BE 28.6%.")
             Wire(false, "bank slice by stop_bps bucket")
         }
         McCard("Positive-outcome vs full-win (ladder era)", "bank pnl_r histogram per cohort") {
+            SectionLabel("the rates", divider = false)
             StatRow(Triple("win avg", "1.59R", GOOD), Triple("was", "2.50 flat", UNK))
-            Note("Track positive-outcome rate beside full-win rate — never conflate. Payoff mass: -1.0 · +1.05 · +1.95 · runners.")
-            Wire(false, "bank pnl_r histogram per cohort — get_vr_scoreboard")
+            SectionLabel("what it means")
+            Note("Track positive-outcome rate beside full-win rate; never conflate the two. Payoff mass: -1.0 · +1.05 · +1.95 · runners.")
+            Wire(false, "bank pnl_r histogram per cohort · get_vr_scoreboard")
         }
         McCard("Hold-time autopsy", "bank closed_at − entry_filled_at") {
+            SectionLabel("the medians", divider = false)
             KvRow("winners median", "8 min", NEUTRAL)
-            KvRow("losers median", "2 min — adverse-flow entries", WARN)
+            KvRow("losers median", "2 min, adverse-flow entries", WARN)
+            SectionLabel("what it means")
             Note("The 2-minute deaths are the ENTRY_CONFIRM target; P-CONFIRM prices it.")
             Wire(false, "bank closed_at − entry_filled_at")
         }
         McCard("Fill map", tool = "bank fill rate per symbol", sub = "zone placement") {
+            SectionLabel("the fills", divider = false)
             HBarChart(
                 listOf(Bar("AVAX", 47.0), Bar("FIL", 50.0), Bar("ETH", 29.0), Bar("LTC", 27.0), Bar("DOGE", 8.0, WARN), Bar("SUI", 0.0, UNK), Bar("XLM", 0.0, UNK), Bar("NEAR", 0.0, UNK)),
                 unit = "%", labelWidth = 64,
             )
+            SectionLabel("what it means")
             Note("Zero-fill = offset defects, not patience; the ×0.6 repair sits unwired.")
             Wire(false, "bank fill rate per symbol")
         }
@@ -609,56 +631,64 @@ fun AnalyticsScreen(repo: MissionRepository) {
             } else {
                 StatRow(Triple("fill alpha bps", fmt(exec.num("fill_alpha_bps"), 2), NEUTRAL), Triple("maker ratio", fmt(exec.num("maker_ratio"), 2), NEUTRAL))
             }
-            Wire(exec != null, "get_exec_quality — honestly empty")
+            Wire(exec != null, "get_exec_quality · honestly empty")
         }
 
         // ── 04 · LEARNING + SYSTEM ────────────────────────────────────────────────────────────────
         AnaSection("04 · Learning + system", "The learning plane")
         McCard("Corpus counter vs the T1 gate", "bank resolved per cohort + class tags") {
+            SectionLabel("the count", divider = false)
             StatRow(Triple("resolved rows", "~3,004", NEUTRAL), Triple("t1_min_labeled", "5,000", WARN))
+            SectionLabel("what it means")
             Note("TRIAD-A-only labeled count needs the cohort split; at current flow the gate lands within days.")
             Wire(false, "bank resolved per cohort + class tags")
         }
         McCard("Curriculum class mix (live fails)", "fail histogram → class map") {
+            SectionLabel("the classes", divider = false)
             HBarChart(
                 listOf(Bar("class0 parsimony", 806.0), Bar("class1 geometry", 88.0), Bar("class2 bounds", 49.0), Bar("class3 abstention", 234.0)),
                 labelWidth = 120,
             )
+            SectionLabel("what it means")
             Note("class1 redefined by the 45bps law: stop = max(structure, 45bps, 0.3×ATR), targets scale to gross 2.5+.")
             Wire(false, "fail histogram → class map")
         }
         McCard("Calibration deciles", "get_calibration") {
             KvRow("artifact", calib.text("status", "absent").uppercase(), if (calib.text("status") == "absent") UNK else NEUTRAL)
             Note("Pins only at 300+ fresh takes with occupied deciles (LRN-4); status absent is the honest read.")
-            Wire(calib != null, "get_calibration — status absent is the honest read")
+            Wire(calib != null, "get_calibration · status absent is the honest read")
         }
         McCard("Attribution ledger", "get_attribution_ledger") {
             KvRow("windows · candidates", "${attr.int("weeks") ?: 0} wk · ${attr.int("total_candidates") ?: 0} cand", if (attr?.bool("enough") == true) GOOD else WARN)
             KvRow("dB0 (edge moved) · d(M1-B0)", "weekly cadence", NEUTRAL)
-            Wire(attr != null, "get_attribution_ledger — empty-until-race is correct")
+            Wire(attr != null, "get_attribution_ledger · empty-until-race is correct")
         }
         McCard("Drift monitors", "get_conviction_histogram + decisions stats") {
-            KvRow("conviction shape", "bimodal — must spread", WARN)
+            KvRow("conviction shape", "bimodal, must spread", WARN)
             KvRow("rationale length", "stable", NEUTRAL)
             KvRow("abstain mix", "96% pre-T1", WARN)
             Wire(false, "get_conviction_histogram + decisions stats")
         }
         McCard("Continuity SLOs", "get_continuity") {
             KvRow("continuity verdict", cont.text("verdict", "—"), continuityTone(cont.text("verdict")))
-            Note("FLOW 100+/h ±30% · CAG monotone hits · BANK heartbeat 2× — self-heal armed; config REDs propose, never apply.")
+            Note("Self-heal is armed, but config REDs only propose, never apply. Watched: FLOW 100+/h ±30%, CAG monotone hits, BANK heartbeat 2×.")
             Wire(cont != null, "get_continuity")
         }
 
         // ── 05 · DEEP INSIGHTS ────────────────────────────────────────────────────────────────────
-        AnaSection("05 · Deep insights", "The second layer — what the first layer means")
+        AnaSection("05 · Deep insights", "The second layer: what the first layer means")
         McCard("Tier vs outcome", tool = "bank slice: conviction_tier × outcome", sub = "pre-calibration truth") {
+            SectionLabel("the tiers", divider = false)
             HBarChart(listOf(Bar("VERY_LOW", 30.0, WARN), Bar("LOW", 20.0, WARN)), unit = "%", labelWidth = 88)
-            Note("Conviction tier is anti-correlated with outcomes in the window — the head recites, it does not rank. The T1 unlock in one chart.")
+            SectionLabel("what it means")
+            Note("In this window, higher conviction tiers do worse, not better: the model recites, it does not rank. The T1 unlock in one chart.")
             Wire(false, "bank slice: conviction_tier × outcome")
         }
         McCard("Skip anatomy", tool = "get_conviction_histogram × bank outcomes", sub = "96% decomposed") {
+            SectionLabel("the breakdown", divider = false)
             HBarChart(listOf(Bar("conviction-0 (invalid era)", 806.0, BAD), Bar("stock-22 skips", 234.0, WARN), Bar("real skips 28-35", 49.0)), labelWidth = 140)
-            Note("Model-skips resolved 17.2% vs stream 25.8% — judgment signal exists under the stock-22 era.")
+            SectionLabel("what it means")
+            Note("Model-skips resolved at 17.2% vs 25.8% for the full stream, so a judgment signal exists under the stock-22 era.")
             Wire(false, "get_conviction_histogram × bank outcomes")
         }
         McCard("MFE / MAE", tool = "get_vr_scoreboard.mfe_hist", sub = "the phases unlock (906 rows live)") {
@@ -669,24 +699,30 @@ fun AnalyticsScreen(repo: MissionRepository) {
             Wire(false, "phases table → get_vr_scoreboard.mfe_hist")
         }
         McCard("CAG economics", "get_cag_stats + audit lane") {
+            SectionLabel("the numbers", divider = false)
             StatRow(
                 Triple("hits", "${cag.int("cache_hits") ?: "—"}", NEUTRAL),
                 Triple("rate", cag.num("hit_rate")?.let { "${fmt(it * 100, 1)}%" } ?: "—", WARN),
             )
-            Note("latency saved ~103s model time · audit agreement 0.95 · memo key incl. checkpoint — verify before slot flip (LRN-8).")
+            SectionLabel("what it means")
+            Note("Cache saves ~103s of model time at 0.95 audit agreement. Verify the memo key (checkpoint-scoped) before any slot flip (LRN-8).")
             Wire(cag != null, "get_cag_stats + audit lane")
         }
         McCard("Pipeline conversion", "run_select counts across views") {
+            SectionLabel("the funnel", divider = false)
             HBarChart(
                 listOf(Bar("candidates", 3172.0), Bar("decisions", 3014.0), Bar("valid-semantic", 1447.0), Bar("gated pass", 0.0, UNK), Bar("takes", 2.0, WARN)),
                 labelWidth = 110,
             )
+            SectionLabel("what it means")
             Note("95% candidate→decision (queue sheds + staleness = the 5%). The 45bps floor is the current waterline.")
             Wire(false, "run_select counts across views")
         }
         McCard("Bank growth + cohort explosion", "get_shadow_bank.total") {
+            SectionLabel("the growth", divider = false)
             HBarChart(listOf(Bar("12:27Z", 983.0), Bar("16:08Z", 1125.0), Bar("01:30Z all-cohorts", 8008.0)), labelWidth = 120)
-            Note("The jump is vr/1 multiplying the stream into books — divide by cohort before reading anything.")
+            SectionLabel("what it means")
+            Note("The jump is vr/1 multiplying one stream into many books, so divide by cohort before reading anything.")
             Wire(false, "get_shadow_bank.total (per-cohort pending)")
         }
         McCard("Label-channel census (the corpus, live)", "corpus builder counts per channel") {
@@ -694,11 +730,13 @@ fun AnalyticsScreen(repo: MissionRepository) {
             KvRow("verdict teacher (P-MKT-AT-SIG)", "no-fill universe · 2,617", NEUTRAL)
             KvRow("wait exemplars (untouched zones)", "2,617", NEUTRAL)
             KvRow("shaped credit (phases)", "906", NEUTRAL)
-            KvRow("banned (context_stale era)", "excluded — invariant 12", WARN)
-            Wire(false, "corpus builder counts per channel — LRN-2/3")
+            KvRow("banned (context_stale era)", "excluded, invariant 12", WARN)
+            Wire(false, "corpus builder counts per channel · LRN-2/3")
         }
         McCard("Session heat", tool = "bank slice hr-block", sub = "where R lives") {
+            SectionLabel("the heat", divider = false)
             HBarChart(listOf(Bar("15-17Z", 34.0, GOOD), Bar("18-23Z", 27.0), Bar("00-11Z", 26.0), Bar("12-14Z", 21.0, WARN)), unit = "%", labelWidth = 72)
+            SectionLabel("what it means")
             Note("WR% by block (window). 12-14Z carries the 0.7 down-weight (unwired); 15-17Z is the harvest window.")
             Wire(false, "bank slice hr-block")
         }
@@ -710,6 +748,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             Wire(false, "get_packet.derivatives per active symbol")
         }
         McCard("Governor scoreboard", tool = "get_governor_refusals GROUP BY check_id", sub = "all 14 checks") {
+            SectionLabel("the checks", divider = false)
             val gov = d["get_governor_refusals"] as? JsonObject
             val byCheck = guardDerive(emptyList<JsonObject>()) { gov.field("by_check").rows().ifEmpty { gov.field("refusals").rows() } }
             if (byCheck.isNotEmpty()) {
@@ -720,22 +759,25 @@ fun AnalyticsScreen(repo: MissionRepository) {
             } else {
                 HBarChart(listOf(Bar("stop_bounds.min_width", 2.0, BAD), Bar("all other checks", 0.0, UNK)), labelWidth = 140)
             }
+            SectionLabel("what it means")
             Note("Every gated take died at one check. When P-REJ-GOV feeds, each bar gains an R-cost.")
             Wire(d["get_governor_refusals"] != null, "get_governor_refusals GROUP BY check_id")
         }
         McCard("Latency anatomy", "get_analytics.latency + get_latency_budgets") {
+            SectionLabel("the latency", divider = false)
             HBarChart(listOf(Bar("p50", 4700.0), Bar("p95", 5008.0, WARN), Bar("cap", 12000.0, UNK)), unit = "ms", labelWidth = 64)
-            Note("Headroom 2.4× at p95 — CAG hits land ~0ms and widen it as cluster loads.")
+            SectionLabel("what it means")
+            Note("Headroom is 2.4× at p95; CAG hits land near 0ms and widen it as the cluster loads.")
             Wire(false, "get_analytics.latency + get_latency_budgets")
         }
         McCard("Attribution preview", tool = "get_attribution_ledger", sub = "the referee's ledger") {
             KvRow("ΔB0 week-over-week", "edge motion", NEUTRAL)
-            KvRow("Δ(M1−B0)", "judgment motion — the only promotable number", NEUTRAL)
+            KvRow("Δ(M1−B0)", "judgment motion, the only promotable number", NEUTRAL)
             KvRow("first read", "when the four-book race opens", NEUTRAL)
-            Wire(false, "get_attribution_ledger — weekly cadence; attribution_required=true")
+            Wire(false, "get_attribution_ledger · weekly cadence; attribution_required=true")
         }
         WhyBox("THE LAW · A-0") {
-            LawBlock("A-0", "Every number carries its exact wire — tool + field — or it renders WIRE PENDING, never a fabricated value.")
+            LawBlock("A-0", "Every number carries its exact wire (tool + field) or it renders WIRE PENDING, never a fabricated value.")
         }
     }
 }
@@ -850,7 +892,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
             val full = (lookup.envelope.data as? JsonObject).field("rows").rows().firstOrNull()
                 .text("decision_id", "")
             if (full.isEmpty()) {
-                detailErr = "prefix $safe not found in decisions — the log row did not resolve to a decision_id"
+                detailErr = "prefix $safe not found in decisions: the log row did not resolve to a decision_id"
             } else {
                 val res = repo.tool("get_trade_row", buildJsonObject { put("decision_id", full) })
                 val data = res.envelope.data as? JsonObject
@@ -883,11 +925,11 @@ fun TradeLogsScreen(repo: MissionRepository) {
         VerdictBanner(
             word = "COUNTERFACTUAL",
             said = if (shadow == null && census == null) {
-                "The shadow bank and decision census did not answer this poll — the counterfactual integrity read is UNKNOWN, never assumed clean."
+                "The shadow bank and decision census did not answer this poll. The counterfactual integrity read is UNKNOWN, never assumed clean."
             } else {
                 "No real trades. ${sbTotal?.let { "%,d".format(it) } ?: "—"} shadow rows, " +
                     "${dupRows?.let { "%,d".format(it) } ?: "—"} of them duplicates. The model was consulted on " +
-                    "${consultedPct?.let { fmt(it * 100, 1) + "%" } ?: "—"} of candidates — the rest are gateway errors, " +
+                    "${consultedPct?.let { fmt(it * 100, 1) + "%" } ?: "—"} of candidates. The rest are gateway errors, " +
                     "timeouts and invalid output. Every number below is inflated " +
                     "${inflation?.let { "~" + fmt(it, 2) + "×" } ?: "—"} until the log is deduplicated."
             },
@@ -899,13 +941,13 @@ fun TradeLogsScreen(repo: MissionRepository) {
             wordTone = if ((dupRows ?: 0) > 0) BAD else UNK,
         )
         Ribbon(
-            "Four lanes — refusal ⇒ rejected · outcome ⇒ closed · fill-no-outcome ⇒ open · take-no-fill ⇒ missed",
+            "Four lanes: refusal ⇒ rejected · outcome ⇒ closed · fill-no-outcome ⇒ open · take-no-fill ⇒ missed",
             "Ledger-derived join (decisions ⟕ intents ⟕ fills ⟕ outcomes ⟕ refusals ⟕ packets) by decision_id. Account is ${accts.joinToString(", ").ifEmpty { "—" }}; the six persona accounts join once the shadow lane writes.",
             INFO,
         )
         McCard("Per-symbol summary (T-2)", "get_trade_logs") {
             if (logs.isEmpty()) {
-                Note("No rows in the window — the ledger join returned empty.", UNK)
+                Note("No rows in the window. The ledger join returned empty.", UNK)
             } else {
                 val bySym = logs.groupBy { it.text("symbol") }
                     .entries.sortedByDescending { it.value.size }
@@ -933,7 +975,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
                         )
                     },
                 )
-                Note("A chip reads BTC-USDT-PERP — n acct · n open · n closed · net ±R. net_r is a per-selection sum over resolved rows, never summed across cohorts (T-2).")
+                Note("A chip reads BTC-USDT-PERP: n acct · n open · n closed · net ±R. net_r is a per-selection sum over resolved rows, never summed across cohorts (T-2).")
             }
         }
         McCard("Lane census (T-2)", "get_trade_logs") {
@@ -962,7 +1004,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
         }
         McCard("Row integrity", tool = "get_row_integrity", sub = "duplication by layer") {
             if (integ == null) {
-                Note("get_row_integrity unavailable — no integrity read this poll.", UNK)
+                Note("get_row_integrity unavailable. No integrity read this poll.", UNK)
             } else {
                 val layers = guardDerive(emptyList<JsonObject>()) { integ.field("layers").rows() }
                 val inflation = integ.num("inflation_factor")
@@ -997,7 +1039,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
         }
         McCard("Decision census", tool = "get_decision_census", sub = "who actually answered (T-3)") {
             if (census == null) {
-                Note("get_decision_census unavailable — no census this poll.", UNK)
+                Note("get_decision_census unavailable. No census this poll.", UNK)
             } else {
                 val byReason = guardDerive(emptyList<JsonObject>()) { census.field("by_reason").rows() }
                 val mac = census.obj("model_actually_consulted")
@@ -1033,12 +1075,13 @@ fun TradeLogsScreen(repo: MissionRepository) {
                         },
                     )
                 }
-                Note(census.text("note", "model_actually_consulted counts take + a real model answer only — a gateway error/timeout is not a model decision (T-3)."), INFO)
+                SectionLabel("what it counts", divider = true)
+                Note(census.text("note", "model_actually_consulted counts take + a real model answer only: a gateway error/timeout is not a model decision (T-3)."), INFO)
             }
         }
         McCard("Conviction", tool = "get_conviction_histogram", sub = "a mode collapse, not a distribution") {
             if (convFresh == null || convFresh.isEmpty()) {
-                Note("get_conviction_histogram returned no fresh buckets this poll — the distribution read is UNKNOWN.", UNK)
+                Note("get_conviction_histogram returned no fresh buckets this poll. The distribution read is UNKNOWN.", UNK)
             } else {
                 // Dense 0..70 conviction axis so index == conviction; the void band (36–62) renders empty
                 // and the take threshold (60) lands at the right x (web pConviction: voidLo/voidHi 36/62).
@@ -1047,6 +1090,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
                     val tone = if (c >= 60) GOOD else if (c == 0) UNK else WARN
                     Bar(if (c % 10 == 0) "$c" else "", f, tone)
                 }
+                SectionLabel("the histogram", divider = false)
                 Histogram(convBars, thresholdIndex = 60, voidRange = 36..62)
                 val freshTotal = guardDerive(0.0) { convFresh.values.sumOf { it.str().toDoubleOrNull() ?: 0.0 } }
                 val at0 = guardDerive(0.0) { convFresh.text("0", "").toDoubleOrNull() ?: 0.0 }
@@ -1060,17 +1104,18 @@ fun TradeLogsScreen(repo: MissionRepository) {
                     Triple("at 22 (default)", "%,d".format(at22.toInt()), WARN),
                     Triple("≥ 60 (takes)", "%,d".format(ge60.toInt()), if (ge60 > 0) GOOD else UNK),
                 )
+                SectionLabel("what it means", divider = true)
                 Ribbon(
                     "This is not a distribution. It is a mode collapse.",
                     "The model emits 0 (never called), 22 (its default), a thin 28–35 tail, and has crossed the take " +
                         "threshold ${ge60.toInt()} time(s) in ${freshTotal.toInt()} fresh inferences. The void from 36 to 62 " +
-                        "is empty — there is nothing to calibrate against.",
+                        "is empty: there is nothing to calibrate against.",
                 )
                 WhyBox("THE LAW · P6 · P7") {
                     LawBlock(
                         "P6 · P7",
-                        "P6 — a model that rarely abstains is a defect; the take-band (10–60%) operationalises the inverse, that " +
-                            "a model that always abstains is equally a defect. P7 — with ${support ?: "—"} support points, calibration " +
+                        "P6: a model that rarely abstains is a defect; the take-band (10–60%) operationalises the inverse, that " +
+                            "a model that always abstains is equally a defect. P7: with ${support ?: "—"} support points, calibration " +
                             "is not merely absent, it is impossible: there is no reliability curve to fit.",
                     )
                 }
@@ -1078,7 +1123,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
         }
         McCard("Fabrication audit", tool = "get_fabrication_audit", sub = "invented vs honestly absent (T-4)") {
             if (fabAudit == null) {
-                Note("get_fabrication_audit unavailable — no audit this poll.", UNK)
+                Note("get_fabrication_audit unavailable. No audit this poll.", UNK)
             } else {
                 val fabs = guardDerive(emptyList<JsonObject>()) { fabAudit.field("fabrications").rows() }
                 val absences = guardDerive(emptyList<JsonObject>()) { fabAudit.field("absences").rows() }
@@ -1086,9 +1131,9 @@ fun TradeLogsScreen(repo: MissionRepository) {
                 VerdictBanner(
                     word = if (fabTotal > 0) "FABRICATED" else "CLEAN",
                     said = if (fabTotal > 0) {
-                        "$fabTotal fabricated field values across ${fabAudit.int("fabrication_kinds") ?: fabs.size} kinds — plus ${absences.size} honest-absence classes, rendered grey, never conflated."
+                        "$fabTotal fabricated field values across ${fabAudit.int("fabrication_kinds") ?: fabs.size} kinds, plus ${absences.size} honest-absence classes, rendered grey, never conflated."
                     } else {
-                        "No fabricated values detected — ${absences.size} honest-absence classes render grey."
+                        "No fabricated values detected. ${absences.size} honest-absence classes render grey."
                     },
                     pills = listOf(
                         "kinds ${fabAudit.int("fabrication_kinds") ?: "—"}" to (if (fabTotal > 0) BAD else GOOD),
@@ -1126,7 +1171,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
         McCard("Two vocabularies for one event", "get_shadow_bank · ledger lanes") {
             val byOut = shadow.obj("by_outcome")
             if (byOut == null) {
-                Note("get_shadow_bank returned no by_outcome funnel — the ledger-vs-bank map is UNKNOWN this poll.", UNK)
+                Note("get_shadow_bank returned no by_outcome funnel. The ledger-vs-bank map is UNKNOWN this poll.", UNK)
             } else {
                 val noFill = byOut.obj("no_fill")
                 val gap = byOut.obj("gap")
@@ -1158,23 +1203,23 @@ fun TradeLogsScreen(repo: MissionRepository) {
                     Ribbon(
                         "⚠ Every loss in the bank is exactly −1.000R.",
                         "Real stops slip. The counterfactual resolver models a stop that always fills at the exact stop " +
-                            "price — a frictionless stop. P-MIRROR (§21.6, sim ⊆ real) fails the moment a real fill exists. " +
+                            "price, a frictionless stop. P-MIRROR (§21.6, sim ⊆ real) fails the moment a real fill exists. " +
                             "The bank's ${sbNetR?.let { "+" + fmt(it, 0) + "R" } ?: "—"} is inflated by duplicates and by a stop that cannot lose more than it plans to.",
                     )
                 }
                 Note(
                     "T-6. The ledger says rejected / missed / open / closed. The bank says win / loss / no_fill / gap / " +
-                        "expired. gap (n=${gapN ?: "—"}) maps to nothing — no ledger meaning, no P&L. That is " +
+                        "expired. gap (n=${gapN ?: "—"}) maps to nothing: no ledger meaning, no P&L. That is " +
                         "${gapPct?.let { fmt(it, 0) + "%" } ?: "—"} of the bank in a category nobody defined.",
                     INFO,
                 )
                 // ── P&L subsection — get_pnl_summary → { groups: [] } is a measured zero, the only fully honest number ──
                 val pnlGroups = guardDerive(emptyList<JsonObject>()) { pnlSummary.field("groups").rows() }
-                Note("P&L — get_pnl_summary", UNK)
+                Note("P&L · get_pnl_summary", UNK)
                 if (pnlSummary == null) {
                     Note("get_pnl_summary unavailable this poll.", UNK)
                 } else if (pnlGroups.isEmpty()) {
-                    Note("get_pnl_summary → { groups: [] } — empty. Zero outcomes, zero P&L. A measured zero, and the only fully honest number on this page.", GOOD)
+                    Note("get_pnl_summary → { groups: [] } is empty. Zero outcomes, zero P&L. A measured zero, and the only fully honest number on this page.", GOOD)
                 } else {
                     MiniTable(
                         listOf("group", "n", "net R", "avg R"),
@@ -1193,7 +1238,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
         }
         McCard("Most recent trades (T-3)", "get_trade_logs") {
             if (logs.isEmpty()) {
-                Note("No rows in the window — the ledger join returned empty.", UNK)
+                Note("No rows in the window. The ledger join returned empty.", UNK)
             } else {
                 MiniTable(
                     listOf("ts", "acct", "symbol", "side", "status", "entry", "exit", "sl", "tp", "pnl_r"),
@@ -1213,7 +1258,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
                         )
                     },
                 )
-                Note("Status is toned by lane — win/open ⇒ GOOD/INFO, loss ⇒ BAD, rejected/missed ⇒ WARN; pnl_r toned by sign. A null entry/exit/pnl_r on a rejected row is a real absence (the gate fired before a fill), never a fabricated zero (T-3).")
+                Note("Status is toned by lane: win/open ⇒ GOOD/INFO, loss ⇒ BAD, rejected/missed ⇒ WARN; pnl_r toned by sign. A null entry/exit/pnl_r on a rejected row is a real absence (the gate fired before a fill), never a fabricated zero (T-3).")
                 Note("Tap a row id to load its full get_trade_row chain in the detail card below.", INFO)
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp),
@@ -1230,9 +1275,9 @@ fun TradeLogsScreen(repo: MissionRepository) {
             val dr = detailRow
             val err = detailErr
             when {
-                detailLoading -> Note("Fetching ${detailId ?: "—"} — expanding the id prefix via decisions, then get_trade_row…", INFO)
-                err != null -> Note("Row detail error: $err — a rejection is surfaced, never swallowed.", BAD)
-                dr == null -> Note("Tap a row id in the trades card above to load the full decision chain — envelope · chain · candidate · market · honest nulls · fabrications.", INFO)
+                detailLoading -> Note("Fetching ${detailId ?: "—"}: expanding the id prefix via decisions, then get_trade_row…", INFO)
+                err != null -> Note("Row detail error: $err. A rejection is surfaced, never swallowed.", BAD)
+                dr == null -> Note("Tap a row id in the trades card above to load the full decision chain: envelope · chain · candidate · market · honest nulls · fabrications.", INFO)
                 else -> {
                     val envl = dr.obj("envelope")
                     val chain = dr.obj("chain")
@@ -1284,7 +1329,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
                             nullsL.take(8).map { a -> row(a.text("field") to UNK, a.text("reason") to UNK) },
                         )
                     }
-                    Note("Absences are honest nulls with named reasons (never zeros); fabrications render as defects — the two are never conflated (T-4).")
+                    Note("Absences are honest nulls with named reasons (never zeros); fabrications render as defects. The two are never conflated (T-4).")
                 }
             }
         }
@@ -1301,7 +1346,7 @@ fun TradeLogsScreen(repo: MissionRepository) {
                         row(g to t, "${rows.size}" to t)
                     },
                 )
-                Note("abstain_reason is the most valuable column (T-3): the dominant gate names the kill — validator_reject:context_stale is the staleness veto, not a low conviction.")
+                Note("abstain_reason is the most valuable column (T-3): the dominant gate names the kill. validator_reject:context_stale is the staleness veto, not a low conviction.")
             }
         }
         WhyBox("THE LAW · T-1..T-7") {
@@ -1514,11 +1559,11 @@ fun DatabankScreen(repo: MissionRepository) {
         VerdictBanner(
             word = "HOLED",
             said = if (tableCensus == null && mcpAudit == null) {
-                "The table census and mcp_audit summary did not answer this poll — the integrity read is UNKNOWN, never assumed clean."
+                "The table census and mcp_audit summary did not answer this poll. The integrity read is UNKNOWN, never assumed clean."
             } else {
                 "${holesCount ?: "—"} table(s) whose writer counted rows the reader cannot see. A primary key that is null " +
                     "on every row. And an alert tool that fails ${alertsTool?.num("fail_rate")?.let { fmt(it * 100, 0) + "%" } ?: "—"} " +
-                    "of the time — while the dashboard rendered green. A counter and a table that disagree is a hole, not a lag."
+                    "of the time, while the dashboard rendered green. A counter and a table that disagree is a hole, not a lag."
             },
             pills = listOf(
                 "HOLES ${holesCount?.let { "$it table(s) · counter ≠ rows" } ?: "—"}" to (if ((holesCount ?: 0) > 0) BAD else UNK),
@@ -1528,8 +1573,8 @@ fun DatabankScreen(repo: MissionRepository) {
             wordTone = if ((holesCount ?: 0) > 0 || (totRate ?: 0.0) > 0.05) BAD else UNK,
         )
         Ribbon(
-            "The bank this hour — lane counts, the outcome funnel, resolver status, capture manifest",
-            "A row is never born resolved — resolved:${resolved ?: "—"} pending:${pending ?: "—"}. The no-nulls law as analytics: every absence tells the current story. ${bank.text("note", "")}",
+            "The bank this hour: lane counts, the outcome funnel, resolver status, capture manifest",
+            "A row is never born resolved: resolved:${resolved ?: "—"} pending:${pending ?: "—"}. The no-nulls law as analytics: every absence tells the current story. ${bank.text("note", "")}",
             INFO,
         )
         McCard("The hole", tool = "get_hole_report · health.records_total vs count(*)", sub = "the counter and the table disagree") {
@@ -1541,7 +1586,7 @@ fun DatabankScreen(repo: MissionRepository) {
             val rowsSrc = if (hrRows.isNotEmpty()) hrRows else censusTables
             if (rowsSrc.isEmpty()) {
                 val status = holeReport.text("status", "")
-                Note(if (status != "—" && status.isNotEmpty()) "get_hole_report: $status — reconciliation falls back to get_table_census, which did not answer either." else "No hole report or table census this poll — the reconciliation is UNKNOWN.", UNK)
+                Note(if (status != "—" && status.isNotEmpty()) "get_hole_report: $status. Reconciliation falls back to get_table_census, which did not answer either." else "No hole report or table census this poll. The reconciliation is UNKNOWN.", UNK)
             } else {
                 MiniTable(
                     listOf("writer", "view", "records_total", "count(*)", "delta", "status"),
@@ -1586,7 +1631,7 @@ fun DatabankScreen(repo: MissionRepository) {
                     val invis = if (c != null && r != null) c - r else null
                     Ribbon(
                         "${invis?.let { kotlin.math.abs(it).toString() } ?: "—"} of ${c ?: "—"} ${holeRow.text("name")} rows are invisible to the view.",
-                        "Every page that reads this writer reports ${r ?: "—"} rows when the writer says ${c ?: "—"} — the analysis runs over " +
+                        "Every page that reads this writer reports ${r ?: "—"} rows when the writer says ${c ?: "—"}. The analysis runs over " +
                             "${if (c != null && r != null && c > 0) fmt(r.toDouble() / c * 100, 0) + "%" else "—"} of the data. A delta this large on a table that has not moved is a hole, not a lag.",
                     )
                 }
@@ -1597,14 +1642,14 @@ fun DatabankScreen(repo: MissionRepository) {
             val hopId = guardDerive("—") { chainHop.text("id") }
             val hopVerified: Boolean? = chainHop?.let { if (it.field("hash_verified") == null) null else it.bool("hash_verified") }
             if (packets == null && chainObj == null) {
-                Note("The context.packets counter and get_decision_chain did not answer this poll — the stranded-packet / broken-hop read is UNKNOWN, never assumed clean.", UNK)
+                Note("The context.packets counter and get_decision_chain did not answer this poll. The stranded-packet / broken-hop read is UNKNOWN, never assumed clean.", UNK)
             } else {
                 Ribbon(
                     "${packets?.let { "%,d".format(it) } ?: "—"} context packets, and not one is reachable.",
-                    "ledger.context.packets has a counter and NO VIEW — nothing on this page can count them independently. " +
+                    "ledger.context.packets has a counter and NO VIEW: nothing on this page can count them independently. " +
                         "get_decision_chain traces the newest decision to { id: ${if (hopId == "—" || hopId == "null") "null" else hopId.take(10)}, " +
                         "hash_verified: ${hopVerified ?: "—"} } with chain_verified: ${chainVerified ?: "—"}. " +
-                        "P4 (everything replayable bit-for-bit) is not unproven — it is dead at the first hop.",
+                        "P4 (everything replayable bit-for-bit) is not unproven, it is dead at the first hop.",
                 )
             }
         }
@@ -1630,12 +1675,13 @@ fun DatabankScreen(repo: MissionRepository) {
             }
             KvRow("schema · nonulls", "${bank.text("schema", "—")} · ${bank.text("nonulls", "—")}", if (bank.text("nonulls").contains("green")) GOOD else INFO)
             KvRow("resolver lag", bank.num("lag_min")?.let { "${fmt(it, 1)} min" } ?: "— (no lag reported)", if (bank.num("lag_min") == null) UNK else NEUTRAL)
-            Note("`nonulls: AT-DTB11 green` is printed beside the real counts — an asserted green is measured only if the class census agrees (D-6). GATED dominating the census is the staleness-veto regime, not a low-signal market.")
+            SectionLabel("what it means", divider = true)
+            Note("`nonulls: AT-DTB11 green` is printed beside the real counts. An asserted green is measured only if the class census agrees (D-6). GATED dominating the census is the staleness-veto regime, not a low-signal market.")
         }
         McCard("Capture manifest", tool = "get_databank.capture_top", sub = "top reasons (D-6)") {
             val capTop = bank.field("capture_top").list()
             if (capTop.isEmpty()) {
-                Note("Capture manifest empty — no captured absences this hour.", UNK)
+                Note("Capture manifest empty. No captured absences this hour.", UNK)
             } else {
                 // capture_top [reason, n] pairs as a horizontal bar chart ranked by n (web: hBars).
                 val capBars = capTop.take(8).mapNotNull { e ->
@@ -1645,13 +1691,13 @@ fun DatabankScreen(repo: MissionRepository) {
                     Bar(name, n, WARN)
                 }
                 HBarChart(capBars, labelWidth = 148)
-                Note("Each captured absence is a real reason (timeout / model / error / validator_reject) with its n — the manifest is the no-nulls law made countable.")
+                Note("Each captured absence is a real reason (timeout / model / error / validator_reject) with its n. The manifest is the no-nulls law made countable.")
             }
         }
         McCard("Shadow bank", tool = "get_shadow_bank", sub = "outcome funnel (D-1)") {
             val byOutcome = shadow.obj("by_outcome")
             if (byOutcome == null) {
-                Note("Shadow bank unavailable — the deployment has no local bank.", UNK)
+                Note("Shadow bank unavailable. The deployment has no local bank.", UNK)
             } else {
                 // Outcome funnel (win / loss / no_fill / gated / expired) as a horizontal bar chart
                 // ranked by n — each bar's count is the live by_outcome.n (web: outcome funnel hBars).
@@ -1678,18 +1724,18 @@ fun DatabankScreen(repo: MissionRepository) {
                         row(k to outTone, "${o.int("n") ?: "—"}" to NEUTRAL, (avg?.let { fmt(it, 3) } ?: "null") to (if (avg == null) UNK else outTone))
                     },
                 )
-                Note("`gap` / `no_fill` / `pending` carry avg_pnl_r null — a measured absence shown honestly, not zero. Loss avg near −1.000 is the frictionless-stop tell (D-1).")
+                Note("`gap` / `no_fill` / `pending` carry avg_pnl_r null: a measured absence shown honestly, not zero. Loss avg near −1.000 is the frictionless-stop tell (D-1).")
                 KvRow(
                     "net_pnl_r (integrity)",
                     netR?.let { fmt(it, 2) } ?: "—",
                     pnlTone(netR),
                 )
-                Note("net_pnl_r is per-selection over distinct decisions — never a cross-cohort P&L sum (${shadow.text("note", "triad-cf/1")}). ${total ?: "—"} rows, ${byOutcome.entries.size} outcome classes.")
+                Note("net_pnl_r is per-selection over distinct decisions, never a cross-cohort P&L sum (${shadow.text("note", "triad-cf/1")}). ${total ?: "—"} rows, ${byOutcome.entries.size} outcome classes.")
             }
         }
         McCard("Bank rows", tool = "get_bank_rows", sub = "the dup-indexed ledger (D-4)") {
             if (bankRows == null) {
-                Note("get_bank_rows unavailable — the paged bank endpoint did not answer.", UNK)
+                Note("get_bank_rows unavailable. The paged bank endpoint did not answer.", UNK)
             } else {
                 val rws = guardDerive(emptyList<JsonObject>()) { bankRows.field("rows").rows() }
                 val bankTotal = bankRows.int("total")
@@ -1723,7 +1769,7 @@ fun DatabankScreen(repo: MissionRepository) {
                     )
                     if (rws.size > 8) Note("Showing 8 of ${rws.size} page rows.", UNK)
                 }
-                Note(bankRows.text("note", "every duplicate row names which row it duplicates (dup_of) — dedup before you count."), INFO)
+                Note(bankRows.text("note", "every duplicate row names which row it duplicates (dup_of): dedup before you count."), INFO)
             }
         }
         McCard("The bank", tool = "get_databank · get_shadow_bank", sub = "three vocabularies & asserted greens (D-6)") {
@@ -1741,7 +1787,7 @@ fun DatabankScreen(repo: MissionRepository) {
             val missingFromBank = ledgerVocab.filter { l -> bankNames.none { it.startsWith(l) } }
             val classVocab = listOf("REAL", "GATED", "MISSED")
             if (bank == null && capPairs.isEmpty()) {
-                Note("get_databank did not answer — the bank vocabulary is UNKNOWN this poll.", UNK)
+                Note("get_databank did not answer. The bank vocabulary is UNKNOWN this poll.", UNK)
             } else {
                 Note("THREE VOCABULARIES FOR ONE EVENT", INFO)
                 val vrows = (0 until maxOf(ledgerVocab.size, capPairs.size, classVocab.size)).map { i ->
@@ -1756,7 +1802,7 @@ fun DatabankScreen(repo: MissionRepository) {
                     )
                 }
                 MiniTable(listOf("ledger · abstain", "bank · capture_top", "trade log · class"), vrows)
-                Note("`error` — the single largest failure mode in the ledger — ${if ("error" in missingFromBank) "does not appear in the bank's capture_top at all" else "is present in both"}. get_databank admits it: capture_top is proxied by gate_reason; production joins TriadDTBNK's manifest. A proxy for a manifest that does not exist.", WARN)
+                Note("`error`, the single largest failure mode in the ledger, ${if ("error" in missingFromBank) "does not appear in the bank's capture_top at all" else "is present in both"}. get_databank admits it: capture_top is proxied by gate_reason; production joins TriadDTBNK's manifest. A proxy for a manifest that does not exist.", WARN)
             }
             // D-6 · an asserted green is not a measured green — print the nonulls claim beside the null counts.
             KvRow("get_databank.nonulls (asserted)", bank.text("nonulls", "—"), if (bank.text("nonulls").contains("green")) WARN else UNK)
@@ -1782,7 +1828,7 @@ fun DatabankScreen(repo: MissionRepository) {
                     nullTally.map { (f, n, dn) -> row(f to NEUTRAL, "${n ?: "—"}" to BAD, "/ ${dn ?: "—"}" to UNK) },
                 )
             }
-            Note("AT-DTB11 is green on a bank full of nulls — it is a claim, not a test. This panel prints the claim next to the counts and lets them argue (D-6). And the ingest contradiction: get_databank.ingest[0].age_s null while get_bridge_lag returns live ages — two tools, one registry, two answers.")
+            Note("AT-DTB11 is green on a bank full of nulls: it is a claim, not a test. This panel prints the claim next to the counts and lets them argue (D-6). And the ingest contradiction: get_databank.ingest[0].age_s null while get_bridge_lag returns live ages, two tools, one registry, two answers.")
         }
         McCard("Table census", tool = "get_table_census", sub = "counter vs table (D-1)") {
             if (tableCensus == null) {
@@ -1844,7 +1890,7 @@ fun DatabankScreen(repo: MissionRepository) {
                             }
                         }.sortedByDescending { it.value }.take(8)
                     }
-                    if (worst.isEmpty()) Note("No null-bearing columns in the census — every counted column is filled.", GOOD)
+                    if (worst.isEmpty()) Note("No null-bearing columns in the census. Every counted column is filled.", GOOD)
                     else HBarChart(worst, unit = "%", labelWidth = 150)
                     MiniTable(
                         listOf("table", "cols", "null cols", "non-OK"),
@@ -1866,9 +1912,10 @@ fun DatabankScreen(repo: MissionRepository) {
         }
         McCard("mcp_audit", tool = "get_mcp_audit_summary · D-5", sub = "the observability of the observability") {
             if (mcpAudit == null) {
-                Note("get_mcp_audit_summary unavailable — the tool-reliability read is UNKNOWN this poll (never rendered as a green state).", UNK)
+                Note("get_mcp_audit_summary unavailable. The tool-reliability read is UNKNOWN this poll (never rendered as a green state).", UNK)
             } else {
                 val alertsRate = alertsTool.num("fail_rate")
+                SectionLabel("the numbers", divider = false)
                 StatRow(
                     Triple("calls", totCalls?.let { "%,d".format(it) } ?: "—", NEUTRAL),
                     Triple("failures", totFails?.let { "%,d".format(it) } ?: "—", if ((totFails ?: 0) > 0) BAD else GOOD),
@@ -1876,10 +1923,11 @@ fun DatabankScreen(repo: MissionRepository) {
                     Triple("get_alerts fail", alertsRate?.let { "${fmt(it * 100, 1)}%" } ?: "—", if ((alertsRate ?: 0.0) >= 0.3) BAD else WARN),
                     Triple("100% failing", "${fullyFailing ?: "—"}", if ((fullyFailing ?: 0) > 0) BAD else GOOD),
                 )
+                SectionLabel("what it means", divider = true)
                 Ribbon(
-                    "get_alerts — the tool whose job is to tell you something is wrong — fails ${alertsRate?.let { fmt(it * 100, 0) + "%" } ?: "—"} of the time.",
+                    "get_alerts, the tool whose job is to tell you something is wrong, fails ${alertsRate?.let { fmt(it * 100, 0) + "%" } ?: "—"} of the time.",
                     "${alertsTool.int("failures")?.let { "%,d".format(it) } ?: "—"} of ${alertsTool.int("calls")?.let { "%,d".format(it) } ?: "—"} calls. And the dashboard " +
-                        "rendered a quiet, green panel anyway — because a failed read and a clean read look identical to a UI that does not check. " +
+                        "rendered a quiet, green panel anyway, because a failed read and a clean read look identical to a UI that does not check. " +
                         "This is the false-green machine, caught in its own audit log.",
                 )
                 val worst = guardDerive(emptyList<JsonObject>()) { auditByTool.sortedByDescending { it.num("fail_rate") ?: 0.0 }.take(12) }
@@ -1903,7 +1951,7 @@ fun DatabankScreen(repo: MissionRepository) {
                 WhyBox("THE LAW · D-5") {
                     LawBlock(
                         "D-5",
-                        mcpAudit.text("rule", "the audit log audits the auditor — a tool whose fail_rate exceeds 0.05 may not have its output rendered as a green state anywhere in Mission Control. The server enforces it, not every GUI one at a time, from memory."),
+                        mcpAudit.text("rule", "the audit log audits the auditor: a tool whose fail_rate exceeds 0.05 may not have its output rendered as a green state anywhere in Mission Control. The server enforces it, not every GUI one at a time, from memory."),
                     )
                 }
             }
@@ -1915,10 +1963,10 @@ fun DatabankScreen(repo: MissionRepository) {
             StatRow(
                 Triple("validator.passed=true on non-answers", poisoned?.let { "%,d".format(it) } ?: "—", if ((poisoned ?: 0) > 0) BAD else if (poisoned == null) UNK else GOOD),
             )
-            if (fabRow == null && fabErr != null) Note("poisoned count did not answer: $fabErr — rendered UNKNOWN, never a fabricated figure.", UNK)
+            if (fabRow == null && fabErr != null) Note("poisoned count did not answer: $fabErr. Rendered UNKNOWN, never a fabricated figure.", UNK)
             val pr = permRow
             when {
-                permErr != null -> Note("run_select over decisions did not answer: $permErr — the permanent-record counts render UNKNOWN, never a fabricated figure.", UNK)
+                permErr != null -> Note("run_select over decisions did not answer: $permErr. The permanent-record counts render UNKNOWN, never a fabricated figure.", UNK)
                 pr == null -> Note("Reading the decisions ledger for the append-only permanent record…", INFO)
                 else -> {
                     val n = pr.int("n"); val zh = pr.int("zero_hash"); val dh = pr.int("distinct_hash")
@@ -1928,18 +1976,18 @@ fun DatabankScreen(repo: MissionRepository) {
                         Triple("distinct input_hash", dh?.let { "%,d".format(it) } ?: "—", NEUTRAL),
                         Triple("decisions", n?.let { "%,d".format(it) } ?: "—", NEUTRAL),
                     )
-                    Note("Those rows are permanent — the ledger is append-only. The zero-hash bucket collapses ${zh?.let { "%,d".format(it) } ?: "—"} decisions into a single key; the ${dh?.let { "%,d".format(it) } ?: "—"} real hashes are one row, one hash.")
+                    Note("Those rows are permanent: the ledger is append-only. The zero-hash bucket collapses ${zh?.let { "%,d".format(it) } ?: "—"} decisions into a single key; the ${dh?.let { "%,d".format(it) } ?: "—"} real hashes are one row, one hash.")
                 }
             }
             Ribbon(
                 "D-4 · an append-only ledger makes fabrication permanent.",
-                "You can stop making a fabrication. You cannot unmake one. Any dataset built from this ledger — any calibration " +
-                    "fitted over it, any fine-tune that samples it — inherits the lie. A 'we fixed it' panel that hides the historical count is itself a fabrication.",
+                "You can stop making a fabrication. You cannot unmake one. Any dataset built from this ledger (any calibration " +
+                    "fitted over it, any fine-tune that samples it) inherits the lie. A 'we fixed it' panel that hides the historical count is itself a fabrication.",
             )
             WhyBox("THE LAW · the zero-hash bucket") {
                 LawBlock(
                     "the zero-hash bucket",
-                    "The real hashes are perfectly unique — one row, one hash. The entire collision problem IS the zero bucket, and it too is permanent.",
+                    "The real hashes are perfectly unique: one row, one hash. The entire collision problem IS the zero bucket, and it too is permanent.",
                 )
             }
             // THE GATEWAY FAILS IN BATCHES, NOT REQUESTS — error rows sharing a ts_response to the µs, derived
@@ -1958,7 +2006,7 @@ fun DatabankScreen(repo: MissionRepository) {
                     listOf("ts_response (µs)", "errors", "symbols"),
                     batches.map { (ts, n, syms) -> row(ts to NEUTRAL, "$n rows" to BAD, syms to NEUTRAL) },
                 )
-                Note("Error rows share an identical ts_response to the microsecond, across different symbols — the gateway does not fail per-request, it fails per-batch. ts_request == ts_response there, so latency is unmeasurable by construction on those rows.")
+                Note("Error rows share an identical ts_response to the microsecond, across different symbols: the gateway does not fail per-request, it fails per-batch. ts_request == ts_response there, so latency is unmeasurable by construction on those rows.")
             }
         }
         McCard("Book definitions & independence", "get_book_definitions") {
@@ -1980,13 +2028,13 @@ fun DatabankScreen(repo: MissionRepository) {
                     },
                 )
                 KvRow("promotion satisfiable", "${bookDefs.bool("promotion_satisfiable")}", if (bookDefs.bool("promotion_satisfiable")) GOOD else BAD)
-                Note(bookDefs.text("note", "B1 shipped as a threshold on M1's own conviction — the §14.5 uplift-over-B1 gate is unsatisfiable."), WARN)
+                Note(bookDefs.text("note", "B1 shipped as a threshold on M1's own conviction: the §14.5 uplift-over-B1 gate is unsatisfiable."), WARN)
             }
         }
         McCard("Ingest heartbeats (D-2)", "get_databank.ingest") {
             val ingest = bank.field("ingest").rows()
             if (ingest.isEmpty()) {
-                Note("No ingest registry rows — a writer's silence is itself a finding.", WARN)
+                Note("No ingest registry rows. A writer's silence is itself a finding.", WARN)
             } else {
                 MiniTable(
                     listOf("stream", "owner", "age_s"),
@@ -1999,7 +2047,7 @@ fun DatabankScreen(repo: MissionRepository) {
                         )
                     },
                 )
-                Note("A null age_s is a writer whose last heartbeat is unknown — rendered honestly, since a writer's silence is itself a finding (D-2).")
+                Note("A null age_s is a writer whose last heartbeat is unknown, rendered honestly, since a writer's silence is itself a finding (D-2).")
             }
             // get_bridge_lag — a second registry answering the same question. The contradiction is the finding.
             val blLanes = guardDerive(emptyList<JsonObject>()) { bridgeLag.field("lanes").rows() }
@@ -2007,7 +2055,7 @@ fun DatabankScreen(repo: MissionRepository) {
                 val ages = blLanes.mapNotNull { it.num("age_s") }
                 val ageRange = if (ages.isEmpty()) "—" else "${fmt(ages.min(), 0)}–${fmt(ages.max(), 0)}s"
                 KvRow("get_bridge_lag", "${blLanes.size} lanes · ages $ageRange", if (ages.isEmpty()) UNK else NEUTRAL)
-                Note("get_databank.ingest and get_bridge_lag are two tools over one registry — when the ingest age_s reads null while the bridge reports live ages, that disagreement is the finding, not a lag.", INFO)
+                Note("get_databank.ingest and get_bridge_lag are two tools over one registry: when the ingest age_s reads null while the bridge reports live ages, that disagreement is the finding, not a lag.", INFO)
             } else if (bridgeLag != null) {
                 KvRow("get_bridge_lag", "no lanes reported", UNK)
             }
@@ -2016,7 +2064,7 @@ fun DatabankScreen(repo: MissionRepository) {
             val lrows = logRows
             when {
                 logErr != null && lrows == null ->
-                    Note("run_select over decisions did not answer: $logErr — the ledger log is not served this poll, rendered UNKNOWN, never padded with synthetic rows.", UNK)
+                    Note("run_select over decisions did not answer: $logErr. The ledger log is not served this poll, rendered UNKNOWN, never padded with synthetic rows.", UNK)
                 lrows == null ->
                     Note("Reading the decisions ledger (ORDER BY ts_response DESC LIMIT 2,500)…", INFO)
                 lrows.isEmpty() ->
@@ -2058,7 +2106,7 @@ fun DatabankScreen(repo: MissionRepository) {
                             )
                         },
                     )
-                    if (shown.size > 30) Note("Showing the newest 30 of ${"%,d".format(shown.size)} filtered rows — the full 2,500 are held in memory.", UNK)
+                    if (shown.size > 30) Note("Showing the newest 30 of ${"%,d".format(shown.size)} filtered rows. The full 2,500 are held in memory.", UNK)
                     Note("Every column of the decisions envelope that matters, on every row: the full id, the abstain reason, the latency, whether input_hash is the zero bucket, and what the validator claimed. Rows sharing a ts are one batch failure. It does not pad itself with synthetic rows to look impressive.")
                 }
             }
@@ -2078,7 +2126,7 @@ private data class QView(val name: String, val cols: List<QCol>)
 
 private val QC_SCHEMA = listOf(
     QView("aux_events", listOf(
-        QCol("event_id", "varchar", true, "table is empty — Kronos / news feeds never wrote"),
+        QCol("event_id", "varchar", true, "table is empty: Kronos / news feeds never wrote"),
         QCol("symbol", "varchar"), QCol("schema", "varchar"), QCol("ts", "bigint"),
         QCol("candidate_id", "varchar"), QCol("body", "json"),
     )),
@@ -2091,7 +2139,7 @@ private val QC_SCHEMA = listOf(
         QCol("decision_id", "varchar", true),
         QCol("candidate_id", "varchar", false, "8 candidates adjudicated twice"),
         QCol("symbol", "varchar"), QCol("verdict", "varchar"),
-        QCol("slot", "varchar", false, "1 distinct — slot B has never run"),
+        QCol("slot", "varchar", false, "1 distinct: slot B has never run"),
         QCol("conviction", "integer", false, "12 distinct values in 3,664 rows"),
         QCol("is_cache", "boolean"),
         QCol("ts_request", "bigint", false, "== ts_response on 1,825 rows"),
@@ -2100,7 +2148,7 @@ private val QC_SCHEMA = listOf(
         QCol("body", "json"),
     )),
     QView("fills", listOf(
-        QCol("fill_id", "varchar", true, "table is empty — 0 fills, ever"),
+        QCol("fill_id", "varchar", true, "table is empty: 0 fills, ever"),
         QCol("order_id", "varchar"), QCol("decision_id", "varchar"), QCol("symbol", "varchar"),
         QCol("price", "double"), QCol("qty", "double"), QCol("body", "json"),
     )),
@@ -2110,7 +2158,7 @@ private val QC_SCHEMA = listOf(
         QCol("status", "varchar"), QCol("body", "json"),
     )),
     QView("intents", listOf(
-        QCol("intent_id", "varchar", true, "table is empty — the governor never passed an intent"),
+        QCol("intent_id", "varchar", true, "table is empty: the governor never passed an intent"),
         QCol("decision_id", "varchar"), QCol("candidate_id", "varchar"), QCol("symbol", "varchar"),
         QCol("qty_base", "double"), QCol("notional_quote", "double"), QCol("limits_hash", "varchar"),
         QCol("body", "json"),
@@ -2118,7 +2166,7 @@ private val QC_SCHEMA = listOf(
     QView("mcp_audit", listOf(
         QCol("ts", "bigint"), QCol("tool", "varchar"), QCol("family", "varchar"), QCol("caller", "varchar"),
         QCol("args_hash", "varchar"), QCol("latency_ms", "double"), QCol("bytes", "bigint"),
-        QCol("ok", "boolean", false, "the false-green detector — 22% of reads failed"),
+        QCol("ok", "boolean", false, "the false-green detector: 22% of reads failed"),
     )),
     QView("orders", listOf(
         QCol("order_id", "varchar", true, "table is empty"),
@@ -2126,12 +2174,12 @@ private val QC_SCHEMA = listOf(
         QCol("side", "varchar"), QCol("body", "json"),
     )),
     QView("outcomes", listOf(
-        QCol("outcome_id", "varchar", true, "table is empty — 0 labelled outcomes"),
+        QCol("outcome_id", "varchar", true, "table is empty: 0 labelled outcomes"),
         QCol("decision_id", "varchar"), QCol("symbol", "varchar"), QCol("label", "varchar"),
         QCol("pnl_r", "double"), QCol("body", "json"),
     )),
     QView("refusals", listOf(
-        QCol("refusal_id", "varchar", true, "NULL on 18 of 18 — any JOIN on it returns ∅"),
+        QCol("refusal_id", "varchar", true, "NULL on 18 of 18: any JOIN on it returns ∅"),
         QCol("decision_id", "varchar"), QCol("symbol", "varchar"),
         QCol("check_id", "varchar", false, "null on 16 of 18 (89%)"),
         QCol("ts", "bigint"), QCol("body", "json"),
@@ -2154,17 +2202,17 @@ private fun qcLint(sqlRaw: String): List<QLint> {
     val out = mutableListOf<QLint>()
     fun add(id: String, name: String, sev: Tone, ev: String) { if (id !in waived) out.add(QLint(id, name, sev, ev)) }
     if (Regex("\\b(insert|update|delete|drop|create|alter|truncate|attach|copy|pragma|call)\\b").containsMatchIn(body))
-        add("L-0", "WRITE", BAD, "run_select is SELECT-only, enforced server-side — this query would be rejected, not sent.")
+        add("L-0", "WRITE", BAD, "run_select is SELECT-only, enforced server-side: this query would be rejected, not sent.")
     if (body.contains("count(*)") && body.contains("candidates") && !body.contains("distinct"))
-        add("L-1", "DUP_AGG", BAD, "candidates holds 164 duplicate rows (BTC 86 · ETH 78) — an aggregate without DISTINCT counts them.")
+        add("L-1", "DUP_AGG", BAD, "candidates holds 164 duplicate rows (BTC 86 · ETH 78): an aggregate without DISTINCT counts them.")
     if (body.contains("input_hash") && !body.contains("repeat('0'") && !body.contains("0000000000"))
-        add("L-5", "ZERO_HASH", BAD, "1,825 decisions carry input_hash = 0×64 — filter the zero bucket or you group half the ledger into one key.")
+        add("L-5", "ZERO_HASH", BAD, "1,825 decisions carry input_hash = 0×64: filter the zero bucket or you group half the ledger into one key.")
     if (!Regex("\\blimit\\b").containsMatchIn(body))
-        add("L-9", "SILENT_LIMIT", WARN, "the server appends LIMIT 10,000 without warning — mcp_audit holds 11,628 rows, you would get 10,000 and a complete-looking row_count.")
+        add("L-9", "SILENT_LIMIT", WARN, "the server appends LIMIT 10,000 without warning: mcp_audit holds 11,628 rows, you would get 10,000 and a complete-looking row_count.")
     if (Regex("\\b(packets|context_packets|shadow_sync|shadow\\.trades|live\\.trades)\\b").containsMatchIn(body))
-        add("L-10", "NO_VIEW", BAD, "this table has a health counter and NO VIEW — it is not in the allowlist; the server will reject this query.")
+        add("L-10", "NO_VIEW", BAD, "this table has a health counter and NO VIEW: it is not in the allowlist; the server will reject this query.")
     if (body.contains("conviction"))
-        add("L-11", "CONVICTION_DIST", WARN, "conviction has 12 distinct values across 3,664 rows — a mode collapse, not a distribution; P7 calibration over it is impossible.")
+        add("L-11", "CONVICTION_DIST", WARN, "conviction has 12 distinct values across 3,664 rows: a mode collapse, not a distribution; P7 calibration over it is impossible.")
     return out
 }
 
@@ -2207,10 +2255,10 @@ fun QueryConsoleScreen(repo: MissionRepository) {
     ) {
         Ribbon(
             "A query console that just runs SQL is a fabrication engine",
-            "run_select is SELECT-only over the allowlisted DuckDB view catalog (§3.2 guards). The server rewrites your SQL and may append LIMIT — the result carries the SQL that actually ran.",
+            "run_select is SELECT-only over the allowlisted DuckDB view catalog (§3.2 guards). The server rewrites your SQL and may append LIMIT, so the result carries the SQL that actually ran.",
             WARN,
         )
-        McCard("Editor (Q-1)", "run_select — live") {
+        McCard("Editor (Q-1)", "run_select · live") {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -2275,9 +2323,9 @@ fun QueryConsoleScreen(repo: MissionRepository) {
             }
             // ── the inline lint gutter — lint-as-you-type beside the editor (Q-1), client-side triad-lint/1 ──
             if (firedLint.isEmpty()) {
-                Note("lint · 0 fired — ✓ clean under triad-lint/1", GOOD)
+                Note("lint · 0 fired · ✓ clean under triad-lint/1", GOOD)
             } else {
-                Note("lint · ${firedLint.size} fired — the gutter names each defect before you run:", if (firedLint.any { it.sev == BAD }) BAD else WARN)
+                Note("lint · ${firedLint.size} fired: the gutter names each defect before you run:", if (firedLint.any { it.sev == BAD }) BAD else WARN)
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -2286,15 +2334,16 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                 }
                 firedLint.forEach { r -> Note("${r.id} · ${r.ev}", r.sev) }
             }
-            Note("Q-1 · lint before you run. Every rule is a defect measured in this ledger this hour — a rule you legitimately need to break carries a written waiver (-- lint-ok: L-N — reason). A linter with no waiver mechanism gets disabled within a week.", INFO)
+            Note("Q-1 · lint before you run. Every rule is a defect measured in this ledger this hour. A rule you legitimately need to break carries a written waiver (-- lint-ok: L-N, reason). A linter with no waiver mechanism gets disabled within a week.", INFO)
         }
         McCard("Lint + plan (Q-1 / Q-4)", "get_query_lint · explain_query") {
             val lint = lintData
             val plan = explainData
             if (lint == null && plan == null) {
-                Note("Run a query — the server lints it (triad-lint rules) and explains the rewrite/truncation plan here, before you read the result. Both tools take the SQL as an argument, so they fire per run, never on the poll.", INFO)
+                Note("Run a query and the server lints it (triad-lint rules) and explains the rewrite/truncation plan here, before you read the result. Both tools take the SQL as an argument, so they fire per run, never on the poll.", INFO)
             } else {
                 if (lint != null) {
+                    SectionLabel("the lint", divider = false)
                     val rules = guardDerive(emptyList<JsonObject>()) { lint.field("rules").rows() }
                     KvRow(
                         "max severity",
@@ -2302,7 +2351,7 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                         sevTone(lint.text("max_severity", "clean")),
                     )
                     if (rules.isEmpty()) {
-                        Note("No lint rules fired — clean under ${lint.text("ruleset_version", "—")}.", GOOD)
+                        Note("No lint rules fired. Clean under ${lint.text("ruleset_version", "—")}.", GOOD)
                     } else {
                         MiniTable(
                             listOf("rule", "name", "sev", "fix"),
@@ -2318,6 +2367,7 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                     }
                 }
                 if (plan != null) {
+                    SectionLabel("the plan", divider = true)
                     KvRow(
                         "will truncate",
                         "${plan.bool("will_truncate")} · est ${plan.int("est_rows") ?: "—"} rows vs limit ${plan.int("effective_limit") ?: "—"}",
@@ -2327,31 +2377,31 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                     if (rewrites.isNotEmpty()) Note("Rewrites: " + rewrites.joinToString("; ") { it.str() }, INFO)
                     Note("SQL that will run: ${plan.text("sql_out", "—")}")
                 }
-                Note("Q-4: a silent truncation is a lie — will_truncate is computed BEFORE the query runs; the result card below shows the SQL that actually ran (Q-3).", INFO)
+                Note("Q-4: a silent truncation is a lie. will_truncate is computed BEFORE the query runs; the result card below shows the SQL that actually ran (Q-3).", INFO)
             }
         }
         McCard("Result + provenance (Q-3 / Q-4)", "run_select") {
             when {
-                status?.second == BAD -> Note("Query error: ${status?.first} — the guard/binder rejected it. A rejection is surfaced, never swallowed.", BAD)
+                status?.second == BAD -> Note("Query error: ${status?.first}. The guard/binder rejected it. A rejection is surfaced, never swallowed.", BAD)
                 columns.isEmpty() -> Note("Run a query to see columns + rows. The result shows the row count the server returned.", INFO)
                 else -> {
                     KvRow("returned", status?.first ?: "—", GOOD)
                     MiniTable(columns, resultRows.take(25))
                     if (resultRows.size > 25) Note("Showing first 25 of ${resultRows.size} returned rows.", UNK)
-                    Note("AP/1 — a cohort with n < 30 is an anecdote, not evidence: read any COUNT(*) column against the 30-row floor before you draw a conclusion.", WARN)
+                    Note("AP/1: a cohort with n < 30 is an anecdote, not evidence: read any COUNT(*) column against the 30-row floor before you draw a conclusion.", WARN)
                 }
             }
         }
         McCard("Query catalog", tool = "get_query_catalog", sub = "the saved units of knowledge (Q-6)") {
             if (queryCat == null) {
-                Note("get_query_catalog unavailable — the canned pills fall back to the three built-ins.", UNK)
+                Note("get_query_catalog unavailable. The canned pills fall back to the three built-ins.", UNK)
             } else if (catQueries.isEmpty()) {
-                Note("Catalog empty — no saved queries server-side.", UNK)
+                Note("Catalog empty. No saved queries server-side.", UNK)
             } else {
                 KvRow("queries", "${queryCat.int("count") ?: catQueries.size}", NEUTRAL)
                 Ribbon(
                     "Q-6 · the saved query is the unit of knowledge.",
-                    "Every number on every page of Mission Control came from one of these — tap to load, lint, and re-run it against the live ledger. A finding you cannot re-run is folklore.",
+                    "Every number on every page of Mission Control came from one of these: tap to load, lint, and re-run it against the live ledger. A finding you cannot re-run is folklore.",
                     INFO,
                 )
                 catQueries.take(13).forEachIndexed { i, q ->
@@ -2377,7 +2427,7 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                         }
                     }
                 }
-                Note(queryCat.text("note", "the page chips name which pages depend on the query — the provenance edge. When a finding changes, every page that cites it is stale and should say so (Q-6)."), INFO)
+                Note(queryCat.text("note", "the page chips name which pages depend on the query, the provenance edge. When a finding changes, every page that cites it is stale and should say so (Q-6)."), INFO)
             }
         }
         McCard("Schema", tool = "get_view_catalog · the allowlist", sub = "${QC_SCHEMA.size} views, $QC_TOTAL_COLS columns (Q-7)") {
@@ -2416,13 +2466,13 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                         }
                     }
                     view.cols.filter { it.defect.isNotEmpty() }.forEach { c ->
-                        Note("${c.name} (${c.type}) — ${c.defect}", WARN)
+                        Note("${c.name} (${c.type}): ${c.defect}", WARN)
                     }
                 }
             }
             Note(
-                if (catViews.isEmpty()) "get_view_catalog has not answered — row counts read '—' until it does; the column schema is the static allowlist. A table not in this list is rejected by run_select (Q-7)."
-                else viewCat.text("note", "the machine-readable view catalog — a table not here is rejected by run_select (Q-7)."),
+                if (catViews.isEmpty()) "get_view_catalog has not answered, so row counts read '—' until it does; the column schema is the static allowlist. A table not in this list is rejected by run_select (Q-7)."
+                else viewCat.text("note", "the machine-readable view catalog: a table not here is rejected by run_select (Q-7)."),
                 UNK,
             )
         }
@@ -2432,8 +2482,8 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                 Triple("views allowlisted", "${if (catViews.isEmpty()) QC_SCHEMA.size else catViews.size}", NEUTRAL),
                 Triple("injected limit", "10,000", BAD),
             )
-            Note("SELECT / WITH only · server-enforced · the LIMIT is silent — appended to every query without one.")
-            Note("TESTED LIVE — SELECT * FROM packets LIMIT 1", UNK)
+            Note("SELECT / WITH only · server-enforced · the LIMIT is silent, appended to every query without one.")
+            Note("TESTED LIVE · SELECT * FROM packets LIMIT 1", UNK)
             Text(
                 "{ \"ok\": false, \"error\": \"rejected\",\n  \"reason\": \"table 'packets' is not in the\n   allowlisted view catalog (aux_events,\n   candidates, decisions, fills, health,\n   intents, mcp_audit, orders, outcomes,\n   refusals)\" }",
                 color = androidx.compose.ui.graphics.Color(0xFFB4231F),
@@ -2442,11 +2492,11 @@ fun QueryConsoleScreen(repo: MissionRepository) {
                 lineHeight = 15.sp,
                 modifier = Modifier.padding(top = 6.dp),
             )
-            Note("The guards are real and they name themselves. But note what it implies: ledger.context.packets — 45,692 rows, with a health counter — is not in the allowlist. You cannot reach it from here. P4 replay is dead at the first hop and the console cannot even go look.")
+            Note("The guards are real and they name themselves. But note what it implies: ledger.context.packets (45,692 rows, with a health counter) is not in the allowlist. You cannot reach it from here. P4 replay is dead at the first hop and the console cannot even go look.")
             WhyBox("THE LAW · Q-2") {
                 LawBlock(
                     "Q-2",
-                    "Read-only, and say so out loud. The console never attempts a write it knows will be rejected — L-0 blocks it client-side and tells you why. A UI that fires a doomed request and renders the error is a UI that has not read its own docs.",
+                    "Read-only, and say so out loud. The console never attempts a write it knows will be rejected: L-0 blocks it client-side and tells you why. A UI that fires a doomed request and renders the error is a UI that has not read its own docs.",
                 )
             }
         }
