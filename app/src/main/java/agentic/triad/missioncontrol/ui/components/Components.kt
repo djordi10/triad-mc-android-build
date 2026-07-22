@@ -30,7 +30,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -464,6 +468,65 @@ fun PendBox(tool: String, spec: String) {
         }
     }
 }
+
+/**
+ * A within-card section heading — a hairline rule then a small mono uppercase eyebrow — so a card that
+ * holds several distinct parts (the numbers · the meaning · what's pending) reads as labelled sections
+ * instead of one undifferentiated blur. Promoted from the Topology view's private `.src` heading so any
+ * McCard can carve its body into named parts. Pass `divider = false` for the first section (no rule above).
+ */
+@Composable
+fun SectionLabel(label: String, divider: Boolean = true) {
+    Column(Modifier.fillMaxWidth().padding(top = if (divider) 14.dp else 6.dp)) {
+        if (divider) Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+        Text(
+            label.uppercase(), color = Ink2, fontFamily = Mono, fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp,
+            modifier = Modifier.padding(top = if (divider) 9.dp else 0.dp, bottom = 2.dp),
+        )
+    }
+}
+
+/**
+ * A wire-status stamp — a soft-tinted pill that names a panel's feed and colours itself by state:
+ * amber fill + DASHED border for WIRE PENDING (waiting on a feed), green fill + solid border for
+ * WIRED · LIVE (reading now). Styled like the Topology PEND box so it reads as a status annotation,
+ * never as the card's main content — replaces the old inline amber/green `Note("WIRE PENDING · …")`.
+ */
+@Composable
+fun WireStamp(live: Boolean, tool: String) {
+    val accent = if (live) Emerald else Amber
+    val fill = if (live) EmeraldSoft else AmberSoft
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        Modifier.fillMaxWidth().padding(top = 10.dp)
+            .background(fill, shape)
+            .drawBehind {
+                drawRoundRect(
+                    accent.copy(alpha = 0.55f), cornerRadius = CornerRadius(8.dp.toPx()),
+                    style = Stroke(
+                        1.dp.toPx(),
+                        pathEffect = if (live) null else PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())),
+                    ),
+                )
+            }
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (live) "WIRED · LIVE" else "WIRE PENDING", color = accent, fontFamily = Mono, fontSize = 8.5.sp,
+            fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
+        )
+        Text(
+            tool, color = Ink2, fontFamily = Mono, fontSize = 9.sp, lineHeight = 13.sp,
+            modifier = Modifier.padding(start = 8.dp).weight(1f),
+        )
+    }
+}
+
+/** Back-compat shorthand for the pending stamp. */
+@Composable
+fun WirePending(tool: String) = WireStamp(live = false, tool = tool)
 
 /**
  * A key → value line — the web `.lev`/`.row2` pattern: a sans key (--ink2) opposite a mono value,

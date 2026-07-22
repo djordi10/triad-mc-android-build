@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -44,10 +45,14 @@ import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.Ribbon
+import agentic.triad.missioncontrol.ui.components.SectionLabel
+import agentic.triad.missioncontrol.ui.components.WireStamp
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
 import agentic.triad.missioncontrol.ui.components.WhyBox
+import agentic.triad.missioncontrol.ui.theme.Emerald
+import agentic.triad.missioncontrol.ui.theme.Ink
 import agentic.triad.missioncontrol.ui.theme.Line
 import agentic.triad.missioncontrol.ui.components.Tone
 import agentic.triad.missioncontrol.ui.components.Tone.BAD
@@ -187,20 +192,29 @@ private fun anaWrBars(resolved: List<ARow>, key: (ARow) -> String): List<Bar> =
         anaWrBar(k, rows.count { it.out == "win" }, rows.size)
     }
 
-/** The designed-page module wire caption — WIRED·LIVE (green) reads today, WIRE PENDING (amber) names the feed. */
+/** The designed-page module wire caption. Live reads a small green stamp; a pending feed renders as the
+ *  de-emphasised amber DASHED [WirePending] box, so it reads as a status annotation, not main content. */
 @Composable
-private fun Wire(live: Boolean, tool: String) {
-    Note((if (live) "WIRED · LIVE · " else "WIRE PENDING · ") + tool, if (live) GOOD else WARN)
-}
+private fun Wire(live: Boolean, tool: String) = WireStamp(live, tool)
 
-/** A designed-page section divider — an emerald mono eyebrow over a large plane title. */
+/**
+ * A PARENT section header — a chapter heading that owns the cards beneath it. Given real weight (big
+ * ExtraBold title + emerald eyebrow + an emerald accent bar + generous top air) so the hierarchy reads
+ * section ▸ cards, instead of competing with the dark card header bands below it.
+ */
 @Composable
 private fun AnaSection(eyebrow: String, title: String) {
-    Note(eyebrow.uppercase(), GOOD)
-    Text(
-        title, fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, fontSize = 21.sp,
-        letterSpacing = (-0.3).sp, modifier = Modifier.padding(top = 1.dp, bottom = 6.dp),
-    )
+    Column(Modifier.fillMaxWidth().padding(top = 26.dp, bottom = 12.dp)) {
+        Text(
+            eyebrow.uppercase(), color = Emerald, fontFamily = FontFamily.Monospace, fontSize = 10.sp,
+            letterSpacing = 1.6.sp, fontWeight = FontWeight.Bold,
+        )
+        Text(
+            title, color = Ink, fontFamily = FontFamily.Default, fontWeight = FontWeight.ExtraBold,
+            fontSize = 26.sp, letterSpacing = (-0.6).sp, modifier = Modifier.padding(top = 3.dp),
+        )
+        Box(Modifier.padding(top = 9.dp).width(46.dp).height(3.dp).background(Emerald, RoundedCornerShape(2.dp)))
+    }
 }
 
 /** One workbench filter chip — dark pine fill when selected (the .fchip.on state), light otherwise. */
@@ -419,15 +433,19 @@ fun AnalyticsScreen(repo: MissionRepository) {
             Note("CAG capture is fresh/cache split over ${cag.int("total") ?: "—"} calls. Latency lives in get_analytics when the ledger carries it.")
         }
         McCard("Attribution + continuity", "get_attribution_ledger · get_continuity") {
+            SectionLabel("the numbers", divider = false)
             KvRow("attribution windows", "${attr.int("weeks") ?: 0} wk · ${attr.int("total_candidates") ?: 0} cand", if (attr?.bool("enough") == true) GOOD else WARN)
             KvRow("attribution enough", "${attr?.bool("enough") ?: false} (required ${attr?.bool("required") ?: true})", if (attr?.bool("enough") == true) GOOD else BAD)
             KvRow("continuity verdict", cont.text("verdict", "—"), continuityTone(cont.text("verdict")))
-            Note("Attribution is the co-tuning referee (ΔB0 edge vs M1−B0 judgment, ≥4 weeks / ≥300 candidates). Continuity SLOs: FLOW / CAG / BANK.")
+            SectionLabel("what it means")
+            Note("Attribution is the referee that decides whether a tuning change actually helped. It needs 4 weeks and 300 trades before it can rule; it does not have enough yet, so it stays silent.")
         }
         McCard("Exec quality", tool = "get_exec_quality", sub = "honestly empty") {
             if (exec == null || exec.text("status", "") == "") {
-                KvRow("fill / maker / requote", "— · Prometheus unavailable (degrades)", UNK)
-                Note("get_exec_quality is Prometheus-only and reports transport:unavailable pre-live — rendered honestly as UNKNOWN, never a fabricated fill.", UNK)
+                SectionLabel("the numbers", divider = false)
+                KvRow("fill / maker / requote", "— · not available yet", UNK)
+                SectionLabel("why it's empty")
+                Note("This card measures how cleanly orders fill. It reads from Prometheus, which is not running before go-live, so the values stay blank instead of showing a made-up fill.", UNK)
             } else {
                 StatRow(
                     Triple("fill alpha bps", fmt(exec.num("fill_alpha_bps"), 2), NEUTRAL),
@@ -437,15 +455,15 @@ fun AnalyticsScreen(repo: MissionRepository) {
         }
         // ══ THE DESIGNED "LIFELINE" PAGE — every module names its live wire (a0..a5) ═════════════════════
         AnaSection("Analytics · designed from the databank", "TRIAD Analytics")
-        Note("Every module below carries a real value from the system this hour and its exact wire — the tool and field it reads, with honest status where the feed does not exist yet. The page contract: no chart without a named source.")
-        StatRow(
-            Triple("decisions", "3,014", NEUTRAL),
-            Triple("takes", "2", WARN),
-            Triple("bank rows", "8,008", NEUTRAL),
-            Triple("win avg", "1.59R", GOOD),
-            Triple("CAG hits", cag.let { val h = it.int("cache_hits"); val t = it.int("total"); if (h != null && t != null) "$h/$t" else "22/1229" }, WARN),
-        )
-        Note("designed 2026-07-12 from the live databank · legend: WIRED · LIVE reads today · WIRE PENDING names the tool on the audit list.", UNK)
+        McCard("System totals", tool = "get_analytics · get_cag_stats", sub = "the databank, right now") {
+            StatRow(
+                Triple("decisions", "3,014", NEUTRAL),
+                Triple("takes", "2", WARN),
+                Triple("bank rows", "8,008", NEUTRAL),
+                Triple("win avg", "1.59R", GOOD),
+                Triple("CAG hits", cag.let { val h = it.int("cache_hits"); val t = it.int("total"); if (h != null && t != null) "$h/$t" else "22/1229" }, WARN),
+            )
+        }
 
         // ── 01 · SIGNALS ───────────────────────────────────────────────────────────────────────────
         AnaSection("01 · Signals", "The engine plane")

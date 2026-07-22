@@ -280,7 +280,7 @@ fun IntelligenceScreen(repo: MissionRepository) {
     ) {
         VerdictBanner(
             word = "MUZZLED",
-            said = "The model proposes ${invalidTrades + (takeN ?: 0)} trades; the validator destroys $invalidTrades of them, erasing conviction to 0 and filing each as invalid_output. The input is excellent; the envelope forbids the trade.",
+            said = "${invalidTrades + (takeN ?: 0)} trades proposed, $invalidTrades blocked by safety checks. Good signals, but they break the risk rules.",
             pills = listOf(
                 "MODEL · GREEN" to GOOD,
                 "VALIDATOR · RED · $invalidTrades killed" to SEV,
@@ -290,10 +290,9 @@ fun IntelligenceScreen(repo: MissionRepository) {
             title = "Intelligence & CAG",
         )
         Ribbon(
-            "invalid_output is a REJECTED TRADE, not a broken model (I-1)",
-            "The model returns a well-formed trade; the validator kills it on risk checks, then erases " +
-                "conviction to 0 and files it as invalid_output. $vrTotal proposals died this way — the " +
-                "model wants to trade; the envelope forbids it. An abstain is not a refusal.",
+            "invalid_output means a rejected trade, not a broken model (I-1)",
+            "The AI returns a valid trade, then the risk checks kill it and log it as invalid_output. " +
+                "$vrTotal trades died this way. The model wants in; the risk rules keep it out.",
             SEV,
         )
         McCard("Slot-A attestation (I-1)", tool = "get_attestation", sub = "the F15 fixed point") {
