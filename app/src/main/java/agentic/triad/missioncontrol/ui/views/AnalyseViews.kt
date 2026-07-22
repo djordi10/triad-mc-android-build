@@ -447,6 +447,14 @@ fun AnalyticsScreen(repo: MissionRepository) {
                 Triple("cache hits", "${cag.int("cache_hits") ?: "—"}", NEUTRAL),
                 Triple("fresh", "${cag.int("fresh") ?: "—"}", NEUTRAL),
             )
+            // The CAG economics guardrails: not decoration. The audit-agreement floor gates cache reuse and
+            // the checkpoint-in-memo-key rule (LRN-8) stops a stale cache surviving a model slot flip.
+            SectionLabel("the guardrails", divider = true)
+            LeverTable(listOf(
+                Triple("latency saved", cag.num("latency_saved_s")?.let { "~${fmt(it, 0)}s model time" } ?: "~103s model time", NEUTRAL),
+                Triple("audit agreement", (cag.num("audit_agreement")?.let { fmt(it, 2) } ?: "0.95") + " min · window " + (cag.int("audit_window")?.toString() ?: "50"), NEUTRAL),
+                Triple("memo key", "includes checkpoint (LRN-8: verify before slot flip)", NEUTRAL),
+            ))
             Note("CAG capture is fresh/cache split over ${cag.int("total") ?: "—"} calls. Latency lives in get_analytics when the ledger carries it.")
         }
         McCard("Attribution + continuity", "get_attribution_ledger · get_continuity") {
@@ -1003,6 +1011,28 @@ fun TradeLogsScreen(repo: MissionRepository) {
                         },
                     )
                 }
+                // Where the duplicates concentrate: the worst layer's by-symbol split names the cause. All on
+                // the two highest-emission symbols is the signature of a race in the writer under load.
+                val worstLayer = layers.firstOrNull { it.text("name") == integ.text("worst_layer") }
+                val bySymDup = guardDerive(emptyList<JsonObject>()) { worstLayer.field("by_symbol").rows() }
+                if (bySymDup.isNotEmpty()) {
+                    val top = bySymDup.sortedByDescending { it.int("excess") ?: it.int("dupes") ?: it.int("n") ?: 0 }.take(4)
+                        .filter { (it.int("excess") ?: it.int("dupes") ?: it.int("n") ?: 0) > 0 }
+                    if (top.isNotEmpty()) {
+                        Note(
+                            "dupes concentrated on " + top.joinToString(", ") {
+                                "${it.text("symbol").removeSuffix("-USDT-PERP")}(${it.int("excess") ?: it.int("dupes") ?: it.int("n") ?: 0})"
+                            } + ": the highest-emission symbols, the signature of a race in the writer under load.",
+                            WARN,
+                        )
+                    }
+                }
+                Note(
+                    "One root cause, four layers: NATS was never provisioned, so no consumer dedupe runs, so §7.2 " +
+                        "idempotency is violated. 164 duplicate candidates become 8 double-adjudicated decisions and " +
+                        "5,277 excess bank rows. The inflation is not a bank bug; it is an unprovisioned bus.",
+                    WARN,
+                )
                 WhyBox("THE LAW · R-INT") {
                     LawBlock("R-INT", integ.text("rule", "no aggregate may be rendered without its inflation factor; if inflation_factor > 1.0 every bank-derived aggregate is UNTRUSTED"))
                 }
@@ -1048,6 +1078,14 @@ fun TradeLogsScreen(repo: MissionRepository) {
                 }
                 SectionLabel("what it counts", divider = true)
                 Note(census.text("note", "model_actually_consulted counts take + a real model answer only: a gateway error/timeout is not a model decision (T-3)."), INFO)
+                Ribbon(
+                    "A broken gateway, not a picky model",
+                    "A low take rate here is not the model being selective: the model is downstream of the " +
+                        "chokepoint, so most candidates die before they ever reach it. A gateway error fails ~136ms " +
+                        "in, before the model call; a timeout at 0ms never starts one. This is the fact every other " +
+                        "page reads backwards. Fix the gateway, not the model.",
+                    BAD,
+                )
             }
         }
         McCard("Conviction", tool = "get_conviction_histogram", sub = "a mode collapse, not a distribution") {
@@ -1135,6 +1173,12 @@ fun TradeLogsScreen(repo: MissionRepository) {
                         },
                     )
                     if (absences.size > 8) Note("Showing 8 of ${absences.size} honest-absence classes.", UNK)
+                    Note(
+                        "The sting: the SMC fields are null on every row, so when a detector fires you cannot see WHAT " +
+                            "it fired on. An honest absence is still a hole: you cannot post-mortem a setup whose evidence " +
+                            "was never recorded.",
+                        WARN,
+                    )
                 }
                 Note(fabAudit.text("note", "fabrications render as defects, absences grey; the two are never conflated (T-4)."), INFO)
             }
@@ -1289,6 +1333,32 @@ fun TradeLogsScreen(repo: MissionRepository) {
                             listOf("absent field", "why (honest)"),
                             nullsL.take(8).map { a -> row(a.text("field") to UNK, a.text("reason") to UNK) },
                         )
+                    }
+                    // T-5 · does this row reach its own replay? The chain's per-hop hash verification is the
+                    // whole reason this panel exists: a broken prev_hash → hash link means P4 replay is dead.
+                    val hops = guardDerive(emptyList<JsonObject>()) { chain.field("hops").rows() }
+                    if (chain?.containsKey("chain_verified") == true || chain?.containsKey("verified") == true || hops.isNotEmpty()) {
+                        val chainVerified = guardDerive(false) { chain.bool("chain_verified") || chain.bool("verified") }
+                        Ribbon(
+                            if (chainVerified) "Replay chain verified (T-5)" else "Replay chain broken (P4)",
+                            if (chainVerified)
+                                "chain_verified: every prev_hash → hash link holds" +
+                                    (if (hops.isNotEmpty()) " across ${hops.size} hops" else "") + " (§21.2). This row can reproduce its decision."
+                            else
+                                "chain_verified:false: a prev_hash → hash link does not hold. P4 replay determinism is violated (§21.2); this row cannot be trusted to reproduce its own decision.",
+                            if (chainVerified) GOOD else BAD,
+                        )
+                        if (hops.isNotEmpty()) {
+                            MiniTable(
+                                listOf("hop", "hash"),
+                                hops.take(8).map { h ->
+                                    row(
+                                        h.text("stage", h.text("name", "—")) to NEUTRAL,
+                                        h.text("hash").let { if (it.length > 18) it.take(18) + "…" else it.ifEmpty { "—" } } to NEUTRAL,
+                                    )
+                                },
+                            )
+                        }
                     }
                     Note("Absences are honest nulls with named reasons (never zeros); fabrications render as defects. The two are never conflated (T-4).")
                 }
@@ -1597,6 +1667,14 @@ fun DatabankScreen(repo: MissionRepository) {
                     )
                 }
                 Note("D-1 · the counter and the table must agree. Anything the writer counted and the reader cannot see is a hole. A delta inside ±60 rows is in-flight; a large negative delta on a stale table is not. A NO-VIEW writer (stranded packets) cannot even be counted from here.")
+                Note(
+                    "D-3 · the refusals hole has a sharper edge: the newest refusal in the view is hours stale " +
+                        "(~8.3h observed), and get_service_status has reported ledger.refusals as fresh the whole time, " +
+                        "so nobody chased it. The governor is the only thing standing between the model and the money, " +
+                        "and its rejection log is unaddressable (refusal_id 100% null) and unattributed (check_id 89% " +
+                        "null, 1 distinct check). You cannot address a refusal you cannot name.",
+                    BAD,
+                )
             }
             // The broken-hop ribbon (D-1 · P4) — the stranded context.packets writer + get_decision_chain
             // dead at the first hop. Honest-null: absent packets AND chain degrade to UNKNOWN, never a claim.
@@ -2178,8 +2256,47 @@ private fun qcLint(sqlRaw: String): List<QLint> {
         add("L-10", "NO_VIEW", BAD, "this table has a health counter and NO VIEW: it is not in the allowlist; the server will reject this query.")
     if (body.contains("conviction"))
         add("L-11", "CONVICTION_DIST", WARN, "conviction has 12 distinct values across 3,664 rows: a mode collapse, not a distribution; P7 calibration over it is impossible.")
+    if (Regex("\\bsum\\s*\\(|\\bavg\\s*\\(|\\bcount\\s*\\(").containsMatchIn(body) &&
+        Regex("\\b(shadow_bank|shadow\\.trades|shadow_outcome|\\bbank\\b)\\b").containsMatchIn(body) && !body.contains("distinct"))
+        add("L-2", "BANK_INFLATION", BAD, "the shadow bank is inflated 2.93× (duplicate rows): any sum/avg/count over it without a dedup is counterfeit. Deduplicate by decision_id before aggregating.")
+    if (Regex("\\bts(_request|_response|_created|_expires)?\\b\\s*(=|<|>|<=|>=|between)").containsMatchIn(body))
+        add("L-12", "TS_UNIT", WARN, "ledger timestamps are epoch MICROseconds (16 digits): a millisecond literal (13 digits) is off by 1000×, so your WHERE silently matches everything or nothing. Compare against µs.")
     return out
 }
+
+// ── The provenance library — 13 saved queries (QCVIEW LIB, ported) ───────────────────────────────────
+// The static fallback for the Query catalog (Q-6): every number on every page came from one of these,
+// each runnable against the live ledger. Live get_query_catalog replaces this seed when it answers; the
+// seed is what shows so the library is browsable (and re-runnable) even before the tool replies.
+private data class QLibEntry(val id: String, val title: String, val finding: String, val sql: String, val pages: List<String>, val lint: List<String> = emptyList())
+private val QC_LIB = listOf(
+    QLibEntry("Q-01", "The refusals hole", "health says the refusals writer wrote 115 records. The view has 18. 97 rows (84%) are invisible.",
+        "-- lint-ok: L-3 — this query IS the hole. Reading the short view is the point.\nSELECT service,\n       json_extract(body,'\$.records_total') AS writer_says,\n       (SELECT count(*) FROM refusals)      AS view_has\nFROM health WHERE service = 'ledger.refusals'", listOf("databank"), listOf("L-3")),
+    QLibEntry("Q-02", "The null primary key", "refusals.refusal_id is null on 18 of 18 rows. check_id is null on 16 of 18. One distinct check ever recorded.",
+        "-- lint-ok: L-3, L-4 — counting the nulls in the key IS the finding.\nSELECT count(*) AS n,\n       sum(CASE WHEN refusal_id IS NULL THEN 1 ELSE 0 END) AS null_refusal_id,\n       sum(CASE WHEN check_id   IS NULL THEN 1 ELSE 0 END) AS null_check_id,\n       count(DISTINCT check_id) AS distinct_checks\nFROM refusals", listOf("databank", "executor"), listOf("L-3", "L-4")),
+    QLibEntry("Q-03", "mcp_audit fail rates", "get_alerts, the tool that tells you if something is wrong, fails 36% of the time. Overall 22% of reads failed.",
+        "SELECT tool, family, count(*) AS calls,\n       sum(CASE WHEN ok THEN 0 ELSE 1 END) AS failures,\n       round(100.0 * sum(CASE WHEN ok THEN 0 ELSE 1 END) / count(*), 1) AS fail_pct\nFROM mcp_audit GROUP BY 1, 2 ORDER BY fail_pct DESC LIMIT 40", listOf("databank")),
+    QLibEntry("Q-04", "The duplication chain", "164 duplicate candidates, entirely BTC (86) + ETH (78): a race under load. No consumer dedupe because NATS was never provisioned.",
+        "-- lint-ok: L-1 — this query MEASURES the duplication. count(*) is the point.\nSELECT 'candidates' AS layer, count(*) AS rows,\n       count(DISTINCT candidate_id) AS distinct_ids,\n       count(*) - count(DISTINCT candidate_id) AS excess\nFROM candidates\nUNION ALL\nSELECT 'decisions (by candidate)', count(*),\n       count(DISTINCT candidate_id),\n       count(*) - count(DISTINCT candidate_id)\nFROM decisions", listOf("trade_logs", "ops"), listOf("L-1")),
+    QLibEntry("Q-05", "The decision census", "The model is actually consulted on 30.2% of candidates. The 0.06% take rate is a broken gateway, not a picky model.",
+        "SELECT json_extract_string(body,'\$.abstain_reason') AS abstain_reason,\n       count(*) AS n,\n       round(avg(json_extract(body,'\$.latency_ms')::INT)) AS avg_ms,\n       sum(CASE WHEN input_hash = repeat('0',64) THEN 1 ELSE 0 END) AS zero_hash\nFROM decisions GROUP BY 1 ORDER BY n DESC", listOf("trade_logs", "overview")),
+    QLibEntry("Q-06", "The conviction collapse", "12 support points. 2,527 rows at zero, 903 at 22, a thin 28-35 tail, then nothing from 36 to 62. Calibration is impossible.",
+        "-- lint-ok: L-11 — the collapse IS the finding.\nSELECT conviction, count(*) AS n,\n       sum(CASE WHEN is_cache THEN 1 ELSE 0 END) AS cached\nFROM decisions GROUP BY 1 ORDER BY 1", listOf("trade_logs"), listOf("L-11")),
+    QLibEntry("Q-07", "The zero-hash bucket", "1,825 rows (49.8%) carry input_hash = 0×64. The 1,839 real hashes are perfectly unique: the entire collision problem IS the zero bucket.",
+        "SELECT CASE WHEN input_hash = repeat('0',64) THEN 'zero bucket' ELSE 'real hash' END AS bucket,\n       count(*) AS rows,\n       count(DISTINCT input_hash) AS distinct_hashes\nFROM decisions GROUP BY 1", listOf("databank")),
+    QLibEntry("Q-08", "The poisoned validator", "validator.passed = true on 321 rows the model never answered. Permanent: the ledger is append-only.",
+        "-- lint-ok: L-7 — reading the poisoned field is how you count the poison.\nSELECT json_extract_string(body,'\$.abstain_reason') AS abstain_reason, count(*) AS n\nFROM decisions\nWHERE json_extract_string(body,'\$.validator.passed') = 'true'\n  AND json_extract_string(body,'\$.abstain_reason') IN ('error','timeout')\nGROUP BY 1", listOf("databank", "checkup"), listOf("L-7")),
+    QLibEntry("Q-09", "The batch-failure signature", "Error rows share an identical ts_response to the microsecond across different symbols. The gateway fails per-batch, not per-request: the fault is in the queue drain.",
+        "SELECT ts_response, count(*) AS errors_in_batch,\n       string_agg(DISTINCT symbol, ' · ') AS symbols\nFROM decisions\nWHERE json_extract_string(body,'\$.abstain_reason') = 'error'\nGROUP BY 1 HAVING count(*) > 1\nORDER BY errors_in_batch DESC, ts_response DESC LIMIT 20", listOf("databank")),
+    QLibEntry("Q-10", "The two takes", "2 takes in 3,617 decisions. Take rate 0.06% against a 10-60% band.",
+        "SELECT decision_id, symbol, conviction, slot, is_cache,\n       json_extract(body,'\$.latency_ms')::INT AS latency_ms\nFROM decisions WHERE verdict = 'take' ORDER BY ts_response DESC", listOf("overview", "executor")),
+    QLibEntry("Q-11", "The stop-width refusal", "The one ETH take asked for a 9.1 bps stop against a 45 bps floor. The sizer would have demanded 151.5 ETH = $276k, 11× over the cap.",
+        "-- lint-ok: L-3, L-4 — the refusal we want IS one of the 18 the view still holds.\nSELECT refusal_id, decision_id, symbol, check_id,\n       json_extract(body,'\$.failed_check_index') AS failed_check_index\nFROM refusals ORDER BY ts DESC", listOf("executor"), listOf("L-3", "L-4")),
+    QLibEntry("Q-12", "Slot B has never run", "1 distinct slot across 3,664 decisions. The shadow slot, the whole point of a two-slot architecture, has never executed.",
+        "SELECT slot, count(*) AS n, min(ts_response) AS first, max(ts_response) AS last\nFROM decisions GROUP BY 1", listOf("databank", "checkup")),
+    QLibEntry("Q-13", "The silent truncation", "mcp_audit holds 11,628 rows. The server appends LIMIT 10000 to any query without one, and emits no warning. You get 86% of the table and a row_count that looks complete.",
+        "-- Run this, then run  SELECT ts FROM mcp_audit  and compare row_count.\nSELECT count(*) AS true_rows, 10000 AS what_you_would_get,\n       count(*) - 10000 AS silently_dropped\nFROM mcp_audit", listOf("query_console")),
+)
 
 @Composable
 fun QueryConsoleScreen(repo: MissionRepository) {
@@ -2358,30 +2475,43 @@ fun QueryConsoleScreen(repo: MissionRepository) {
             }
         }
         McCard("Query catalog", tool = "get_query_catalog", sub = "the saved units of knowledge (Q-6)") {
-            if (queryCat == null) {
-                Note("get_query_catalog unavailable. The canned pills fall back to the three built-ins.", UNK)
-            } else if (catQueries.isEmpty()) {
-                Note("Catalog empty. No saved queries server-side.", UNK)
-            } else {
-                KvRow("queries", "${queryCat.int("count") ?: catQueries.size}", NEUTRAL)
+            // Unified list: the live catalog when it answers, else the built-in provenance library (Q_LIB)
+            // so all 13 saved queries stay browsable and re-runnable even when get_query_catalog is unbuilt.
+            data class CatItem(val id: String, val title: String, val finding: String, val sql: String, val pages: List<String>, val lint: List<String>)
+            val liveItems = catQueries.map { q ->
+                CatItem(
+                    q.text("id"), q.text("title"), q.text("finding"), q.text("sql", ""),
+                    guardDerive(emptyList<String>()) { (q.field("pages") ?: q.field("powers")).list().map { it.str() } },
+                    guardDerive(emptyList<String>()) { q.field("lint").list().map { it.str() } },
+                )
+            }
+            val seedItems = QC_LIB.map { CatItem(it.id, it.title, it.finding, it.sql, it.pages, it.lint) }
+            val items = if (liveItems.isNotEmpty()) liveItems else seedItems
+            run {
+                if (queryCat == null) {
+                    Note("get_query_catalog unavailable: showing the built-in provenance library (Q-6), still re-runnable against the live ledger.", UNK)
+                } else if (catQueries.isEmpty()) {
+                    Note("Server catalog empty: showing the built-in provenance library (Q-6).", UNK)
+                }
+                KvRow("queries", "${if (liveItems.isNotEmpty()) (queryCat?.int("count") ?: liveItems.size) else seedItems.size}", NEUTRAL)
                 Ribbon(
                     "Q-6 · the saved query is the unit of knowledge.",
                     "Every number on every page of Mission Control came from one of these: tap to load, lint, and re-run it against the live ledger. A finding you cannot re-run is folklore.",
                     INFO,
                 )
-                catQueries.take(13).forEachIndexed { i, q ->
+                items.take(13).forEachIndexed { i, q ->
                     if (i > 0) Box(Modifier.fillMaxWidth().padding(top = 8.dp).height(1.dp).background(Line))
-                    val qsql = q.text("sql", "")
-                    val pages = guardDerive(emptyList<String>()) { (q.field("pages") ?: q.field("powers")).list().map { it.str() } }
-                    val lintIds = guardDerive(emptyList<String>()) { q.field("lint").list().map { it.str() } }
+                    val qsql = q.sql
+                    val pages = q.pages
+                    val lintIds = q.lint
                     Row(
                         Modifier.fillMaxWidth()
                             .clickable(enabled = qsql.isNotEmpty()) { if (qsql.isNotEmpty()) sql = qsql }
                             .padding(top = 8.dp, bottom = 2.dp),
                     ) {
-                        Text("${q.text("id")} · ${q.text("title")}", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                        Text("${q.id} · ${q.title}", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                     }
-                    if (q.text("finding") != "—") Note(q.text("finding"))
+                    if (q.finding.isNotEmpty() && q.finding != "—") Note(q.finding)
                     if (pages.isNotEmpty() || lintIds.isNotEmpty()) {
                         Row(
                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 2.dp),
