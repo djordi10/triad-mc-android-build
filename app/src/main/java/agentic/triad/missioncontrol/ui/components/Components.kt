@@ -23,6 +23,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,9 +94,17 @@ fun Tone.soft(): Color = when (this) {
     Tone.UNK -> UnkSoft; Tone.INFO -> BlueSoft; Tone.NEUTRAL -> UnkSoft
 }
 
-// ── the per-view scaffold: dark brand strip + stance strip + a scroll of cards on paper ──────────
+// ── the per-view scaffold: a scroll of cards on paper ────────────────────────────────────────────
 /** One key→value pair for the stance strip (the light stat bar under the brand). */
 data class Stance(val key: String, val value: String, val tone: Tone = Tone.NEUTRAL)
+
+/**
+ * A hoist for the per-view stance. MissionNav provides a state here and renders the value as a second
+ * row of the STICKY header (right under the global PHASE/ENTRIES strip), so a view's summary stats read
+ * as part of that one status section instead of a separate band lower down. When absent (previews/tests)
+ * [ViewScaffold] falls back to rendering the strip inline.
+ */
+val LocalViewStance = compositionLocalOf<MutableState<List<Stance>>?> { null }
 
 @Composable
 fun ViewScaffold(
@@ -101,12 +112,19 @@ fun ViewScaffold(
     stance: List<Stance> = emptyList(),
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // Push this view's stance up to the sticky header (or, without a host, render it inline below).
+    // Push this view's stance into the sticky header. Each view sets its own value on (re)composition,
+    // so the current view always wins; we deliberately do NOT clear on dispose (that clear runs AFTER
+    // the next view has already set its stance, and would blank the row).
+    val hoist = LocalViewStance.current
+    if (hoist != null) SideEffect { if (hoist.value != stance) hoist.value = stance }
     Column(
         Modifier.fillMaxSize().background(Paper).verticalScroll(rememberScrollState())
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
-        BrandStrip(view)
-        if (stance.isNotEmpty()) StanceStrip(stance)
+        // The TRIAD wordmark banner was dropped: it restated the app-bar eyebrow (NN · SEGMENT + view
+        // name) directly above it. The view name now lives only in the top bar.
+        if (hoist == null && stance.isNotEmpty()) StanceStrip(stance)
         content()
     }
 }

@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +59,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import agentic.triad.missioncontrol.R
 import agentic.triad.missioncontrol.TriadApp
+import agentic.triad.missioncontrol.ui.components.LocalViewStance
+import agentic.triad.missioncontrol.ui.components.Stance
+import agentic.triad.missioncontrol.ui.components.fg
 import agentic.triad.missioncontrol.ui.connection.ConnectionScreen
 import agentic.triad.missioncontrol.ui.overview.OverviewScreen
 import agentic.triad.missioncontrol.ui.propose.ProposeDrawer
@@ -191,6 +195,14 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
         updatedAt = DateFormat.getTimeInstance().format(Date())
     }
 
+    // The current view's per-view stats, pushed up by ViewScaffold and rendered as a second sticky
+    // header row under the global stance strip (one status section, not a separate band lower down).
+    val viewStance = remember { mutableStateOf<List<Stance>>(emptyList()) }
+    // Read the value HERE (not only inside the topBar slot) so a change recomposes MissionNav and the
+    // top bar reliably re-renders — a slot-local read alone does not always invalidate the Scaffold slot.
+    val viewStanceRow = viewStance.value
+
+    CompositionLocalProvider(LocalViewStance provides viewStance) {
     Scaffold(
         containerColor = Paper,
         topBar = {
@@ -258,6 +270,8 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
                     onRefresh = { stanceTick++ },
                     onPropose = { nav.go(ROUTE_PROPOSE) },
                 )
+                // ── the current view's own stats, as a second row of the same status section ──
+                if (viewStanceRow.isNotEmpty()) ViewStanceRow(viewStanceRow)
             }
         },
         bottomBar = { if (!wide) TabBar(seg) { s -> nav.go(View.bySegment(s).first().route) } },
@@ -269,6 +283,7 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
             }
         }
     }
+    } // CompositionLocalProvider
 
     // The full-view index — every one of the 21 views by segment, opened by the ☰ hamburger.
     if (showMenu) {
@@ -398,6 +413,21 @@ private fun StanceStrip(
         )
         StripButton("Refresh", primary = false, onClick = onRefresh)
         StripButton("Propose action", primary = true, onClick = onPropose)
+    }
+}
+
+/** The per-view stats as a second header row, styled to match the global stance strip so the two read
+ *  as one status section. Fed by [LocalViewStance], which [ViewScaffold] pushes the current view into. */
+@Composable
+private fun ViewStanceRow(items: List<Stance>) {
+    Row(
+        Modifier.fillMaxWidth().background(Paper).drawBottomHairline(Line)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items.forEach { StanceChip(it.key.uppercase(), it.value, it.tone.fg()) }
     }
 }
 
