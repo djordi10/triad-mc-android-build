@@ -27,6 +27,7 @@ import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.LeverTable
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -363,10 +364,14 @@ fun StrategyScreen(repo: MissionRepository) {
                 ),
             )
             SectionLabel("does the win rate survive its sample")
-            KvRow("breakeven WR (2.5R book)", "${String.format("%.1f", BE * 100)}%, Track A is below it", BAD)
-            // The Wilson lower bound (S-1) rendered for both books — a win rate without its N is a rumour.
-            KvRow("Track A Wilson WR (n=${nf(b0.n)})", wilsonWr(b0.wr, b0.n), BAD)
-            KvRow("Track B Wilson WR (n=${nf(m1.n)})", wilsonWr(m1.wr, m1.n), if ((m1.n ?: 0) < 30) WARN else GOOD)
+            // The Wilson lower bound (S-1) for both books — a win rate without its N is a rumour.
+            LeverTable(
+                listOf(
+                    Triple("breakeven WR (2.5R book)", "${String.format("%.1f", BE * 100)}%, Track A is below it", BAD),
+                    Triple("Track A Wilson WR (n=${nf(b0.n)})", wilsonWr(b0.wr, b0.n), BAD),
+                    Triple("Track B Wilson WR (n=${nf(m1.n)})", wilsonWr(m1.wr, m1.n), if ((m1.n ?: 0) < 30) WARN else GOOD),
+                ),
+            )
             val refused = if ((b0.n ?: 0) > 0) 100.0 * (1 - (m1.n ?: 0).toDouble() / (b0.n ?: 1)) else 0.0
             Ribbon(
                 "Read the honest tension, not just the sign flip",
@@ -527,10 +532,14 @@ fun StrategyScreen(repo: MissionRepository) {
                     "windowed number below is marked as what it is.",
                 SEV,
             )
-            KvRow("LAST 24H", if (haveWindows) "windowed" else "needs tool: windowed by resolved_at", if (haveWindows) NEUTRAL else BAD)
-            KvRow("LAST 7D", if (haveWindows) "windowed" else "needs tool: not computable from get_shadow_bank", if (haveWindows) NEUTRAL else BAD)
-            KvRow("LAST 30D", if (haveWindows) "windowed" else "needs tool: the SQLite bank has resolved_at, window it", if (haveWindows) NEUTRAL else BAD)
-            KvRow("ALL-TIME", "'all' only: the one window the bank does answer", WARN)
+            LeverTable(
+                listOf(
+                    Triple("LAST 24H", if (haveWindows) "windowed" else "needs tool: windowed by resolved_at", if (haveWindows) NEUTRAL else BAD),
+                    Triple("LAST 7D", if (haveWindows) "windowed" else "needs tool: not computable from get_shadow_bank", if (haveWindows) NEUTRAL else BAD),
+                    Triple("LAST 30D", if (haveWindows) "windowed" else "needs tool: the SQLite bank has resolved_at, window it", if (haveWindows) NEUTRAL else BAD),
+                    Triple("ALL-TIME", "'all' only: the one window the bank does answer", WARN),
+                ),
+            )
             Ribbon(
                 "What the cron DID capture",
                 "from logs/track-watch.log (a 30-min line): M1=56513 M2=27 M3=88 total=56628 open_pos=0 " +
