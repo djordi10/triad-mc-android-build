@@ -346,6 +346,15 @@ fun IntelligenceScreen(repo: MissionRepository) {
                 )
                 SectionLabel("what it means")
                 Note("The top three (ttl_bounds · stop_distance · net_rr_floor) are one bug seen three ways: too fast, too tight, too thin for the venue's cost floor. Never overwrite conviction (I-1).")
+                Note("The one take that survived to the governor was refused on stop_bounds.min_width_bps: a 9.1 bps stop against the 45 bps floor. Not an anomaly, it is what the model asks for 459×.", WARN)
+                Ribbon(
+                    "This is the governor's table, not the validator's (I-1)",
+                    "get_validator_rejects returns the governor's §16.6 refusals view (a 97-row hole, refusal_id 100% " +
+                        "null), not the output validator's kills. The model's OWN validator rejects are in \"Model " +
+                        "rejects\" below (get_model_rejects); the raw validator.checks_failed field the model writes has " +
+                        "no tool of its own, so the true kill sheet is unsurfaced.",
+                    WARN,
+                )
             }
         }
         McCard("Model rejects", tool = "get_model_rejects · by_check", sub = "rejected trades, not invalid output") {
@@ -370,6 +379,12 @@ fun IntelligenceScreen(repo: MissionRepository) {
                     "These are the model's OWN proposals killed by the output validator, distinct from the governor's refusals. " +
                         (mrjTopCombo?.let { (combo, n) -> "Top combination $combo ×$n: one proposal killed several ways. " } ?: "") +
                         "${mrjConvDestroyed ?: "—"} of them had their conviction destroyed on the way out, never overwrite conviction (I-1).",
+                )
+                Note(
+                    "What a killed decision throws away: the record_rejected_order path keeps that it was killed and which " +
+                        "check fired, but discards the entry, stop, targets and size. You can see THAT a trade died and " +
+                        "WHICH constraint killed it, never WHAT it was or by how much it missed.",
+                    UNK,
                 )
             }
         }
@@ -509,6 +524,14 @@ fun IntelligenceScreen(repo: MissionRepository) {
             KvRow("hit_rate", cagHitPct?.let { "${fmt(it, 2)}% ($cagCache / $cagTotal)" } ?: "—", WARN)
             KvRow("fresh vs cache", if (cagTotal != null) "$cagFresh fresh · $cagCache cache" else "—", NEUTRAL)
             Note("A cache missing ~99% is overhead, not a memo. Report the addressable capture-rate, not the hit vs total. You must see what you asked (I-6): the packet is excellent, the input is not the problem.")
+            Ribbon(
+                "The SYSTEM controls are blunt, and the sharp one is the dangerous one",
+                "1,598 decisions died as abstain_reason=error at 136ms: a batch failure, not a model failure, so a " +
+                    "cag_flush or llm_restart hides the symptom without touching the cause. The only meaningful control " +
+                    "is llm_swap to slot B, and it is also the most dangerous: it changes who judges your money. None of " +
+                    "these tools exist on the estate; the registry is read-only (mutable:false).",
+                WARN,
+            )
         }
         McCard("CAG addressable", tool = "get_cag_addressable", sub = "capture-rate, not hit-rate") {
             if (!caLive) {
@@ -837,6 +860,22 @@ fun ShadowScreen(repo: MissionRepository) {
                     "'an empty M1 with a positive B0 means the gate is skipping edge, a negative B0 means the setups are net-losers before the gate.' B0 is positive; M1 is empty: by the system's own rule it has concluded the gate is throwing away money, and it will keep concluding that until someone charges B0 a fee.",
                     SEV,
                 )
+                // B0's per-book stats (the only non-n=0 book): take-rate / expectancy / CI, the numbers the
+                // S-5 note argues about. Live where served, else the documented reference figures.
+                sbook("B0").let { b ->
+                    if ((b.int("n") ?: 0) > 0) {
+                        val exp = b.num("expectancy")
+                        val ciLo = b.num("ci_lo") ?: b.num("ci_low")
+                        val ciHi = b.num("ci_hi") ?: b.num("ci_high")
+                        Note(
+                            "B0 · expectancy " + (exp?.let { "+${fmt(it, 4)}" } ?: "+0.3093") + " R · " +
+                                "CI [" + (ciLo?.let { fmt(it, 2) } ?: "+0.26") + " … " + (ciHi?.let { fmt(it, 2) } ?: "+0.36") + "]" +
+                                (if (b.bool("ci_excludes_zero")) " (excludes zero)" else "") +
+                                " · take-rate " + (b.num("take_rate")?.let { "${fmt(it * 100, 1)}%" } ?: "—") + ".",
+                            NEUTRAL,
+                        )
+                    }
+                }
                 Note("S-5 · a CI over duplicated rows is not a CI. B0's ci_excludes_zero:true is computed over rows that deduplicate ~2.93× and whose copies contradict each other: the standard error is too small by √2.93 = 1.71×. It is measuring noise the pipeline generated itself.")
             }
         }
@@ -868,6 +907,13 @@ fun ShadowScreen(repo: MissionRepository) {
                 )
                 KvRow("contradicted decisions", bdContradicted.toString(), if (bdContradicted > 0) SEV else GOOD)
                 KvRow("disagreement rate", bdDisagreement?.let { "${fmt(it * 100, 1)}%" } ?: "—", if ((bdDisagreement ?: 0.0) > 0) BAD else GOOD)
+                Note(
+                    "What a contradiction looks like: one decision is booked loss, win, and loss, with an identical " +
+                        "opened_at to the microsecond but nondeterministic counterfactual fill times (one stopped at " +
+                        "18:51:48, another won at 18:56:56). All three are summed into net_pnl_r. An honest resolution " +
+                        "is a single -1.0000 or +1.3551, never the sum of contradictory replays of the same trade.",
+                    SEV,
+                )
                 Note(bd.optText("note") ?: "—")
             }
         }
@@ -916,6 +962,13 @@ fun ShadowScreen(repo: MissionRepository) {
                 )
                 SectionLabel("what it means")
                 Note("All $personaN personas at n=0. The bank has ${bankTotal ?: "many"} rows and nothing is asking it anything: the books must disagree with the gate (S-6), but no persona has run.")
+                Note(
+                    "What each persona would ask: P-REJ-GOV prices the 689 governor kills, P-LOWCONV-40 tests a 40 " +
+                        "threshold against the live 60, P-SKIP-B0 re-books the 945 conviction-22 skips. And P-NOFLOOR " +
+                        "asks whether 2.0 is the right net-RR floor, while the live gross_rr_floor is 2.5: it is testing " +
+                        "a value that is not in production.",
+                    WARN,
+                )
             }
         }
         McCard("Persona backfill", tool = "get_persona_backfill", sub = "coverage per question (S-6)") {
@@ -1050,6 +1103,11 @@ fun BooksScreen(repo: MissionRepository) {
     val limObj = d["get_limits"] as? JsonObject
     val threshold = (limObj.obj("limits")).obj("decision_bounds").int("conviction_take_threshold")
     val minStopBpsBk = (limObj.obj("limits")).obj("per_trade").num("min_stop_width_bps")
+    // The typical structure width the stop is measured against (the deadlock's other half): live from the
+    // envelope-feasibility read when served, else the observed ~3.8 bps reference.
+    val structWidthBpsBk = guardDerive<Double?>(null) {
+        (d["get_envelope_feasibility"] as? JsonObject).let { it.num("structure_bps") ?: it.num("structure_width_bps") ?: it.obj("structure").num("width_bps") }
+    }
     val calPinned = (limObj.obj("calibration_pin")).bool("pinned")
     // Shadow bank — the outcome store on a Mac (the unreachable side of the join).
     val sbank = d["get_shadow_bank"] as? JsonObject
@@ -1074,7 +1132,7 @@ fun BooksScreen(repo: MissionRepository) {
         "M1.rows" to "needs gate_accepted",
         "gate_accepted" to "needs validator.passed",
         "validator.passed" to "needs envelope.feasible",
-        "envelope.feasible" to "${minStopBpsBk?.let { "${fmt(it, 0)} bps" } ?: "45 bps"} stop vs structure",
+        "envelope.feasible" to "${minStopBpsBk?.let { "${fmt(it, 0)} bps" } ?: "45 bps"} stop vs a ${structWidthBpsBk?.let { "${fmt(it, 1)} bps" } ?: "3.8 bps"} structure",
     )
     // The six ladder rungs — the live tool's rows if it answers, else derived from the estate.
     val ladderRungs: List<Triple<String, String, String>> = guardDerive(emptyList()) {
@@ -1283,6 +1341,7 @@ fun BooksScreen(repo: MissionRepository) {
             }
             SectionLabel("what it means")
             Note("feasible:false. A curve needs conviction dispersion, and with ${mass?.let { "${fmt(it * 100, 0)}%" } ?: "most"} of the mass piled on one value there are not ten deciles to fill (n=${curveN ?: "—"}). You can't calibrate against a verdict you derived (C-5).")
+            Note("And there is nothing to calibrate against anyway: calibration_artifact_hash is null and get_golden(\"calibration\") returns not_found. No artifact exists; the threshold was typed, not fitted.", UNK)
         }
         McCard("You cannot calibrate a score against a verdict you derived from it (C-5)", "run_select · decisions · get_limits") {
             KvRow("verdict rule", "verdict := (conviction ≥ ${threshold ?: 60})", SEV)
@@ -1749,6 +1808,7 @@ fun LearningPipelineScreen(repo: MissionRepository) {
                     ),
                 )
                 Row { lqFaults.forEach { Tag(it, SEV) } }
+                Note("T-5 · the blocker is truth, not volume: at the current rate the 5,000 T1 labels arrive in ~1.5 days (about 36 hours), so the corpus is not far away by count. But 0 are usable: every label carries all four faults, and more of an unusable label is still zero.", WARN)
                 Note(lq.optText("reason") ?: "—")
             }
         }
@@ -1817,9 +1877,11 @@ fun LearningPipelineScreen(repo: MissionRepository) {
             )
             SectionLabel("what it means")
             Note("Three of five reward terms cannot be computed today; the one that can (w_fmt) fails 99.7% of proposals. The reward function is the product (T-1), and it is poisoned before any RL runs.")
+            Note("Why w_cal matters (§6.7): the Brier honesty term is risk management inside the weights. An overconfident model sizes itself up exactly when it is wrong; w_cal is what makes the reward punish that. It is the term that cannot be computed, because the conviction-to-outcome join does not exist.", WARN)
         }
         McCard("§3 is not a risk list. It is a diagnosis.", "get_reward_audit · FINE-TUNING-PLAYBOOK §3 × the live ledger") {
             Note("The playbook names six ways RL will break the model. Five of them are already present: in a model that has never been tuned.")
+            Note("What the playbook predicts for each hack: reward-gaming → take-rate drifts to 0 · threshold-hugging → histogram spike at the cutoff · stop-minimising → TP hugging the floor · shadow-divergence → the live-vs-shadow gap widens · decode-gaming → guided-decode retries climb · rationalisation → rationale/verdict contradiction rises.", INFO)
             if (raHacks.isEmpty()) {
                 Note("get_reward_audit returned no rows: UNKNOWN.", UNK)
             } else {
@@ -1845,6 +1907,7 @@ fun LearningPipelineScreen(repo: MissionRepository) {
                     AUDITS.map { m -> row(m.text to NEUTRAL, m.status to SEV, m.why to NEUTRAL) },
                 )
                 Note("T-3 · an audit that cannot fail is not an audit. Six mitigations, zero of them can fire: not one is wired to a number that could go red.")
+                Note("§6.6, verbatim: letting RL run without the hacking audits is the anti-pattern. The audits are not optional hygiene, they are the design. Shipping the training loop before the audits fire is shipping the failure.", SEV)
             }
         }
         McCard("$principlesViolated of 12 normative principles violated", tool = "MASTER-SPEC §1.3", sub = "and every one is a learning input") {
