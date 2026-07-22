@@ -871,23 +871,18 @@ fun GovernanceScreen(repo: MissionRepository) {
             Stance("rules that should exist", "16", BAD),
         ),
     ) {
-        Ribbon(
-            "UNTOLD · the board that decides whether real money flows returns questions, not answers",
-            "Governance can read the board and the proposals inbox, and replay them, but it applies nothing. " +
-                "The ten §16.6 gates carry no PASS/FAIL field from get_go_no_go_status; each verdict below is " +
-                "COMPUTED here from the live ledger, and a gate whose source tool is not served renders honest " +
-                "UNKNOWN, never a flattering GREEN. Every operator action is a proposal (propose_action EXECUTES " +
-                "NOTHING); the executor honors only triadctl after its own confirm.",
-            SEV,
-        )
-
-        StatRow(
-            Triple("go / no-go", "NO-GO", SEV),
-            Triple("gates passing", "$passing / 10", BAD),
-            Triple("blocking", blockingList.size.toString(), BAD),
-            Triple("unknown", unknownList.size.toString(), UNK),
-            Triple("proposals", proposals.size.toString(), if (proposals.isEmpty()) UNK else INFO),
-            Triple("rules missing", "16", BAD),
+        // Hero: the verdict, the title, and one plain reading of what this board is and why it can't
+        // say yes. Folds the old UNTOLD ribbon (the meaning summary) so it lives in one place; the
+        // per-verdict breakdown lives in the board chart below, so the old StatRow was dropped as a
+        // straight restatement of the stance pills.
+        VerdictBanner(
+            title = "Governance",
+            word = "no-go",
+            said = "The board that clears real money reads every gate and replays every proposal, but applies " +
+                "nothing. The ten gates ship no verdict of their own, so each one below is computed live from the " +
+                "ledger; a gate whose source tool is missing reads UNKNOWN, never a flattering green. Every operator " +
+                "action here is a proposal that executes nothing.",
+            wordTone = SEV,
         )
 
         // ── the signature go/no-go board — ten gates, each verdict live from the ledger ──
@@ -985,11 +980,13 @@ fun GovernanceScreen(repo: MissionRepository) {
         // ── what actually works — honest UNKNOWN over a flattering default ──
         McCard("What actually works", tool = "get_kill_state · get_attestation · get_config_active", sub = "and it is not nothing") {
             Note("Sixteen findings in this series are something broken. This is the panel that can say a few things are genuinely, provably right.")
-            KvRow("control_path: false", if (ks != null || bs != null) "kill + breaker cannot act" else "—", if (ks != null || bs != null) GOOD else UNK)
-            KvRow("state: \"unknown\", not \"disarmed\"", killState, if (ks != null) GOOD else UNK)
-            KvRow("attestation is real", if (at == null) "—" else at.text("contracts_version") + " · " + at.text("manifest_sha").take(12) + "…", if (at != null) GOOD else UNK)
-            KvRow("dirty: false", if (ca == null) "—" else ca.text("preset") + (if (ca.bool("dirty")) " · DRAFT" else " · clean"), if (ca != null && !ca.bool("dirty")) GOOD else UNK)
-            KvRow("propose_action executes nothing", "genuinely advisory", GOOD)
+            LeverTable(buildList<Lever> {
+                add(Lever("control_path: false", if (ks != null || bs != null) "kill + breaker cannot act" else "—", if (ks != null || bs != null) GOOD else UNK))
+                add(Lever("state: \"unknown\", not \"disarmed\"", killState, if (ks != null) GOOD else UNK))
+                add(Lever("attestation is real", if (at == null) "—" else at.text("contracts_version") + " · " + at.text("manifest_sha").take(12) + "…", if (at != null) GOOD else UNK))
+                add(Lever("dirty: false", if (ca == null) "—" else ca.text("preset") + (if (ca.bool("dirty")) " · DRAFT" else " · clean"), if (ca != null && !ca.bool("dirty")) GOOD else UNK))
+                add(Lever("propose_action executes nothing", "genuinely advisory", GOOD))
+            })
             Ribbon(
                 "The governance design is excellent. The governance instrumentation is blind.",
                 "That is a far smaller problem than it looks: the fix is cheap. The proposal path is right, the " +
@@ -1032,9 +1029,7 @@ fun GovernanceScreen(repo: MissionRepository) {
         // ── the sixteen rules that don't exist ──
         McCard("Sixteen pages. Sixteen rules. Zero exist.", "every finding in this series, as a threshold") {
             Note("Every finding in this series is an alert rule that does not exist, and each is a single threshold over data already in the ledger. Not one requires new plumbing.")
-            GOV_RULES.forEachIndexed { i, (rule, value) ->
-                KvRow("${i + 1}. $rule", value, BAD)
-            }
+            LeverTable(GOV_RULES.mapIndexed { i, (rule, value) -> Triple("${i + 1}. $rule", value, BAD) })
             Note("§6.3 get_shadow_plane_alerts (the tool that would turn each finding into a firing rule) is not built. These sixteen are the findings; not one is a rule.", UNK)
             Ribbon(
                 "firing: 16 · pages: 0",
@@ -1088,8 +1083,10 @@ fun GovernanceScreen(repo: MissionRepository) {
                         else -> NEUTRAL
                     }
                     KvRow(p.obj("args").text("title", p.text("proposal_id")), disp.uppercase(), dispTone)
-                    KvRow("  kind · severity", p.text("kind") + " · " + p.text("severity"), NEUTRAL)
-                    KvRow("  id", p.text("proposal_id"), NEUTRAL)
+                    LeverTable(listOf(
+                        Triple("kind · severity", p.text("kind") + " · " + p.text("severity"), NEUTRAL),
+                        Triple("id", p.text("proposal_id"), NEUTRAL),
+                    ))
                     Note(p.text("rationale"), NEUTRAL)
                 }
                 Note("Replay a proposal to re-read its steps; the executor honors only triadctl after its own confirm.", INFO)
