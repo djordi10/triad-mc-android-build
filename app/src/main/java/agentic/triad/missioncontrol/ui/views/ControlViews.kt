@@ -158,12 +158,6 @@ fun ConfigScreen(repo: MissionRepository) {
         // editor affordances that operate on the CLIENT draft; the working Export change-plan is the
         // live ConfigDraftCard below. Nothing here applies to the running system (R-C1).
         McCard("The editor", tool = "config store · R-C1", sub = "draft over the applied baseline") {
-            SectionLabel("Draft state", divider = false)
-            KvRow("mode", "DRAFT EDITOR · READ + PROPOSE · R-C1 (apply only via triadctl)", INFO)
-            KvRow("applied profile", if (preset == "—") "—" else preset, NEUTRAL)
-            KvRow("fingerprint", fpShort, NEUTRAL)
-            KvRow("draft state", stateLabel, stateTone)
-            SectionLabel("Editor chips", divider = true)
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 Tag("applied-baseline ▾", NEUTRAL)
                 Tag("Save profile", NEUTRAL)
@@ -172,13 +166,10 @@ fun ConfigScreen(repo: MissionRepository) {
                 Tag("Export preset", INFO)
                 Tag("Export change-plan →", GOOD)
             }
-            Note("Full editor over the applied preset. Every control writes a draft; nothing applies from here (R-C1). Save profile / Discard / Import JSON / Export preset act on the client draft; Export change-plan produces the grouped ops for triad-config compile → triadctl config verify → apply. The live change-plan builder is the card below.", NEUTRAL)
+            Note("Client-draft affordances. The working change-plan builder is the card below.", NEUTRAL)
         }
 
-        McCard("Applied preset", tool = "get_config_active · get_config_preset", sub = "the served baseline") {
-            KvRow("preset name", preset, NEUTRAL)
-            KvRow("state", stateLabel, stateTone)
-            KvRow("fingerprint", fpRaw, NEUTRAL)
+        McCard("Applied preset", tool = "get_config_active · get_config_preset", sub = "metadata of the served baseline") {
             KvRow("schema", active.text("schema"), NEUTRAL)
             KvRow("source", active.text("src"), NEUTRAL)
             if (meta != null) {
@@ -393,25 +384,6 @@ fun ConfigScreen(repo: MissionRepository) {
         // The safe half that "already works": build a config change IN THE APP, read the diff, and
         // file it as a proposal. It never applies — there is no config_apply ("NO TOOL WRITES IT").
         ConfigDraftCard(repo, domains, fpRaw)
-
-        McCard("Operator actions", tool = "propose_action", sub = "proposals, never commands") {
-            SectionLabel("The actions", divider = false)
-            KvRow("global circuit breaker", "halt new entries immediately; exits keep managing", WARN)
-            KvRow("hard kill", "entries + requotes off, convert resting TPs to protective (two-step)", SEV)
-            KvRow("cancel all orders", "flatten the resting book (pre-live: none exist, payload still emitted)", WARN)
-            KvRow("pause symbol", "per-symbol entry pause, exits alive", NEUTRAL)
-            SectionLabel("Chips", divider = true)
-            Row { Tag("circuit breaker", WARN); Tag("hard kill", SEV); Tag("cancel all", WARN); Tag("pause symbol", NEUTRAL) }
-            Note("Every action emits a signed operator-action/1 payload {via:'config-gui', requires:'triadctl confirm'}. The executor honors only triadctl after its own confirm. The GUI cannot apply. Ever.")
-        }
-
-        Note("Config-Store SYSTEM controls do not exist on the server yet: they render as PEND and would only propose.", UNK)
-        PendBox("config_apply", "CRIT · apply a preset to the running system. ARMED (10s + CONFIRM); interlocked LIVE. Absent ⇒ probes tools/list, then files propose_action.")
-        PendBox("conn_activate", "CRIT · repoint the SYSTEM profile (demo/shadow/paper/live). LIVE hard-refused until the go/no-go board is clean.")
-        PendBox("svc_restart", "HIGH · stop(drain)+start a process. Refuses on executor/venue while anything rests. Absent ⇒ proposes.")
-        PendBox("cag_flush", "MED · evict the CAG cache. Absent ⇒ proposes. (Hit-rate 1.15%: flushing a cache that never hits changes nothing.)")
-        PendBox("llm_swap", "CRIT · load a model into a slot: the one control that would move the system, and the most dangerous. Absent ⇒ proposes.")
-        PendBox("mcp_token_issue", "CRIT · mint a scoped bearer token. Absent ⇒ proposes. mcp_token_revoke refuses the token you are using.")
 
         WhyBox("THE LAW · R-C1") {
             LawBlock(
