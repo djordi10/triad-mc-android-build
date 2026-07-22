@@ -1,14 +1,19 @@
-# SUITE wiring diagnosis + connect plan (LIVE-VERIFIED 2026-07-22)
+# TRIAD Mission Control — live-wiring diagnosis + connect plan (LIVE-VERIFIED 2026-07-22)
 
-Scope: the five SUITE views (21 Overview · 22 Symbols · 23 Lab · 24 Tables · 25 Venue),
+This doc covers **live-data wiring across the whole app**. Sections 0-6 are the SUITE deep-dive
+(where the work started); **section 7 is the app-wide inventory** of everything else that is not
+yet wired, grouped by whose job it is to fix.
+
+SUITE scope: the five SUITE views (21 Overview · 22 Symbols · 23 Lab · 24 Tables · 25 Venue),
 `ui/views/SuiteViews.kt` + `ui/views/SuiteData.kt`.
 
 All numbers below are from a **live MCP session on 2026-07-22** (the origin was 502 for a few
 minutes, then the watchdog respawned it and I pulled real tool dumps). This replaces the
 earlier snapshot guesswork.
 
-Split the way you asked: what the app can connect now, and what has to be connected on your
-side (one server env var), so the app diff stays small.
+The split is the same everywhere: what the app can connect now (app-side), what needs a server
+tool built (backend), and what needs a transport switched on (infra), so each fix lands with the
+smallest possible diff.
 
 ---
 
@@ -207,3 +212,63 @@ snapshot the next. Causes, in order of how often you will see them:
 
 Honest-data rule held throughout: nothing renders a fabricated number. A tool that is absent,
 DSN-gated, or feed-absent shows its real absent/zero state, never a made-up value.
+
+---
+
+## 7. App-wide wiring inventory (beyond SUITE)
+
+Everything else in the app that is not yet on live data, grouped by whose job it is. Same three
+buckets as SUITE. **Only bucket A is an app-side gap** — B and C are honest states where the app
+already shows the absence correctly (a PEND box or a "transport unavailable" line), so they are
+not bugs, they are waiting on a server tool or a transport.
+
+### A. Declared-but-unread — app-side, wire now (the SUITE-Overview pattern)
+
+The tool IS polled by the view's `*_TOOLS` list, then never read in the composable, so its data
+is fetched over the wire and thrown away. This is the exact gap that was just closed on SUITE
+Overview. Closing it is a small, additive, guarded diff (render only when the tool answers).
+
+| View | Tool declared-but-unread |
+|------|--------------------------|
+| Connections 19 (`ControlPlaneViews.kt`) | `get_config_preset`, `get_continuity` |
+| Reader/Writer 05 (`ReaderWriter.kt`) | `get_feed_health`, `get_view_catalog` |
+
+(SUITE's own leftovers in this bucket — `get_bank_dedup`, `get_shadow_bank`,
+`get_books_scoreboard`, `get_detector_registry`, `get_validator_rejects`, `get_book_definitions` —
+are declared for the Lab / bank context and light up with the DSN, so they are tracked under
+section 4B, not here.)
+
+### B. PEND — the server tool is not built (backend)
+
+The app already renders an honest "PEND · NOT BUILT" box for these; nothing can wire them until
+the server ships the tool.
+
+| View | Tool (what it would show) |
+|------|---------------------------|
+| Overview 01 (`Overview.kt`) | `get_money_path`, `get_risk_envelope`, `get_truth_coverage` (the "PEND trio", 404 until built) |
+| Strategy 08 (`Strategy.kt`) | `get_detector_split` (per-detector outcome split), `get_combo_registry` (per-combo win rate) |
+
+Until these ship, Strategy's per-detector rows honestly borrow their win rate from TRIAD-A and
+the combo rows read "NOT EMITTING / 0 rows / PEND", never a fabricated number.
+
+### C. Transport-gated — a transport must be switched on (infra)
+
+The tool exists but its underlying transport is off, so every read is `transport: unavailable`.
+This is the same shape as SUITE's DSN gap: an infra switch on liko's side, zero app change.
+
+| View | Reads | Transport needed |
+|------|-------|------------------|
+| Executor 02 + Ops 04 (`OperateViews.kt`) | latency budgets, lane headroom, watchdog stats, clock skew, exit-lane p99 | **Prometheus** |
+| Overview 01 (`Overview.kt`) | NATS bus status | the NATS bus (does not exist on the diagram by design) |
+| SUITE + Shadow/Books (`SuiteViews.kt`, `ModelLearnViews.kt`) | priced bank, shadow bank, dedup, book scoreboard | **`TRIAD_DATABANK_DSN`** (section 4B) |
+
+### Priority summary
+
+| Bucket | Nature | Owner | Action |
+|--------|--------|-------|--------|
+| **A** (4 tools) | fetched but not rendered | app | wire now, SUITE-Overview pattern |
+| **B** (5 tools) | server tool not built | backend | build the tool; app already shows PEND |
+| **C** (Prometheus · NATS · DSN) | transport off | infra / liko | switch the transport on; zero app change |
+
+The one line that unblocks the most at once is still `TRIAD_DATABANK_DSN` (bucket C) — it lights
+up the whole bank half of SUITE plus the Shadow/Books reads with no app change.
