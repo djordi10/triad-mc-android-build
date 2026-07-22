@@ -42,6 +42,7 @@ import agentic.triad.missioncontrol.mcp.ProposeAction
 import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.Gauge
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.LeverTable
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.theme.Line
@@ -520,10 +521,14 @@ fun PromptStudioScreen(repo: MissionRepository) {
         // ── P-2 / P-3 — the arming drawer ──
         McCard("Arm the studio", tool = "no MCP · direct to LLM (P-3)", sub = "P-2 · OFF until you turn it on") {
             SectionLabel("the target", divider = false)
-            KvRow("target", "$OLLAMA_BASE/api/generate", INFO)
-            KvRow("model", OLLAMA_MODEL, NEUTRAL)
-            KvRow("params", "temperature 0 · seed 7 · num_predict 350", NEUTRAL)
-            KvRow("state", if (armed) "ARMED" else "OFF · zero fetches to the LLM have been made", if (armed) BAD else UNK)
+            LeverTable(
+                listOf(
+                    Triple("target", "$OLLAMA_BASE/api/generate", INFO),
+                    Triple("model", OLLAMA_MODEL, NEUTRAL),
+                    Triple("params", "temperature 0 · seed 7 · num_predict 350", NEUTRAL),
+                    Triple("state", if (armed) "ARMED" else "OFF · zero fetches to the LLM have been made", if (armed) BAD else UNK),
+                ),
+            )
             SectionLabel("how the run works", divider = true)
             Note(
                 "The RUN path is the one in Mission Control that is NOT an MCP client. MCP is read-only " +
@@ -797,9 +802,13 @@ fun PromptStudioScreen(repo: MissionRepository) {
             if (pg == null) {
                 Note("no data: prompt_get not served yet. The studio still composes client-side.", UNK)
             } else {
-                KvRow("preset", pg.text("preset"), NEUTRAL)
-                KvRow("fingerprint", shortFp(pg.text("fingerprint")), NEUTRAL)
-                KvRow("applied_at", pg.text("applied_at"), NEUTRAL)
+                LeverTable(
+                    listOf(
+                        Triple("preset", pg.text("preset"), NEUTRAL),
+                        Triple("fingerprint", shortFp(pg.text("fingerprint")), NEUTRAL),
+                        Triple("applied_at", pg.text("applied_at"), NEUTRAL),
+                    ),
+                )
                 if (pgTemplateReal) {
                     VerdictBanner(
                         word = "PROMPT PINNED",
@@ -828,20 +837,12 @@ fun PromptStudioScreen(repo: MissionRepository) {
                 }
                 val ds = pg.text("prompt_draft_system", "")
                 val dn = pg.text("prompt_draft_notes", "")
-                KvRow(
-                    "prompt_draft_system",
-                    if (ds.isEmpty() || ds == "null") "—" else "\"${ds.take(60)}\"",
-                    if (ds.isEmpty() || ds == "null") UNK else NEUTRAL,
-                )
-                KvRow(
-                    "prompt_draft_notes",
-                    if (dn.isEmpty() || dn == "null") "—" else "\"${dn.take(60)}\"",
-                    if (dn.isEmpty() || dn == "null") UNK else NEUTRAL,
-                )
-                KvRow(
-                    "writable",
-                    if (pg.bool("writable")) "true" else "false (writes stay the governed proposal path)",
-                    UNK,
+                LeverTable(
+                    listOf(
+                        Triple("prompt_draft_system", if (ds.isEmpty() || ds == "null") "—" else "\"${ds.take(60)}\"", if (ds.isEmpty() || ds == "null") UNK else NEUTRAL),
+                        Triple("prompt_draft_notes", if (dn.isEmpty() || dn == "null") "—" else "\"${dn.take(60)}\"", if (dn.isEmpty() || dn == "null") UNK else NEUTRAL),
+                        Triple("writable", if (pg.bool("writable")) "true" else "false (writes stay the governed proposal path)", UNK),
+                    ),
                 )
                 pg.obj("render_context")?.let { rc ->
                     KvRow("render_context", nn(rc, "status"), if (nn(rc, "status") == "ok") GOOD else BAD)

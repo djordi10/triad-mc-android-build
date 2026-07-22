@@ -1740,10 +1740,14 @@ fun LearningPipelineScreen(repo: MissionRepository) {
                     unit = "rows",
                     labelWidth = 96,
                 )
-                KvRow("priced", if (lqPriced) "true" else "FALSE: ${fmt(lqFeeApplied, 0)} bps applied", if (lqPriced) GOOD else SEV)
-                KvRow("fill model", "$lqFill (required: $lqFillReq)", if (lqFill == lqFillReq) GOOD else BAD)
-                KvRow("resolvers writing", lqResolvers?.toString() ?: "—", if ((lqResolvers ?: 1) > 1) BAD else GOOD)
-                KvRow("resolver agreement", lqAgreement?.let { fmt(it, 2) } ?: "— (unmeasured)", UNK)
+                LeverTable(
+                    listOf(
+                        Triple("priced", if (lqPriced) "true" else "FALSE: ${fmt(lqFeeApplied, 0)} bps applied", if (lqPriced) GOOD else SEV),
+                        Triple("fill model", "$lqFill (required: $lqFillReq)", if (lqFill == lqFillReq) GOOD else BAD),
+                        Triple("resolvers writing", lqResolvers?.toString() ?: "—", if ((lqResolvers ?: 1) > 1) BAD else GOOD),
+                        Triple("resolver agreement", lqAgreement?.let { fmt(it, 2) } ?: "— (unmeasured)", UNK),
+                    ),
+                )
                 Row { lqFaults.forEach { Tag(it, SEV) } }
                 Note(lq.optText("reason") ?: "—")
             }
@@ -1860,11 +1864,15 @@ fun LearningPipelineScreen(repo: MissionRepository) {
             )
         }
         McCard("Who is sitting in the adjudicator's chair?", "FINE-TUNING-PLAYBOOK §4.1 · §6.1 · get_model_registry") {
-            KvRow("base assumed", "qwen3-8B (v5 lineage), LoRA artifacts", NEUTRAL)
-            KvRow("FinGPT", "stays in the BIAS role per TRIAD-ALIGN", NEUTRAL)
-            KvRow("model_id (live)", "fingpt-crypto:v5-full-test", SEV)
-            KvRow("registry entries", "NONE: schema present · slots [${lpSlots.joinToString(",")}]", SEV)
-            KvRow("slot B", "NEVER RUN: the race has never happened", SEV)
+            LeverTable(
+                listOf(
+                    Triple("base assumed", "qwen3-8B (v5 lineage), LoRA artifacts", NEUTRAL),
+                    Triple("FinGPT", "stays in the BIAS role per TRIAD-ALIGN", NEUTRAL),
+                    Triple("model_id (live)", "fingpt-crypto:v5-full-test", SEV),
+                    Triple("registry entries", "NONE: schema present · slots [${lpSlots.joinToString(",")}]", SEV),
+                    Triple("slot B", "NEVER RUN: the race has never happened", SEV),
+                ),
+            )
             Ribbon(
                 "Either the naming is misleading, or the bias model is adjudicating",
                 "Nothing in this system can tell you which: get_model_registry returns a schema and no entries. The one artifact that exists precisely to answer this question is empty. And the model's name ends in -full-test.",
