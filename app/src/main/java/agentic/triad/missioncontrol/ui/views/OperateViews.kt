@@ -193,7 +193,7 @@ private val ExHatchBrush = Brush.linearGradient(
 /* ---- the §11.3 validator chain — ALWAYS 14, ALWAYS in spec order (AT-EX1) ---- */
 private val EX_CHAIN = listOf(
     Triple(1, "decision_invalid", "Decision schema + slot A + validator.passed"),
-    Triple(2, "candidate_live", "Candidate still live — not expired, not invalidated (watchdog table)"),
+    Triple(2, "candidate_live", "Candidate still live: not expired, not invalidated (watchdog table)"),
     Triple(3, "context_stale", "Context freshness: now − packet.ts ≤ 30s"),
     Triple(4, "conviction_threshold", "conviction ≥ conviction_take_threshold"),
     Triple(5, "zone_subset", "Zone-refined ⊆ candidate zone (defense in depth)"),
@@ -694,7 +694,7 @@ private fun ExecEntryRail(m: ExModel) {
                 m.fired[6]?.let { f ->
                     append(" ${if (f.count == 2) "Both" else exN0(f.count)} takes reached check 6 and died on ")
                     withStyle(b) { append(f.raws.firstOrNull() ?: "stop_bounds") }
-                    append(" — see SIZING.")
+                    append(". See SIZING.")
                 }
             },
             color = PineTextDim, fontSize = 11.5.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 10.dp),
@@ -709,7 +709,7 @@ private fun ExecEntryRail(m: ExModel) {
                 modifier = Modifier.padding(top = 10.dp),
             )
             Text(
-                "conv ${exPct(choke.num("conv"))} vs floor ${exPct(choke.num("floor"), 0)} — ${choke.text("reason", "—")}",
+                "conv ${exPct(choke.num("conv"))} vs floor ${exPct(choke.num("floor"), 0)}: ${choke.text("reason", "—")}",
                 color = PineTextDim, fontSize = 11.5.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp),
             )
             val tops = guardDerive(emptyList<String>()) {
@@ -786,11 +786,11 @@ private fun ExecExitRail(m: ExModel) {
                 append("Exits pay the spread, ")
                 withStyle(b) { append("always") }
                 append(
-                    " — maker patience is not permitted on the way out. The lane has its own connection, its own " +
+                    ". Maker patience is not permitted on the way out. The lane has its own connection, its own " +
                         "consumer, and a reserved rate-limit budget so entry churn can never starve a cancel (§7.3). ",
                 )
                 if (m.exitBlind) withStyle(b) { append("None of that is currently measured.") }
-                else withStyle(b) { append("Measured — verdict ${m.exitStrip}.") }
+                else withStyle(b) { append("Measured: verdict ${m.exitStrip}.") }
             },
             color = ExMaroonText, fontSize = 11.5.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 10.dp),
         )
@@ -953,7 +953,7 @@ private fun ExecChkRow(c: ExChk) {
 
 @Composable
 private fun ExecGovernorCard(m: ExModel) {
-    ExecCard("Governor — the 14-check chain (§11.3)", "get_governor_refusals · get_validator_rejects · get_governor_chain") {
+    ExecCard("Governor: the 14-check chain (§11.3)", "get_governor_refusals · get_validator_rejects · get_governor_chain") {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp)) {
             ExecStatBig("refused", exN0(m.refusedTotal), "all-time", Red)
             ExecStatBig("passed", exN0(m.govPassed), "= intents emitted", if (m.govPassed > 0) Emerald else Sev)
@@ -963,7 +963,7 @@ private fun ExecGovernorCard(m: ExModel) {
             ExecRibbonBox(
                 "X-6 · ${m.nullCheck} refusals carry check_id = null.",
                 "The refusal envelope is required to name the check that rejected. These ${m.nullCheck} rows " +
-                    "cannot be attributed to a rule — they are counted here and mapped to check 1 by convention, " +
+                    "cannot be attributed to a rule: they are counted here and mapped to check 1 by convention, " +
                     "which is a guess. Fix the envelope writer.",
             )
         }
@@ -976,14 +976,14 @@ private fun ExecGovernorCard(m: ExModel) {
             LawBlock(
                 "X-1",
                 "The chain short-circuits on the first failure and runs in spec order. ${m.neverRun} checks have " +
-                    "never been reached. A check that has never run has never been tested — it renders hatched, " +
+                    "never been reached. A check that has never run has never been tested: it renders hatched, " +
                     "not green. This is the same law as the Overview's coverage rule, applied to a rulebook instead " +
                     "of a probe set.",
             )
         }
         if (!m.chainServed) {
             Note(
-                "get_governor_chain not served — the ladder above is stitched client-side from " +
+                "get_governor_chain not served: the ladder above is stitched client-side from " +
                     "get_governor_refusals by mapping check_id → spec row (wiring §3.1).",
                 UNK,
             )
@@ -1052,7 +1052,7 @@ private fun ExecIdentBlock(m: ExModel, s: ExSizing) {
 private fun ExecStopGeometry(m: ExModel) {
     val sg = m.sgeo
     if (sg == null) {
-        ExecBlindCell("get_stop_geometry not served — the stop-width distribution is honestly UNKNOWN")
+        ExecBlindCell("get_stop_geometry not served: the stop-width distribution is honestly UNKNOWN")
         return
     }
     val sw = sg.obj("stop_width_bps")
@@ -1068,15 +1068,15 @@ private fun ExecStopGeometry(m: ExModel) {
     }
     if ((belowPct ?: 0.0) > 50.0) {
         ExecRibbonBox(
-            "THE ANECDOTE IS THE DISTRIBUTION — ${fmt(belowPct, 1)}% of takes sit below the ${fmt(floorBps, 0)}bps floor.",
-            "The bulk of the book is narrower than min_stop_width_bps — a narrower-than-floor stop inflates " +
+            "THE ANECDOTE IS THE DISTRIBUTION: ${fmt(belowPct, 1)}% of takes sit below the ${fmt(floorBps, 0)}bps floor.",
+            "The bulk of the book is narrower than min_stop_width_bps: a narrower-than-floor stop inflates " +
                 "implied notional (X-3).",
         )
     }
     val pctBars = guardDerive(emptyList<Bar>()) {
         listOf("p5", "p25", "p50", "p75", "p95").mapNotNull { k ->
             sw.num(k)?.let { v -> Bar(k, v, if (floorBps != null && v < floorBps) BAD else NEUTRAL) }
-        } + (if (floorBps != null) listOf(Bar("min floor", floorBps, SEV, "stop_bounds.min_width_bps — the limit marker")) else emptyList())
+        } + (if (floorBps != null) listOf(Bar("min floor", floorBps, SEV, "stop_bounds.min_width_bps: the limit marker")) else emptyList())
     }
     if (pctBars.isNotEmpty()) HBarChart(pctBars, unit = "bps", labelWidth = 96)
     // The served hist is [lo, hi, count] 5-bps bins — rebinned to 25 bps for a phone. A bin fully
@@ -1121,7 +1121,7 @@ private fun ExecStopGeometry(m: ExModel) {
     val overCap = nn(sg, "implied_notional_over_cap_pct")
     KvRow(
         "implied notional over max_notional",
-        if (overCap == "—") "— (served null — honestly uncomputed)" else "$overCap%",
+        if (overCap == "—") "— (served null, honestly uncomputed)" else "$overCap%",
         if (overCap == "—") UNK else BAD,
     )
     val bySym = guardDerive(emptyList<JsonObject>()) { sg.arr("by_symbol").rows() }
@@ -1145,13 +1145,13 @@ private fun ExecStopGeometry(m: ExModel) {
 private fun ExecSizingCard(m: ExModel) {
     val s = m.S
     ExecCard(
-        "Sizing — the identity, worked on the last take",
+        "Sizing: the identity, worked on the last take",
         "get_decision(${m.subject.take(8)}…) · get_limits · get_stop_geometry",
     ) {
         if (s == null) {
             ExecBlindCell(
-                if (m.dec == null) "no take to work — get_decision is not served zero-arg"
-                else "no take to work — the governor has passed nothing",
+                if (m.dec == null) "no take to work: get_decision is not served zero-arg"
+                else "no take to work: the governor has passed nothing",
             )
         } else {
             ExecIdentBlock(m, s)
@@ -1161,14 +1161,14 @@ private fun ExecSizingCard(m: ExModel) {
                 "base_qty is inversely proportional to stop distance. A ${fmt(s.bps, 1)} bps stop on " +
                     "${m.dec.text("symbol", "the symbol")} at ${fmt(s.mid, 0)} asks the deterministic sizer for " +
                     "${fmt(s.baseQty, 1)} ${s.unit} = \$${exN0(s.notional.toLong())} against a " +
-                    "\$${exN0(s.cap?.toLong())} cap — a ${fmt(s.over, 1)}× over-cap position. The stop-width " +
+                    "\$${exN0(s.cap?.toLong())} cap: a ${fmt(s.over, 1)}× over-cap position. The stop-width " +
                     "floor is not bureaucracy: it is the last thing standing between the model's geometry and a " +
                     "blown account. The model is emitting stops " +
                     "${s.floorBps?.let { fmt(it / s.bps, 1) } ?: "—"}× too tight. That is the defect. " +
                     "Everything downstream is a symptom.",
             )
             ExecHr()
-            ExecEyebrow("EQUITY SENSITIVITY — THE BREACH GETS WORSE, NOT BETTER")
+            ExecEyebrow("EQUITY SENSITIVITY: THE BREACH GETS WORSE, NOT BETTER")
             MiniTable(
                 listOf("equity", "base_qty", "notional", "vs cap"),
                 listOf(25_000.0, 50_000.0, 100_000.0).map { eqty ->
@@ -1183,16 +1183,16 @@ private fun ExecSizingCard(m: ExModel) {
                 },
             )
             Note(
-                "Equity source: venue_wallet_snapshot — absent in the shadow build, so \$25,000 is a stated " +
+                "Equity source: venue_wallet_snapshot, absent in the shadow build, so \$25,000 is a stated " +
                     "assumption, not a read. The ratio is what matters, and the ratio does not depend on it.",
             )
         }
         ExecHr()
-        ExecEyebrow("STOP GEOMETRY — THE DISTRIBUTION BEHIND THE ANECDOTE (§3.2)")
+        ExecEyebrow("STOP GEOMETRY: THE DISTRIBUTION BEHIND THE ANECDOTE (§3.2)")
         ExecStopGeometry(m)
         WhyBox("THE LAW · X-3") {
             Note(
-                "X-3: sizing is an identity — size = risk% · equity / stop_distance. The below-floor share is the " +
+                "X-3: sizing is an identity (size = risk% · equity / stop_distance). The below-floor share is the " +
                     "sizing anecdote, quantified; a null over-cap share stays null, never a fabricated zero.",
             )
         }
@@ -1254,7 +1254,7 @@ private fun ExecVerdictBar(t: String, ok: Boolean) {
 @Composable
 private fun ExecExitDetailCard(m: ExModel) {
     ExecCard(
-        "Exit rail (P3) — can I still get out?",
+        "Exit rail (P3): can I still get out?",
         "get_exit_lane_status · get_exec_quality · get_lane_headroom · get_watchdog_stats",
         sev = m.exitBlind,
     ) {
@@ -1262,12 +1262,12 @@ private fun ExecExitDetailCard(m: ExModel) {
             ExecRibbonBox(
                 "The exit rail is entirely unmeasured.",
                 "Every live value below reads transport: unavailable (prometheus). P3 says nothing may suppress " +
-                    "an exit — but you cannot assert P3 holds. You can only assert that you have not looked. " +
+                    "an exit, but you cannot assert P3 holds. You can only assert that you have not looked. " +
                     "Three of the nine §16.6 gates (1 · venue campaign, 3 · kill drill, 4 · cancel-on-disconnect) " +
                     "live in this panel, and none can be signed while Prometheus is absent.",
             )
         } else {
-            ExecRibbonBox("Prometheus answers.", "Live p99s below are measured — the server verdict is ${m.exitStrip}.", "ok")
+            ExecRibbonBox("Prometheus answers.", "Live p99s below are measured. The server verdict is ${m.exitStrip}.", "ok")
         }
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
             Text("STAGE", color = Ink2, fontFamily = ExMono, fontSize = 9.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -1297,7 +1297,7 @@ private fun ExecExitDetailCard(m: ExModel) {
         val isoV = nn(iso, "value")
         ExecGuaranteeRow(
             "fast-path isolation",
-            "§7.3 — own conn, own consumer, bus as durable mirror · §21.5 weekly drill · last drill ${nn(iso, "last_drill_ts")}",
+            "§7.3: own conn, own consumer, bus as durable mirror · §21.5 weekly drill · last drill ${nn(iso, "last_drill_ts")}",
         ) {
             if (isoV == "true") ExecTagChip("VERIFIED", "ok") else ExecTagChip("NEVER DRILLED", "unk", hatch = true)
         }
@@ -1305,7 +1305,7 @@ private fun ExecExitDetailCard(m: ExModel) {
             ?: m.vs.obj("cancel_on_disconnect").bool("supported")
         ExecGuaranteeRow(
             "cancel-on-disconnect",
-            "Binance USD-M has none — a heartbeat-flatten watchdog must be signed off (gate 4) · " +
+            "Binance USD-M has none: a heartbeat-flatten watchdog must be signed off (gate 4) · " +
                 "armed ${nn(m.exitLane, "heartbeat_flatten_armed")}",
         ) {
             if (codSupported) ExecTagChip("SUPPORTED", "ok") else ExecTagChip("NOT SUPPORTED", "bad")
@@ -1313,7 +1313,7 @@ private fun ExecExitDetailCard(m: ExModel) {
         val killDrill = nn(m.exitLane, "kill_drill_last_ts")
         ExecGuaranteeRow(
             "kill drill fired for real (RB-3)",
-            "gate 3 — flatten must be confirmed on the venue, not in sim",
+            "gate 3: flatten must be confirmed on the venue, not in sim",
         ) {
             if (killDrill == "—") ExecTagChip("NEVER", "unk", hatch = true) else ExecTagChip(killDrill, "ok")
         }
@@ -1353,12 +1353,12 @@ private fun ExecSmChips(states: List<String>, counts: Map<String, Int>) {
 
 @Composable
 private fun ExecVenueCard(m: ExModel) {
-    ExecCard("Venue & orders — what the exchange says", "get_open_orders · get_positions · get_venue_session", sev = !m.reconciled) {
+    ExecCard("Venue & orders: what the exchange says", "get_open_orders · get_positions · get_venue_session", sev = !m.reconciled) {
         if (!m.reconciled) {
             ExecRibbonBox(
                 "X-4 · last_reconcile_ts = null.",
                 "The reconciler has never run. P10 says the exchange is the source of truth and local state is " +
-                    "only a cache — but this cache has never been compared to anything. That is a defect, not a " +
+                    "only a cache, but this cache has never been compared to anything. That is a defect, not a " +
                     "clean slate. Go/no-go gate 5 cannot be signed.",
             )
         } else {
@@ -1383,7 +1383,7 @@ private fun ExecVenueCard(m: ExModel) {
         )
         Note(
             "Re-quotes chain by replaces_oms_order_id. Illegal transitions crash loudly in dev and alarm in " +
-                "prod — the state machine is the spec.",
+                "prod. The state machine is the spec.",
         )
         ExecHr()
         ExecEyebrow("POSITION STATE MACHINE · §12.7")
@@ -1393,37 +1393,37 @@ private fun ExecVenueCard(m: ExModel) {
         )
         Note(
             "defensive is an overlay flag (F4/F7/F10). Every transition is journalled write-ahead, before " +
-                "acting — that is what makes F6 restart-safe.",
+                "acting. That is what makes F6 restart-safe.",
         )
         ExecHr()
         val keys = m.vs.obj("keys")
         val wdr = nn(keys, "withdrawal_scoped_call_rejected")
         if (wdr == "—") {
             ExecRibbonBox(
-                "Key safety — Sev-1 #2, never probed.",
+                "Key safety: Sev-1 #2, never probed.",
                 "Boot must make a withdrawal-scoped call expecting rejection and an IP-allowlist check expecting " +
                     "enforcement. A key that could withdraw must fail boot. This build holds no keys, so the probe " +
-                    "has never run — and gate 2 cannot be signed.",
+                    "has never run, and gate 2 cannot be signed.",
                 "am",
             )
         } else {
             ExecRibbonBox(
                 "Key safety probe: withdrawal-scoped call rejected = $wdr · IP allowlist enforced = ${nn(keys, "ip_allowlist_enforced")}.",
-                if (wdr == "true") "Gate 2 evidence exists — verify the dossier before signing." else "A key that could withdraw MUST fail boot (Sev-1 #2).",
+                if (wdr == "true") "Gate 2 evidence exists. Verify the dossier before signing." else "A key that could withdraw MUST fail boot (Sev-1 #2).",
                 if (wdr == "true") "ok" else "sev",
             )
         }
         // fold-in: the rest of get_venue_session (§3.4) — order-id map · reconciler · COD
         if (m.vs != null) {
-            ExecEyebrow("VENUE SESSION · KEYS · RECONCILER — get_venue_session (§3.4)")
+            ExecEyebrow("VENUE SESSION · KEYS · RECONCILER · get_venue_session (§3.4)")
             val oim = m.vs.obj("order_id_map")
             val orphans = oim.int("orphans") ?: 0
             val phantoms = oim.int("phantoms") ?: 0
             if (orphans + phantoms > 0) {
                 ExecRibbonBox(
-                    "DIVERGENT — ${oim.int("entries") ?: 0} entries · $orphans orphans · $phantoms phantoms.",
+                    "DIVERGENT: ${oim.int("entries") ?: 0} entries · $orphans orphans · $phantoms phantoms.",
                     "Local order ids with no venue counterpart. " +
-                        if (m.reconciled) "Reconcile evidence exists — square it." else "With last_reconcile_ts null, nothing has ever squared this ledger against a venue.",
+                        if (m.reconciled) "Reconcile evidence exists. Square it." else "With last_reconcile_ts null, nothing has ever squared this ledger against a venue.",
                 )
             }
             KvRow("keys present", nn(keys, "present"), NEUTRAL)
@@ -1446,7 +1446,7 @@ private fun ExecVenueCard(m: ExModel) {
                 if (cod.bool("supported")) GOOD else WARN,
             )
         } else {
-            Note("get_venue_session not served — session, keys, order-id map and reconciler are honestly UNKNOWN (wiring §3.4).", UNK)
+            Note("get_venue_session not served: session, keys, order-id map and reconciler are honestly UNKNOWN (wiring §3.4).", UNK)
         }
     }
 }
@@ -1476,7 +1476,7 @@ private fun ExecHopRow(h: JsonObject) {
             val id = nn(h, "id")
             when {
                 id != "—" -> Text(id, color = if (ok) Emerald else Ink, fontFamily = ExMono, fontSize = 10.sp)
-                absent -> Text("not produced — the governor refused", color = Ink2, fontFamily = ExMono, fontSize = 10.sp)
+                absent -> Text("not produced: the governor refused", color = Ink2, fontFamily = ExMono, fontSize = 10.sp)
                 else -> Text("id: null · context_hash: null", color = Red, fontFamily = ExMono, fontSize = 10.sp)
             }
             val bh = h.text("body_hash", "")
@@ -1494,10 +1494,10 @@ private fun ExecHopRow(h: JsonObject) {
 
 @Composable
 private fun ExecReplayCard(m: ExModel) {
-    ExecCard("Replay (P4) — can this trade be reproduced?", "get_decision_chain · get_decision", sev = m.chainVerified == false) {
+    ExecCard("Replay (P4): can this trade be reproduced?", "get_decision_chain · get_decision", sev = m.chainVerified == false) {
         when (m.chainVerified) {
             false -> ExecRibbonBox(
-                "X-7 · P4 VIOLATION — chain_verified: false.",
+                "X-7 · P4 VIOLATION · chain_verified: false.",
                 "The decision envelope carries context_hash = ${exSh(m.dec.text("context_hash", ""), 10)}…, but " +
                     "the ledger cannot produce the packet it names: the packet hop has no id and no hash. This " +
                     "trade cannot be replayed. P4: \"if a trade cannot be replayed, the system that produced it " +
@@ -1506,8 +1506,8 @@ private fun ExecReplayCard(m: ExModel) {
             )
             true -> ExecRibbonBox("chain_verified: true.", "", "ok")
             null -> ExecRibbonBox(
-                "REPLAY UNKNOWN — get_decision_chain is not served zero-arg.",
-                "The chain cannot be pulled without a decision_id. chain_verified is UNKNOWN — never assumed " +
+                "REPLAY UNKNOWN: get_decision_chain is not served zero-arg.",
+                "The chain cannot be pulled without a decision_id. chain_verified is UNKNOWN, never assumed " +
                     "healthy (X-7).",
                 "unk",
             )
@@ -1537,7 +1537,7 @@ private fun ExecReplayCard(m: ExModel) {
                 Text("validator", color = Ink2, fontSize = 12.sp, modifier = Modifier.width(110.dp))
                 if (m.dec.obj("validator").bool("passed")) ExecTagChip("PASSED", "ok") else ExecTagChip("FAILED", "bad")
                 Text(
-                    "the I8 output validator passed it. The governor still refused it — defense in depth.",
+                    "the I8 output validator passed it. The governor still refused it: defense in depth.",
                     color = Ink2, fontSize = 10.sp, lineHeight = 13.sp, modifier = Modifier.padding(start = 6.dp).weight(1f),
                 )
             }
@@ -1557,12 +1557,12 @@ private fun ExecReplayCard(m: ExModel) {
                 Text(
                     "This is evidence, never an instruction. It is never parsed, never routed, and never used " +
                         "for control flow (P2). It is also, in this case, a plausible-sounding sentence attached " +
-                        "to a stop ${ratio ?: "—"}× too tight — which is exactly why the governor does not read it.",
+                        "to a stop ${ratio ?: "—"}× too tight, which is exactly why the governor does not read it.",
                     color = ExAmText, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 7.dp),
                 )
             }
         } else {
-            Note("get_decision not served zero-arg — model, checkpoint, latency and the untrusted rationale are honestly UNKNOWN.", UNK)
+            Note("get_decision not served zero-arg: model, checkpoint, latency and the untrusted rationale are honestly UNKNOWN.", UNK)
         }
     }
 }
@@ -1589,7 +1589,7 @@ private fun ExecQualityRow(metric: String, target: String, src: JsonObject?, ser
 
 @Composable
 private fun ExecQualityCard(m: ExModel) {
-    ExecCard(if (m.eqServed) "Execution quality" else "Execution quality — blind", "get_exec_quality · get_clock_skew · get_limits") {
+    ExecCard(if (m.eqServed) "Execution quality" else "Execution quality: blind", "get_exec_quality · get_clock_skew · get_limits") {
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
             Text("METRIC", color = Ink2, fontFamily = ExMono, fontSize = 9.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Text("TARGET", color = Ink2, fontFamily = ExMono, fontSize = 9.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, modifier = Modifier.width(76.dp))
@@ -1610,7 +1610,7 @@ private fun ExecQualityCard(m: ExModel) {
         ExecMetaRow("defensive after", "${m.etim.int("consecutive_reject_defensive") ?: 3} consecutive venue rejects")
         ExecMetaRow("gateway queue", "${m.lim.obj("gateway").int("queue_depth_per_slot") ?: 8} per slot")
         Note(
-            "The budgets are shown even though nothing measures them — so you know what good would have meant " +
+            "The budgets are shown even though nothing measures them, so you know what good would have meant " +
                 "before you could see it. A budget you are not measuring is a wish.",
         )
     }
@@ -1620,11 +1620,11 @@ private fun ExecQualityCard(m: ExModel) {
 @Composable
 private fun ExecProposeCard() {
     val ctx = LocalContext.current
-    ExecCard("Propose — the only write on this page", "propose_action · operator-action/1") {
+    ExecCard("Propose: the only write on this page", "propose_action · operator-action/1") {
         WhyBox("THE LAW · X-5 · read-only wall") {
             Note(
                 "X-5: the Executor is the only service with exchange keys. This GUI has none. There is no cancel, " +
-                    "no flatten, no arm, no release here — and there never will be. What you can do is file a " +
+                    "no flatten, no arm, no release here, and there never will be. What you can do is file a " +
                     "proposal that a human runs at triadctl.",
             )
         }
@@ -1634,7 +1634,7 @@ private fun ExecProposeCard() {
             modifier = Modifier.padding(top = 9.dp)
                 .background(Emerald, RoundedCornerShape(8.dp))
                 .clickable {
-                    Toast.makeText(ctx, "X-5 — the GUI holds no keys. File it from the ✎ Propose action in the app bar.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(ctx, "X-5: the GUI holds no keys. File it from the ✎ Propose action in the app bar.", Toast.LENGTH_LONG).show()
                 }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         )
@@ -1647,15 +1647,15 @@ private fun ExecServerReads(m: ExModel) {
     Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).height(1.dp).background(Line))
         Text(
-            "SERVER READS — BEYOND THE PAGE SPEC", color = Unk, fontFamily = ExMono, fontSize = 9.sp,
+            "SERVER READS: BEYOND THE PAGE SPEC", color = Unk, fontFamily = ExMono, fontSize = 9.sp,
             letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 8.dp),
         )
         Box(Modifier.weight(1f).height(1.dp).background(Line))
     }
-    ExecCard("Risk envelope — limits vs observed", "get_risk_envelope") {
+    ExecCard("Risk envelope: limits vs observed", "get_risk_envelope") {
         val re = m.re
         if (re == null) {
-            ExecBlindCell("get_risk_envelope not served — the envelope is honestly UNKNOWN")
+            ExecBlindCell("get_risk_envelope not served: the envelope is honestly UNKNOWN")
         } else {
             val noStop = re.int("fills_without_armed_stop")
             val unprot = re.num("unprotected_notional_quote")
@@ -1692,10 +1692,10 @@ private fun ExecServerReads(m: ExModel) {
             Row(Modifier.padding(top = 4.dp)) {
                 ExecTagChip(if (re.bool("caps_present")) "CAPS PRESENT" else "CAPS ABSENT", if (re.bool("caps_present")) "ok" else "bad")
             }
-            Note("source: ${re.text("source", "—")} — breaker/kill 'unknown' renders UNKNOWN, never SAFE.")
+            Note("source: ${re.text("source", "—")}. Breaker/kill 'unknown' renders UNKNOWN, never SAFE.")
         }
     }
-    ExecCard("Exposure — per symbol · global", "get_exposure") {
+    ExecCard("Exposure: per symbol · global", "get_exposure") {
         val ex = m.exposure
         if (ex == null) {
             ExecBlindCell("get_exposure not served")
@@ -1725,9 +1725,9 @@ private fun ExecServerReads(m: ExModel) {
         KvRow("kill", "$klState · armed ${nn(m.kl, "armed")} · scope ${m.kl.text("scope", "—")}", if (klState == "unknown") UNK else if (klState == "armed") SEV else GOOD)
         KvRow("sim gap · real / sim fills", "${nn(m.simGap, "real_fills")} / ${nn(m.simGap, "sim_fills")}", NEUTRAL)
         KvRow("sim gap · verdict", m.simGap.text("verdict", "—"), if (m.simGap.text("verdict", "") == "HONEST") GOOD else UNK)
-        Note("lane: ${m.simGap.text("lane", "—")} — breaker/kill 'unknown' is UNKNOWN, never SAFE.")
+        Note("lane: ${m.simGap.text("lane", "—")}. Breaker/kill 'unknown' is UNKNOWN, never SAFE.")
     }
-    ExecCard("Latency budgets — full roster (§17.1)", "get_latency_budgets") {
+    ExecCard("Latency budgets: full roster (§17.1)", "get_latency_budgets") {
         if (m.lbRows.isNotEmpty()) {
             MiniTable(
                 listOf("stage", "budget", "live"),
@@ -1747,22 +1747,22 @@ private fun ExecServerReads(m: ExModel) {
         }
         KvRow("config version", m.lb.text("config_version", "—"), NEUTRAL)
         KvRow("clock-skew halt", m.lb.int("clock_skew_halt_ms")?.let { "${it}ms" } ?: "—", NEUTRAL)
-        Note("X-2: a budget you are not measuring is a wish — live values render UNAVAILABLE until Prometheus is present.")
+        Note("X-2: a budget you are not measuring is a wish. Live values render UNAVAILABLE until Prometheus is present.")
     }
     ExecCard("Prometheus lane reads", "get_lane_headroom · get_watchdog_stats · get_clock_skew") {
         if (m.lh != null) {
             ExecEyebrow("LANE HEADROOM")
             exPrimRows(m.lh).forEach { (k, v) -> KvRow(k, v, NEUTRAL) }
-        } else KvRow("lane headroom", "UNAVAILABLE — transport (prometheus)", UNK)
+        } else KvRow("lane headroom", "UNAVAILABLE: transport (prometheus)", UNK)
         if (m.wd != null) {
             ExecEyebrow("WATCHDOG")
             exPrimRows(m.wd).forEach { (k, v) -> KvRow(k, v, NEUTRAL) }
-        } else KvRow("watchdog stats", "UNAVAILABLE — transport (prometheus)", UNK)
+        } else KvRow("watchdog stats", "UNAVAILABLE: transport (prometheus)", UNK)
         if (m.cs != null) {
             ExecEyebrow("CLOCK SKEW")
             exPrimRows(m.cs).forEach { (k, v) -> KvRow(k, v, NEUTRAL) }
-        } else KvRow("clock skew", "UNAVAILABLE — transport (prometheus)", UNK)
-        Note("An absent read renders UNAVAILABLE with its reason — it never shows a number it does not have.")
+        } else KvRow("clock skew", "UNAVAILABLE: transport (prometheus)", UNK)
+        Note("An absent read renders UNAVAILABLE with its reason. It never shows a number it does not have.")
     }
 }
 
@@ -1772,7 +1772,7 @@ private fun ExecFooter(m: ExModel) {
     Column(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 16.dp)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
         Text(
-            "TRIAD Mission Control · view 02 · Executor v1.0 — wiring: TRIAD-Executor-Wiring-v1.0.md",
+            "TRIAD Mission Control · view 02 · Executor v1.0 · wiring: TRIAD-Executor-Wiring-v1.0.md",
             color = Unk, fontFamily = ExMono, fontSize = 10.sp, lineHeight = 15.sp,
             modifier = Modifier.padding(top = 12.dp),
         )
@@ -1984,7 +1984,7 @@ private fun CkopsServerSlot(tool: String, served: Boolean, spec: String, live: @
             live()
         }
     } else {
-        CkopsPendBlock("$tool · server-side — NOT SERVED THIS POLL — panel stitched client-side", spec)
+        CkopsPendBlock("$tool · server-side · NOT SERVED THIS POLL · panel stitched client-side", spec)
     }
 }
 
@@ -2352,7 +2352,7 @@ private fun CkOpsFooter(provenance: String, pend: List<String>, blind: List<Stri
             color = Unk, fontFamily = ExMono, fontSize = 10.sp, lineHeight = 15.sp,
         )
         Text(
-            "BLIND (source unavailable — and the error IS the data): ${blind.joinToString(", ").ifEmpty { "none" }}",
+            "BLIND (source unavailable, and the error IS the data): ${blind.joinToString(", ").ifEmpty { "none" }}",
             color = Unk, fontFamily = ExMono, fontSize = 10.sp, lineHeight = 15.sp,
         )
         Text(laws, color = Unk, fontFamily = ExMono, fontSize = 10.sp, lineHeight = 15.sp)
@@ -2364,14 +2364,14 @@ private class CkSrcSpec(val name: String, val ev: List<String>, val match: (id: 
 private val CkRuntimeExcl = Regex("watchdog|stop_arm|exit_lane|lanes|bus_consumer|dec_consumer|bridge|fix_databank|vgp|reconciler|oms|pm$")
 private val CK_SOURCE_MAP = listOf(
     CkSrcSpec(
-        "Runtime health endpoints — Engine · Intelligence · Executor · Learning expose their own state",
+        "Runtime health endpoints: Engine · Intelligence · Executor · Learning expose their own state",
         listOf(
             "get_service_status only knows LEDGER TABLES, not processes",
             "no process in this system has ever been asked how it is",
         ),
     ) { id, _ -> Regex("^(eng|int|exe|lea)\\.").containsMatchIn(id) && !CkRuntimeExcl.containsMatchIn(id.substringAfter(".", "")) },
     CkSrcSpec(
-        "Prometheus — Phase-0 observability",
+        "Prometheus: Phase-0 observability",
         listOf(
             "get_exec_quality → transport: unavailable (prometheus)",
             "get_lane_headroom → transport: unavailable (prometheus)",
@@ -2381,7 +2381,7 @@ private val CK_SOURCE_MAP = listOf(
         ),
     ) { id, _ -> id in setOf("inf.prom", "inf.clock", "inf.disk", "exe.stop_arm", "exe.exit_lane", "exe.lanes", "eng.watchdog") },
     CkSrcSpec(
-        "TriadDTBNK read-only DSN — CONTESTED (see source reconciliation)",
+        "TriadDTBNK read-only DSN: CONTESTED (see source reconciliation)",
         listOf(
             "get_logger_status → not_implemented (databank)",
             "get_continuity.bank → YELLOW: needs TRIAD_MCP_DATABANK_RO_DSN",
@@ -2389,20 +2389,20 @@ private val CK_SOURCE_MAP = listOf(
         ),
     ) { id, _ -> id in setOf("log.spine", "log.phases", "log.restate", "lea.bridge", "lea.fix_databank") },
     CkSrcSpec(
-        "NATS — streams, consumers, DLQ",
+        "NATS: streams, consumers, DLQ",
         listOf("get_bus_status → transport: unavailable (nats)", "spec §2: not provisioned"),
     ) { id, _ -> id in setOf("inf.nats", "int.bus_consumer", "exe.dec_consumer") },
     CkSrcSpec(
         "Venue session + keys",
-        listOf("keyless shadow build — no adapter, no order-id map", "get_open_orders.last_reconcile_ts = null"),
+        listOf("keyless shadow build: no adapter, no order-id map", "get_open_orders.last_reconcile_ts = null"),
     ) { id, _ -> id in setOf("exe.vgp", "exe.reconciler", "exe.oms", "exe.pm") },
     CkSrcSpec(
-        "Aux feeds — Kronos scorer · news bias",
+        "Aux feeds: Kronos scorer · news bias",
         listOf("K1 book: 'needs the Kronos-fused decision join; pending'"),
     ) { _, plane -> plane == "Aux" },
     CkSrcSpec(
         "Shadow runtime + SimVenue",
-        listOf("sha.personas is green only at REGISTRY level — 'runtime slots not probed'"),
+        listOf("sha.personas is green only at REGISTRY level: 'runtime slots not probed'"),
     ) { _, plane -> plane == "Shadow" },
 )
 
@@ -2414,7 +2414,7 @@ private val CK_SPEC_SOURCES = """get_checkup_sources  →  wiring §3.1
 
 RULES
 · present ∈ true | false | "CONTESTED".  The third value exists
-  BECAUSE the tools currently disagree (C-8) — a boolean would force
+  BECAUSE the tools currently disagree (C-8): a boolean would force
   the server to lie about the Databank DSN.
 · evidence[] is REQUIRED on every source: a claim about a source must
   cite the tool call that supports it.
@@ -2427,7 +2427,7 @@ private val CK_SPEC_PROBE_DEPTH = """get_probe_depth  →  wiring §3.2
               D4 requires it to be exercised against a golden or drill" }
 
 RULES
-· depth_rule ships as a STRING FROM THE SERVER — for the same reason
+· depth_rule ships as a STRING FROM THE SERVER, for the same reason
   verdict_rule does. The GUI must not be able to quietly promote a
   config check to a runtime check.
 · would_be_d3_if is the work item: it turns the depth ladder into a plan."""
@@ -2442,7 +2442,7 @@ RULES
 · ts is normalised to ONE type (+ ts_iso alongside).
 · components_hash lets you PROVE two runs looked at the same census
   before you call their disagreement a divergence.
-· duplicate_writes and schema_drift are computed BY THE SERVER —
+· duplicate_writes and schema_drift are computed BY THE SERVER:
   they are defects in the server's own writes, and it should be the
   one to confess them."""
 
@@ -2467,7 +2467,7 @@ private val OPS_SPEC_FMATRIX = """get_failure_matrix  →  wiring §3.2
 RULES  (L-2)
 · A row is GREEN only when detector_present && last_drill_ts &&
   drill_result == "pass". Two columns. Both must be true.
-· violations[] MUST cite evidence with a count and a source — a
+· violations[] MUST cite evidence with a count and a source: a
   violation claim without evidence is not permitted.
 · verdict is computed SERVER-SIDE so the GUI cannot soften it."""
 
@@ -2480,7 +2480,7 @@ private val OPS_SPEC_PAGER = """get_page_readiness  →  wiring §3.3
 RULES  (L-3)
 · can_page is FALSE if ANY condition is blind. The pager's guarantee
   is the conjunction, not the disjunction.
-· rule ships as a STRING FROM THE SERVER — same reason verdict_rule
+· rule ships as a STRING FROM THE SERVER, same reason verdict_rule
   and depth_rule do."""
 
 private val OPS_SPEC_SUPERVISION = """get_process_supervision  →  wiring §3.4
@@ -2720,7 +2720,7 @@ fun CheckupScreen(repo: MissionRepository) {
     // The stance narrative — CKVIEW `said`, live numbers, never claiming a depth it did not find.
     val ckSaid = if (total == 0) AnnotatedString("no checkup returned.") else buildAnnotatedString {
         val b = SpanStyle(color = Color.White, fontWeight = FontWeight.SemiBold)
-        append("$redsN reds — but ")
+        append("$redsN reds, but ")
         withStyle(b) { append("${unknowns.size} of $total") }
         append(" probes have no source, and ")
         if (runtimeProbes == 0) withStyle(b) { append("not one green is a runtime probe") }
@@ -2812,7 +2812,7 @@ fun CheckupScreen(repo: MissionRepository) {
             }
             Text(ckSaid, color = PineTextDim, fontSize = 13.5.sp, lineHeight = 20.sp, modifier = Modifier.padding(top = 12.dp))
             Text(
-                "GREEN requires coverage ≥ 80% and reds = 0. Below that the verdict is UNKNOWN — regardless of how few reds there are.",
+                "GREEN requires coverage ≥ 80% and reds = 0. Below that the verdict is UNKNOWN, regardless of how few reds there are.",
                 color = PineVer, fontFamily = ExMono, fontSize = 11.sp, lineHeight = 17.sp,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -2838,14 +2838,14 @@ fun CheckupScreen(repo: MissionRepository) {
         // upgraded — if it said GREEN below the 80% floor, the downgrade is named, not silent.
         if (verdict != verdictShown) {
             ExecRibbonBox(
-                "AT-CK12 · server said $verdict — rendered $verdictShown.",
+                "AT-CK12 · server said $verdict, rendered $verdictShown.",
                 "Coverage $covPct is below the 80% floor. C-6: a probe that cannot fail cannot pass.",
             )
         }
         // ── 8.2 PROBE DEPTH (C-1) — ⇔ CKVIEW pDepth: ladder → law ribbon → the greens in their own
         // words → prose; the live get_probe_depth panel sits in the slot the HTML reserves for its
         // PEND spec (the tool has since shipped server-side).
-        ExecCard("Probe depth — how deep is the deepest green?", "get_checkup · classified client-side (C-1)") {
+        ExecCard("Probe depth: how deep is the deepest green?", "get_checkup · classified client-side (C-1)") {
             CkDepthRow("D4 · behavioural", "exercised against a golden / drill", d4, total)
             CkDepthRow("D3 · runtime", "the process answers with its own state", d3, total)
             CkDepthRow("D2 · artifact", "a hash / manifest recomputes clean", d2, total)
@@ -2858,20 +2858,20 @@ fun CheckupScreen(repo: MissionRepository) {
                     b("Every green in this system is D1 or D2. ")
                     append("Zero components are probed at runtime, and zero are exercised behaviourally. ")
                     b("A checkup that never runs the thing it is checking is a spellcheck of the config. ")
-                    append("This is not a criticism of the probes — it is the number that tells you what the verdict is ")
+                    append("This is not a criticism of the probes: it is the number that tells you what the verdict is ")
                     i("worth"); append(".")
                 })
             }
-            ExecEyebrow("THE ${greenReasons.size} GREENS, IN THEIR OWN WORDS — THEY INDICT THEMSELVES")
+            ExecEyebrow("THE ${greenReasons.size} GREENS, IN THEIR OWN WORDS: THEY INDICT THEMSELVES")
             if (greenRows.isNotEmpty()) {
                 MiniTable(listOf("id", "depth", "the probe's own words"), greenRows)
             } else {
-                Note("No GREEN components in the census — nothing to quote.", UNK)
+                Note("No GREEN components in the census. Nothing to quote.", UNK)
             }
             CkopsNote(rich {
                 append("$notProbedN of the ${greenReasons.size} greens contain the phrase ")
                 b("“not probed”")
-                append(". They are telling you, in the reason string, that they did not check the thing you think they checked. The depth classifier reads them literally — ")
+                append(". They are telling you, in the reason string, that they did not check the thing you think they checked. The depth classifier reads them literally: ")
                 m("registry-level"); append(" and "); m("config-level"); append(" cap at "); b("D1")
                 append(", a MANIFEST recompute reaches "); b("D2")
                 append(", and nothing gets to D3 without a live process answering.")
@@ -2879,7 +2879,7 @@ fun CheckupScreen(repo: MissionRepository) {
             CkopsServerSlot("get_probe_depth", pd != null, CK_SPEC_PROBE_DEPTH) {
                 val byDepthSrv = guardDerive(emptyList<Pair<String, Double>>()) { pd.numEntries("by_depth").sortedBy { it.first } }
                 if (byDepthSrv.isEmpty()) {
-                    Note("no by_depth ladder in the payload — nothing to draw.", UNK)
+                    Note("no by_depth ladder in the payload. Nothing to draw.", UNK)
                 } else {
                     HBarChart(
                         byDepthSrv.map { (k, v) ->
@@ -2913,9 +2913,9 @@ fun CheckupScreen(repo: MissionRepository) {
         }
         // ── 8.3 CENSUS — ⇔ CKVIEW pCensus: plane groups → the four-planes red ribbon → the
         // GREEN/YELLOW/RED/UNKNOWN tag row → the hollow-cells note. AT-CK1: exactly total cells.
-        ExecCard("Census — $total components, by plane", "get_checkup") {
+        ExecCard("Census: $total components, by plane", "get_checkup") {
             if (components.isEmpty()) {
-                Note("Census not served — no components to draw.", UNK)
+                Note("Census not served: no components to draw.", UNK)
             } else {
                 byPlane.forEach { (plane, comps) ->
                     CkPlaneGroup(plane, comps) { c ->
@@ -2929,7 +2929,7 @@ fun CheckupScreen(repo: MissionRepository) {
                 } else {
                     b("The four money planes: $moneyProbed of $moneyTotal probed. ")
                 }
-                append("Engine, Intelligence, Executor, Learning — ")
+                append("Engine, Intelligence, Executor, Learning: ")
                 b("$moneyProbed of $moneyTotal components probed. ${(moneyTotal - moneyProbed).coerceAtLeast(0)} dark. ")
                 if (moneyProbed == 0) {
                     append("Every green in this system lives in ")
@@ -2950,15 +2950,15 @@ fun CheckupScreen(repo: MissionRepository) {
                 ExecTagChip("UNKNOWN ${unknowns.size}", "unk", hatch = true)
             }
             CkopsNote(rich {
-                append("— hollow cells are D1 greens (config-level). A solid cell would be an earned green. ")
+                append("Hollow cells are D1 greens (config-level). A solid cell would be an earned green. ")
                 if (runtimeProbes == 0) b("There are none.") else append("There are $runtimeProbes.")
             })
         }
         // ── 8.4 WORK LIST (C-3) — ⇔ CKVIEW pWork: the Inferred ribbon → 7 numbered rows → Export
         // ghost button → the C-3 note; the live get_checkup_sources panel sits in its PEND slot.
-        ExecCard("Work list — what to wire next", "inferred from tool failures") {
+        ExecCard("Work list: what to wire next", "inferred from tool failures") {
             CkopsRibbonRich(rich {
-                b("Inferred — and labelled as such. ")
+                b("Inferred, and labelled as such. ")
                 append("The server ships "); b("one generic fix")
                 append(" for all ${unknowns.size} unknowns (")
                 m("\"add to configs/checkup.v1.json\"")
@@ -2979,7 +2979,7 @@ fun CheckupScreen(repo: MissionRepository) {
             CkopsGhostBtn("Export as task list") {
                 Toast.makeText(
                     ctx,
-                    "Export writes triad-checkup-worklist.md (${workGroups.size} sources, ${unknowns.size} probes) — file writes are not wired in this read-only client.",
+                    "Export writes triad-checkup-worklist.md (${workGroups.size} sources, ${unknowns.size} probes). File writes are not wired in this read-only client.",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -2993,7 +2993,7 @@ fun CheckupScreen(repo: MissionRepository) {
                 // served honestly, never coerced to a boolean. Each CONTESTED source gets a ribbon.
                 sourceRows.filter { it.text("present", "") == "CONTESTED" }.forEach { c ->
                     Ribbon(
-                        "CONTESTED — ${c.text("name", c.text("id", "—"))}",
+                        "CONTESTED: ${c.text("name", c.text("id", "—"))}",
                         c.text("reason", "—") +
                             guardDerive("") {
                                 val ev = c.arr("evidence").list()
@@ -3010,7 +3010,7 @@ fun CheckupScreen(repo: MissionRepository) {
                 }
                 if (levBars.isNotEmpty()) HBarChart(levBars, labelWidth = 116)
                 if (sourceRows.isEmpty()) {
-                    Note("no sources in the payload — nothing to roster.", UNK)
+                    Note("no sources in the payload. Nothing to roster.", UNK)
                 } else {
                     MiniTable(
                         listOf("source", "feeds", "present?", "unblocks"),
@@ -3027,13 +3027,13 @@ fun CheckupScreen(repo: MissionRepository) {
                         },
                     )
                 }
-                Note(srcs.text("note", "present may be true|false|CONTESTED — the third value exists because the tools contradict each other."))
+                Note(srcs.text("note", "present may be true|false|CONTESTED: the third value exists because the tools contradict each other."))
             }
         }
         // ── 8.5 TRI-VIEW — ⇔ CKVIEW pTri: three tiles → the no-referee ribbon → the checked items
         // → the live ingest lanes.
         ExecCard(
-            "Tri-view — three readiness claims that never meet",
+            "Tri-view: three readiness claims that never meet",
             "get_checkup · get_checklist_status · get_go_no_go_status · get_bridge_lag", sev = true,
         ) {
             Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -3047,7 +3047,7 @@ fun CheckupScreen(repo: MissionRepository) {
                 m("CHECKLIST.md"); append(" are "); m("GE-*")
                 append(" edge-harness entries. ")
                 b("Not one core build item")
-                append(" — schemas, bus, ledger, engine, executor, intelligence — is checked. And yet the ledger holds ")
+                append(" (schemas, bus, ledger, engine, executor, intelligence) is checked. And yet the ledger holds ")
                 b("${liveDecisions ?: "—"} decisions"); append(" and ")
                 m("get_bridge_lag"); append(" shows ")
                 b("${bridgeLanes.size} live ingest lanes")
@@ -3056,7 +3056,7 @@ fun CheckupScreen(repo: MissionRepository) {
                 append("A go/no-go that reads from a stale checklist is a ceremony, not a gate.")
             })
             ExecHr()
-            ExecEyebrow("THE $clChecked CHECKED ITEMS — ALL OF THEM")
+            ExecEyebrow("THE $clChecked CHECKED ITEMS: ALL OF THEM")
             if (checkedItems.isEmpty()) Note("no checked items served.", UNK)
             checkedItems.forEach { itemTxt ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.Top) {
@@ -3066,7 +3066,7 @@ fun CheckupScreen(repo: MissionRepository) {
                 Box(Modifier.fillMaxWidth().height(1.dp).background(ExHair))
             }
             ExecHr()
-            ExecEyebrow("LIVE INGEST LANES — THE SYSTEM IS RUNNING")
+            ExecEyebrow("LIVE INGEST LANES: THE SYSTEM IS RUNNING")
             if (bridgeLanes.isEmpty()) {
                 Note("get_bridge_lag returned no lanes.", UNK)
             } else {
@@ -3087,7 +3087,7 @@ fun CheckupScreen(repo: MissionRepository) {
         // ── 8.6 SOURCE PLANES (C-8) — ⇔ CKVIEW pSources: the contradiction block → the ribbon →
         // the source-plane roster.
         ExecCard(
-            "Source planes — where the tools contradict each other",
+            "Source planes: where the tools contradict each other",
             "get_continuity · get_bridge_lag · get_logger_status · get_bus_status", sev = contradiction,
         ) {
             if (contradiction) {
@@ -3109,9 +3109,9 @@ fun CheckupScreen(repo: MissionRepository) {
                     m("get_continuity")
                     append(" claims that DSN is unset. ")
                     b("They cannot both be right. ")
-                    append("The likeliest explanation — two env vars (")
+                    append("The likeliest explanation, two env vars (")
                     m("TRIAD_CONTINUITY_DSN")
-                    append(" vs the bridge's) pointing at one resource — is a ")
+                    append(" vs the bridge's) pointing at one resource, is a ")
                     b("P11 violation in the config surface")
                     append(": one fact, two writers. Until this is resolved, ")
                     i("every")
@@ -3131,7 +3131,7 @@ fun CheckupScreen(repo: MissionRepository) {
                     ),
                     // the HTML hardcodes "8,008 rows" here; this page does not read the shadow bank,
                     // so the honest cell is an em-dash pointer, never a copied number
-                    row("shadow bank (sqlite)" to NEUTRAL, "—" to UNK, "not read on this page — see Ops · get_shadow_bank" to NEUTRAL),
+                    row("shadow bank (sqlite)" to NEUTRAL, "—" to UNK, "not read on this page: see Ops · get_shadow_bank" to NEUTRAL),
                     row(
                         "ingest registry" to NEUTRAL,
                         (if (bridgeLanes.isNotEmpty()) "UP" else "ABSENT") to (if (bridgeLanes.isNotEmpty()) GOOD else UNK),
@@ -3140,13 +3140,13 @@ fun CheckupScreen(repo: MissionRepository) {
                     row(
                         "TriadDTBNK RO" to NEUTRAL,
                         (if (contradiction) "CONTESTED" else "—") to (if (contradiction) SEV else UNK),
-                        (if (contradiction) "CONTESTED — see above" else "no contradiction observed this poll") to NEUTRAL,
+                        (if (contradiction) "CONTESTED: see above" else "no contradiction observed this poll") to NEUTRAL,
                     ),
                     row("Prometheus" to NEUTRAL, "ABSENT" to UNK, "the latency/SLO tools reject with transport: unavailable (prometheus)" to NEUTRAL),
                     row(
                         "NATS" to NEUTRAL,
                         (if (busServed) "UP" else "ABSENT") to (if (busServed) GOOD else UNK),
-                        (if (busServed) "get_bus_status answers" else "get_bus_status rejects — not provisioned (spec §2)") to NEUTRAL,
+                        (if (busServed) "get_bus_status answers" else "get_bus_status rejects: not provisioned (spec §2)") to NEUTRAL,
                     ),
                     row("venue session" to NEUTRAL, "ABSENT" to UNK, "keyless by design (shadow lane)" to NEUTRAL),
                 ),
@@ -3160,15 +3160,15 @@ fun CheckupScreen(repo: MissionRepository) {
         // legend → double-writes / schema-drift ribbons → the C-7 note; the live
         // get_checkup_history panel sits in its PEND slot.
         ExecCard(
-            "Run history — does the checkup agree with itself?", "get_checkup.history · normalised on read",
+            "Run history: does the checkup agree with itself?", "get_checkup.history · normalised on read",
             sev = divergePairs.isNotEmpty() || dupTs > 0,
         ) {
             if (!historyServed) {
-                Note("get_checkup ships no history[] — the served run history is the get_checkup_history panel below (§3.3).", UNK)
+                Note("get_checkup ships no history[]: the served run history is the get_checkup_history panel below (§3.3).", UNK)
             } else {
                 if (divergePairs.isNotEmpty()) {
                     CkopsRibbonRich(rich {
-                        b("C-7 · VERDICT DIVERGENCE — the false-green mechanism, caught in the act. ")
+                        b("C-7 · VERDICT DIVERGENCE: the false-green mechanism, caught in the act. ")
                         append("On "); b("${divergePairs.size}")
                         append(" occasions the "); b("client"); append(" engine and the "); b("mcp")
                         append(" server wrote different verdicts for the same system within the same minute. One of the two is wrong about the state of your trading system, and ")
@@ -3220,7 +3220,7 @@ fun CheckupScreen(repo: MissionRepository) {
                         m("client"); append(" writes "); m("ts"); append(" as an ")
                         b("epoch-µs integer"); append("; "); m("mcp"); append(" writes it as an ")
                         b("ISO-8601 string")
-                        append(". One field, two types, one table — ")
+                        append(". One field, two types, one table: ")
                         b("any query that sorts this history is silently wrong")
                         append(". This page normalises on read, which is a patch over a defect, not a fix.")
                     })
@@ -3243,13 +3243,13 @@ fun CheckupScreen(repo: MissionRepository) {
                     val cw = dv.obj("client")
                     val mw = dv.obj("mcp")
                     Ribbon(
-                        "VERDICT DIVERGENCE — client ${cw.text("verdict", "—")} vs mcp ${mw.text("verdict", "—")} within ${fmt(dv.num("window_s"), 0)}s",
-                        "yellows ${cw.int("yellows")?.toString() ?: "—"} vs ${mw.int("yellows")?.toString() ?: "—"} · same_census ${nn(dv, "same_census")} — two writers over one system, never averaged (AT-CK9).",
+                        "VERDICT DIVERGENCE: client ${cw.text("verdict", "—")} vs mcp ${mw.text("verdict", "—")} within ${fmt(dv.num("window_s"), 0)}s",
+                        "yellows ${cw.int("yellows")?.toString() ?: "—"} vs ${mw.int("yellows")?.toString() ?: "—"} · same_census ${nn(dv, "same_census")}. Two writers over one system, never averaged (AT-CK9).",
                         SEV,
                     )
                 }
                 if (runs.isEmpty()) {
-                    Note("no runs in the payload — history is honestly empty.", UNK)
+                    Note("no runs in the payload. History is honestly empty.", UNK)
                 } else {
                     MiniTable(
                         listOf("ts", "source", "verdict", "reds", "yellows"),
@@ -3269,12 +3269,12 @@ fun CheckupScreen(repo: MissionRepository) {
                 drift.forEach { sd ->
                     KvRow("schema drift · ${sd.text("field", "—")}", "client ${sd.text("client", "—")} vs mcp ${sd.text("mcp", "—")}", WARN)
                 }
-                Note("ts is normalized server-side to epoch-µs (the raw history is unsortable — client writes int, mcp writes ISO). Divergences, duplicate writes and drift are the server confessing defects in its OWN writes.")
+                Note("ts is normalized server-side to epoch-µs (the raw history is unsortable: client writes int, mcp writes ISO). Divergences, duplicate writes and drift are the server confessing defects in its OWN writes.")
             }
         }
         // ── 8.8 BROADCAST (C-4) — ⇔ CKVIEW pBroadcast: kv trio → §17.2 policy block → the C-4
         // ribbon → the drill button → the AT-DB hole report.
-        ExecCard("Broadcast — the alarm nobody has tested", "get_alerts · list_incidents · get_hole_report", sev = true) {
+        ExecCard("Broadcast: the alarm nobody has tested", "get_alerts · list_incidents · get_hole_report", sev = true) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 6.dp)) {
                 ExecStatBig("firing", if (alerts != null) alFiring.toString() else "—", "${alerts.text("source", "—")} rules", Emerald)
                 ExecStatBig("pages", alPages?.toString() ?: "—", "§17.2 policy", Emerald)
@@ -3283,42 +3283,42 @@ fun CheckupScreen(repo: MissionRepository) {
             ExecHr()
             CkopsLawBlock("policy · §17.2", rich {
                 append("Page "); b("only")
-                append(" when money may be unprotected. Broadcast on RED. Nothing else pages — not a yellow, not a stale feed, not a queue depth.")
+                append(" when money may be unprotected. Broadcast on RED. Nothing else pages: not a yellow, not a stale feed, not a queue depth.")
             })
             CkopsRibbonRich(rich {
-                b("C-4 · The broadcaster has never had anything to say — and at $covPct coverage it never could have. ")
+                b("C-4 · The broadcaster has never had anything to say, and at $covPct coverage it never could have. ")
                 append("reds = $redsN. An alarm that has never fired is not a working alarm; it is an ")
                 b("untested")
                 append(" alarm. And ")
                 b("$incidents incidents recorded")
-                append(", in a system with a broken replay chain, a double-writing resolver, and a governor that has never passed an intent — that is a finding about the ")
+                append(", in a system with a broken replay chain, a double-writing resolver, and a governor that has never passed an intent: that is a finding about the ")
                 b("incident recorder")
                 append(", not a clean bill of health.")
             })
             CkopsGhostBtn("Propose a broadcast drill") {
                 Toast.makeText(
                     ctx,
-                    "C-5 — this page cannot page anyone. propose_action writes are not wired in this read-only client; a human fires the drill at triadctl.",
+                    "C-5: this page cannot page anyone. propose_action writes are not wired in this read-only client; a human fires the drill at triadctl.",
                     Toast.LENGTH_LONG,
                 ).show()
             }
             CkopsNote(rich {
                 append("The button files a "); m("propose_action")
-                append(". This page cannot page anyone (C-5) — it appends to its own history and proposes. A human fires the drill.")
+                append(". This page cannot page anyone (C-5): it appends to its own history and proposes. A human fires the drill.")
             })
             ExecHr()
             ExecEyebrow("AT-DB1..10 · NIGHTLY HOLE REPORT")
-            ExecBlindCell("${holeReport.text("status", "absent")} — ${holeReport.text("note", "")}")
+            ExecBlindCell("${holeReport.text("status", "absent")}: ${holeReport.text("note", "")}")
             CkopsNote(rich {
                 append("The nightly data-integrity job has "); b("never landed"); append(". ")
                 m("lea.at_db")
-                append(" is one of the ${unknowns.size} unprobed components — so the job that would catch holes in the bank is itself a hole.")
+                append(" is one of the ${unknowns.size} unprobed components, so the job that would catch holes in the bank is itself a hole.")
             })
         }
         // no current card lacks an HTML counterpart on this page — nothing to append beyond the spec
         val ckPend = listOf("get_checkup_sources", "get_probe_depth", "get_checkup_history").filter { d[it] == null }
         CkOpsFooter(
-            "TRIAD Mission Control · view 08 · Checkup v1.0 — wiring: TRIAD-Checkup-Wiring-v1.0.md",
+            "TRIAD Mission Control · view 08 · Checkup v1.0 · wiring: TRIAD-Checkup-Wiring-v1.0.md",
             ckPend,
             CHECKUP_TOOLS.filter { d[it] == null && it !in ckPend },
             "C-1 green has a depth · C-2 verdict carries its denominator · C-3 unknown is a work item · " +
@@ -3430,11 +3430,11 @@ fun OpsScreen(repo: MissionRepository) {
     val pgConds = listOf(
         PgCond(1, OPS_PAGES[0].first, OPS_PAGES[0].second, execQ, false, if (execQ) "get_exec_quality answers" else promWhy),
         PgCond(2, OPS_PAGES[1].first, OPS_PAGES[1].second, execQ, false, if (execQ) "get_exec_quality answers" else promWhy),
-        PgCond(3, OPS_PAGES[2].first, OPS_PAGES[2].second, !reconcileNull, false, if (reconcileNull) "the reconciler has never run — last_reconcile_ts is null" else "last_reconcile_ts present"),
+        PgCond(3, OPS_PAGES[2].first, OPS_PAGES[2].second, !reconcileNull, false, if (reconcileNull) "the reconciler has never run: last_reconcile_ts is null" else "last_reconcile_ts present"),
         PgCond(4, OPS_PAGES[3].first, OPS_PAGES[3].second, watchdogLive, false, if (watchdogLive) "get_watchdog_stats answers" else promWhy),
-        PgCond(5, OPS_PAGES[4].first, OPS_PAGES[4].second, !breakerUnknown, false, if (breakerUnknown) "breaker state 'unknown' — 0 events" else "breaker state known"),
-        PgCond(6, OPS_PAGES[5].first, OPS_PAGES[5].second, !killUnknown, false, if (killUnknown) "kill state 'unknown' — 0 events" else "kill state known"),
-        PgCond(7, OPS_PAGES[6].first, OPS_PAGES[6].second, attested, attested, if (attested) "get_attestation answers — partial: hash present, no live slot-A compare" else "get_attestation not served"),
+        PgCond(5, OPS_PAGES[4].first, OPS_PAGES[4].second, !breakerUnknown, false, if (breakerUnknown) "breaker state 'unknown': 0 events" else "breaker state known"),
+        PgCond(6, OPS_PAGES[5].first, OPS_PAGES[5].second, !killUnknown, false, if (killUnknown) "kill state 'unknown': 0 events" else "kill state known"),
+        PgCond(7, OPS_PAGES[6].first, OPS_PAGES[6].second, attested, attested, if (attested) "get_attestation answers, partial: hash present, no live slot-A compare" else "get_attestation not served"),
         PgCond(8, OPS_PAGES[7].first, OPS_PAGES[7].second, clockLive, false, if (clockLive) "get_clock_skew answers" else promWhy),
     )
     val blind = pgConds.count { !it.present }
@@ -3445,18 +3445,18 @@ fun OpsScreen(repo: MissionRepository) {
     val fDet: Map<String, Triple<Boolean, String, String>> = mapOf(
         "F1" to Triple(true, "part", "gateway deadline + I8 validator exist"),
         "F2" to Triple(true, "ok", "the I8 output validator fires"),
-        "F3" to Triple(busLive, if (busLive) "ok" else "no", if (busLive) "get_bus_status answers" else "no bus — transport: unavailable (nats)"),
-        "F4" to Triple(feedLive, if (feedLive) "ok" else "no", if (feedLive) "get_feed_health answers" else "feed health via Prometheus — transport unavailable"),
-        "F5" to Triple(false, "no", "no venue session — keyless shadow build"),
-        "F6" to Triple(supervised, if (supervised) "ok" else "no", if (supervised) "process supervision answers" else "no process supervision — restart_counts and version are null on every row"),
-        "F7" to Triple(watchdogLive, if (watchdogLive) "ok" else "no", if (watchdogLive) "get_watchdog_stats answers" else "watchdog heartbeat via Prometheus — transport unavailable"),
-        "F8" to Triple(supervised, if (supervised) "ok" else "no", if (supervised) "process supervision answers" else "no process supervision — nothing knows if the governor is running"),
-        "F9" to Triple(clockLive, if (clockLive) "ok" else "no", if (clockLive) "get_clock_skew answers" else "NTP monitor via Prometheus — transport unavailable"),
-        "F10" to Triple(!reconcileNull, if (!reconcileNull) "ok" else "no", if (reconcileNull) "the reconciler has never run — last_reconcile_ts is null" else "reconcile evidence present"),
+        "F3" to Triple(busLive, if (busLive) "ok" else "no", if (busLive) "get_bus_status answers" else "no bus, transport: unavailable (nats)"),
+        "F4" to Triple(feedLive, if (feedLive) "ok" else "no", if (feedLive) "get_feed_health answers" else "feed health via Prometheus: transport unavailable"),
+        "F5" to Triple(false, "no", "no venue session: keyless shadow build"),
+        "F6" to Triple(supervised, if (supervised) "ok" else "no", if (supervised) "process supervision answers" else "no process supervision: restart_counts and version are null on every row"),
+        "F7" to Triple(watchdogLive, if (watchdogLive) "ok" else "no", if (watchdogLive) "get_watchdog_stats answers" else "watchdog heartbeat via Prometheus: transport unavailable"),
+        "F8" to Triple(supervised, if (supervised) "ok" else "no", if (supervised) "process supervision answers" else "no process supervision: nothing knows if the governor is running"),
+        "F9" to Triple(clockLive, if (clockLive) "ok" else "no", if (clockLive) "get_clock_skew answers" else "NTP monitor via Prometheus: transport unavailable"),
+        "F10" to Triple(!reconcileNull, if (!reconcileNull) "ok" else "no", if (reconcileNull) "the reconciler has never run: last_reconcile_ts is null" else "reconcile evidence present"),
         "F11" to Triple(true, "part", "WAL buffer exists in spec; backpressure never exercised"),
-        "F12" to Triple(busLive, if (busLive) "part" else "no", if (busLive) "a bus answers — its consumer dedupe is unverified from here" else "NO BUS ⇒ NO CONSUMER ⇒ NO DEDUPE. The detection mechanism does not exist."),
-        "F13" to Triple(!breakerUnknown, if (!breakerUnknown) "ok" else "no", if (breakerUnknown) "breaker state is 'unknown' — 0 events in the ledger" else "breaker state known"),
-        "F14" to Triple(!killUnknown, if (!killUnknown) "ok" else "no", if (killUnknown) "kill state is 'unknown' — 0 events in the ledger" else "kill state known"),
+        "F12" to Triple(busLive, if (busLive) "part" else "no", if (busLive) "a bus answers: its consumer dedupe is unverified from here" else "NO BUS ⇒ NO CONSUMER ⇒ NO DEDUPE. The detection mechanism does not exist."),
+        "F13" to Triple(!breakerUnknown, if (!breakerUnknown) "ok" else "no", if (breakerUnknown) "breaker state is 'unknown': 0 events in the ledger" else "breaker state known"),
+        "F14" to Triple(!killUnknown, if (!killUnknown) "ok" else "no", if (killUnknown) "kill state is 'unknown': 0 events in the ledger" else "kill state known"),
     )
     class FRow2(val id: String, val fail: String, val det: String, val present: Boolean, val kind: String, val why: String, val violated: Boolean) {
         // drilled is structurally NEVER — §21.5 has zero drill records anywhere; GREEN is unreachable
@@ -3501,7 +3501,7 @@ fun OpsScreen(repo: MissionRepository) {
         append("The loop is ")
         withStyle(b) { append("alive") }
         append(
-            " — ${decisionsN ?: "—"} decisions, ${exN0(flowRate)}/h, ${laneRows0.size} ingest lanes " +
+            ": ${decisionsN ?: "—"} decisions, ${exN0(flowRate)}/h, ${laneRows0.size} ingest lanes " +
                 "with ${hbRange ?: "—"} heartbeats. But ",
         )
         withStyle(b) { append("$blind of the 8 page conditions have no detector") }
@@ -3602,7 +3602,7 @@ fun OpsScreen(repo: MissionRepository) {
         }
         // ── 4.2 THE INVARIANT BREACH (L-6) — ⇔ OPSVIEW pInvariant: the terminal chain block (kept)
         // + the evidence table + the L-6 law note. It sits above the SLOs on purpose.
-        ExecCard("The invariant breach — §7.2 idempotency", "get_bus_status · get_shadow_bank · get_checkup.history", sev = true) {
+        ExecCard("The invariant breach: §7.2 idempotency", "get_bus_status · get_shadow_bank · get_checkup.history", sev = true) {
             // The OPSVIEW `.chain` — the derivation drawn as a dark terminal block, not a bullet
             // list. Same derives as before (bankRows/bankDistinct/historyDup/busLive/checkupUnknown),
             // interpolated into the exact HTML lines and colors.
@@ -3615,13 +3615,13 @@ fun OpsScreen(repo: MissionRepository) {
                     .background(Pine, RoundedCornerShape(13.dp))
                     .padding(horizontal = 14.dp, vertical = 13.dp),
             ) {
-                OpsChainLine("§7.2", buildAnnotatedString { withStyle(q) { append("\"Delivery is at-least-once everywhere; every consumer is idempotent by message ID —") } })
+                OpsChainLine("§7.2", buildAnnotatedString { withStyle(q) { append("\"Delivery is at-least-once everywhere; every consumer is idempotent by message ID:") } })
                 OpsChainLine("", buildAnnotatedString { withStyle(q) { append(" THIS PAIR OF PROPERTIES IS A SYSTEM INVARIANT.\"") } })
                 OpsChainLine("", buildAnnotatedString { withStyle(pp) { append("│") } })
                 OpsChainLine("§2", buildAnnotatedString { withStyle(q) { append("The event bus is the spine of all four planes. Eleven topics.") } })
                 OpsChainLine("", buildAnnotatedString { withStyle(pp) { append("│") } })
                 if (!busLive) {
-                    OpsChainLine("LIVE", buildAnnotatedString { withStyle(bd) { append("get_bus_status → transport: unavailable — the error IS the evidence") } })
+                    OpsChainLine("LIVE", buildAnnotatedString { withStyle(bd) { append("get_bus_status → transport: unavailable, the error IS the evidence") } })
                     OpsChainLine("", buildAnnotatedString {
                         withStyle(pp) { append("⇒ ") }
                         withStyle(hi) { append("There are no topics. There are no consumers. There is no dedupe layer.") }
@@ -3630,7 +3630,7 @@ fun OpsScreen(repo: MissionRepository) {
                     OpsChainLine("LIVE", buildAnnotatedString { withStyle(SpanStyle(color = VerdictShadow, fontWeight = FontWeight.SemiBold)) { append("get_bus_status → served") } })
                     OpsChainLine("", buildAnnotatedString {
                         withStyle(pp) { append("⇒ ") }
-                        withStyle(hi) { append("a bus answers — its consumer dedupe layer is still unverified from here.") }
+                        withStyle(hi) { append("a bus answers: its consumer dedupe layer is still unverified from here.") }
                     })
                 }
                 OpsChainLine("", buildAnnotatedString { withStyle(pp) { append("│") } })
@@ -3651,7 +3651,7 @@ fun OpsScreen(repo: MissionRepository) {
                         withStyle(bd) { append("${bankRows?.let { exN0(it) } ?: "—"} rows / ${bankDistinct?.let { exN0(it) } ?: "—"} distinct") }
                     } else {
                         withStyle(q) { append("shadow bank · ") }
-                        append("UNKNOWN — bank unavailable")
+                        append("UNKNOWN: bank unavailable")
                     }
                 })
                 OpsChainLine("OBSERVED", buildAnnotatedString {
@@ -3661,7 +3661,7 @@ fun OpsScreen(repo: MissionRepository) {
                         withStyle(bd) { append("$historyDup timestamps written twice") }
                     } else {
                         withStyle(q) { append("checkup history · ") }
-                        append("not served — $checkupUnknown UNKNOWN components")
+                        append("not served: $checkupUnknown UNKNOWN components")
                     }
                 })
                 if (f12Violated) {
@@ -3670,7 +3670,7 @@ fun OpsScreen(repo: MissionRepository) {
                         Box(Modifier.fillMaxWidth().height(1.dp).background(ExMaroonLine))
                         Text(
                             buildAnnotatedString {
-                                append("F12 IS NOT MERELY UNDRILLED. IT IS VIOLATED — and the violation is the ")
+                                append("F12 IS NOT MERELY UNDRILLED. IT IS VIOLATED, and the violation is the ")
                                 withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) { append("predicted consequence") }
                                 append(" of the missing bus. Two independent writers, one root cause.")
                             },
@@ -3681,7 +3681,7 @@ fun OpsScreen(repo: MissionRepository) {
                         Box(Modifier.fillMaxWidth().height(1.dp).background(ExMaroonLine))
                     }
                 } else {
-                    OpsChainLine("", buildAnnotatedString { withStyle(q) { append("no duplicate evidence in this poll — §7.2 is unverified, not proven.") } })
+                    OpsChainLine("", buildAnnotatedString { withStyle(q) { append("no duplicate evidence in this poll: §7.2 is unverified, not proven.") } })
                 }
             }
             // the evidence table (⇔ OPSVIEW pInvariant) — a violation claim carries its evidence
@@ -3706,7 +3706,7 @@ fun OpsScreen(repo: MissionRepository) {
         // ── 4.3 THE F-MATRIX (L-2) — ⇔ OPSVIEW pMatrix: head boxes → §10 law block → the 14 rows →
         // the L-2 note; the live get_failure_matrix panel sits in its PEND slot.
         ExecCard(
-            "The failure matrix (§10) — 14 required behaviours",
+            "The failure matrix (§10): 14 required behaviours",
             "get_bus_status · get_watchdog_stats · get_clock_skew · get_open_orders · get_breaker_state", sev = true,
         ) {
             Row(Modifier.fillMaxWidth().padding(bottom = 11.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -3739,7 +3739,7 @@ fun OpsScreen(repo: MissionRepository) {
                     Triple("green", fmSrv.int("green_n")?.toString() ?: "—", if ((fmSrv.int("green_n") ?: 0) > 0) GOOD else NEUTRAL),
                 )
                 if (rows14.isEmpty()) {
-                    Note("no rows in the payload — the server matrix is honestly empty.", UNK)
+                    Note("no rows in the payload. The server matrix is honestly empty.", UNK)
                 } else {
                     MiniTable(
                         listOf("id", "failure", "detection", "response", "detector?", "drilled?", "verdict"),
@@ -3764,7 +3764,7 @@ fun OpsScreen(repo: MissionRepository) {
                 rows14.filter { guardDerive(false) { it.arr("violations").rows().isNotEmpty() } }.forEach { f ->
                     val v = guardDerive(emptyList<JsonObject>()) { f.arr("violations").rows() }
                     Ribbon(
-                        "${f.text("id", "—")} VIOLATED — ${f.text("failure", "—")}",
+                        "${f.text("id", "—")} VIOLATED: ${f.text("failure", "—")}",
                         v.joinToString(" · ") { vi -> "${vi.text("source", "—")}: ${vi.text("evidence", "—")} (${vi.int("count")?.toString() ?: "—"})" },
                         SEV,
                     )
@@ -3779,9 +3779,9 @@ fun OpsScreen(repo: MissionRepository) {
         }
         // ── 4.4 PAGING POLICY (L-3) — ⇔ OPSVIEW pPager: §17.2 verbatim block → 8 numbered condition
         // rows → the can_page band → firing/pages → the L-3 note; live get_page_readiness in-slot.
-        ExecCard("Paging policy (§17.2) — the pager that cannot fire", "get_alerts · detector probes", sev = true) {
+        ExecCard("Paging policy (§17.2): the pager that cannot fire", "get_alerts · detector probes", sev = true) {
             CkopsLawBlock("policy · §17.2, verbatim", rich {
-                append("“The paging list is deliberately short — ")
+                append("“The paging list is deliberately short: ")
                 b("everything on it means money is or may be unprotected")
                 append(".”")
             })
@@ -3803,7 +3803,7 @@ fun OpsScreen(repo: MissionRepository) {
                 b("L-3 · "); m("can_page"); b(" is the conjunction, not the disjunction. ")
                 append("One blind condition makes ")
                 i("every")
-                append(" silence ambiguous — you no longer know which quiet is real. The pager reports ")
+                append(" silence ambiguous: you no longer know which quiet is real. The pager reports ")
                 append(if (alerts != null) "$alFiring" else "—")
                 append(" firing, and that is correct pre-live. But it is quiet for the ")
                 b("wrong reason"); append(".")
@@ -3820,13 +3820,13 @@ fun OpsScreen(repo: MissionRepository) {
                 )
                 if (!canPageSrv) {
                     Ribbon(
-                        "THE PAGER CANNOT FIRE — $blindN of ${conds.size} conditions are blind",
+                        "THE PAGER CANNOT FIRE: $blindN of ${conds.size} conditions are blind",
                         prSrv.text("rule", "can_page is the CONJUNCTION: one blind condition makes every silence ambiguous"),
                         SEV,
                     )
                 }
                 if (conds.isEmpty()) {
-                    Note("no conditions in the payload — readiness is honestly UNKNOWN.", UNK)
+                    Note("no conditions in the payload. Readiness is honestly UNKNOWN.", UNK)
                 } else {
                     MiniTable(
                         listOf("n", "condition", "detector", "ready?", "why not", "fired"),
@@ -3845,12 +3845,12 @@ fun OpsScreen(repo: MissionRepository) {
                     )
                 }
                 KvRow("client-side pager math above says", "$blind/8 blind · can_page $canPage", if (blindN == blind) GOOD else WARN)
-                Note("L-3: an alarm that has never fired is untested, not working — last_fired null renders 'never', never silence-as-health.")
+                Note("L-3: an alarm that has never fired is untested, not working. A null last_fired renders 'never', never silence-as-health.")
             }
         }
         // ── 4.5 LOOPS (L-1) — ⇔ OPSVIEW pLoops: set A (liveness probes) → the red seam → set B
         // (standing loops) → the L-1 ribbon; the live get_standing_loops roster in its PEND slot.
-        ExecCard("Loops — two sets, never summed", "get_loop_status") {
+        ExecCard("Loops: two sets, never summed", "get_loop_status") {
             OpsLoopSection(
                 ghost = false, "A · LIVENESS PROBES", "$probesOk/$loops ok · native, ledger-derived",
                 {
@@ -3891,7 +3891,7 @@ fun OpsScreen(repo: MissionRepository) {
                 b("L-1 · a liveness probe is not a loop. ")
                 append("“$probesOk/$loops loops OK” is a claim about ")
                 b("$loops ledger probes")
-                append(" — that rows exist. A loop is a ")
+                append(": that rows exist. A loop is a ")
                 b("scheduled job with a schedule, a last-run and a next-run")
                 append(". ")
                 when {
@@ -3904,7 +3904,7 @@ fun OpsScreen(repo: MissionRepository) {
             })
             CkopsServerSlot("get_standing_loops", sloops != null, OPS_SPEC_STANDING) {
                 if (sloopRows.isEmpty()) {
-                    Note("get_standing_loops returned no loops — the roster is honestly UNKNOWN.", UNK)
+                    Note("get_standing_loops returned no loops: the roster is honestly UNKNOWN.", UNK)
                 } else {
                     Tag(
                         if (sloopNever == sloopRows.size) "ALL ${sloopRows.size} NEVER_RUN" else "$sloopNever/${sloopRows.size} NEVER_RUN",
@@ -3936,7 +3936,7 @@ fun OpsScreen(repo: MissionRepository) {
         }
         // ── 4.6 SERVICES (L-4) — ⇔ OPSVIEW pServices: the L-4 ribbon → the ledger-table roster →
         // the four planes and what watches them; live get_process_supervision in its PEND slot.
-        ExecCard("Services — ledger tables, not processes", "get_service_status", sev = true) {
+        ExecCard("Services: ledger tables, not processes", "get_service_status", sev = true) {
             CkopsRibbonRich(rich {
                 b("L-4 · a service is a process, not a table. ")
                 append("Every row below is a "); b("ledger table"); append(". ")
@@ -3945,7 +3945,7 @@ fun OpsScreen(repo: MissionRepository) {
                     m("null"); append(" on all ${svcRows2.size}. ")
                 }
                 if (!supervised) b("There is no process supervision in this system. ")
-                append("The number “services $svcUp/${svcRows2.size} up” — printed on every other page — actually means ")
+                append("The number “services $svcUp/${svcRows2.size} up” (printed on every other page) actually means ")
                 i("“$svcUp of ${svcRows2.size} ledger tables have fresh rows.”")
                 append(" It is not a statement about any process.")
             })
@@ -3967,7 +3967,7 @@ fun OpsScreen(repo: MissionRepository) {
                 )
             }
             ExecHr()
-            ExecEyebrow("THE FOUR PLANES (§2.1) — AND WHAT WATCHES THEM")
+            ExecEyebrow("THE FOUR PLANES (§2.1): AND WHAT WATCHES THEM")
             OPS_PLANES.forEach { (name, host, detail) ->
                 OpsPlaneRow(name, detail, host) {
                     if (supervised) OpsChip("SUPERVISED", "ok") else OpsChip("∅ UNSUPERVISED", "no")
@@ -3976,13 +3976,13 @@ fun OpsScreen(repo: MissionRepository) {
             if (!supervised) {
                 CkopsNote(rich {
                     append("Nothing in this system knows whether "); b("TriadEngine")
-                    append(" is running. If the Signal engine died right now, the ledger tables would simply stop growing — and the first thing that would notice is the continuity watchdog's flow floor, minutes later, by inference.")
+                    append(" is running. If the Signal engine died right now, the ledger tables would simply stop growing, and the first thing that would notice is the continuity watchdog's flow floor, minutes later, by inference.")
                 })
             }
             CkopsServerSlot("get_process_supervision", psup != null, OPS_SPEC_SUPERVISION) {
                 KvRow("supervised", psup.bool("supervised").toString(), if (psup.bool("supervised")) GOOD else BAD)
                 if (psupRows.isEmpty()) {
-                    Note("no processes in the payload — supervision is honestly UNKNOWN per process.", UNK)
+                    Note("no processes in the payload. Supervision is honestly UNKNOWN per process.", UNK)
                 } else {
                     MiniTable(
                         listOf("process", "plane · host", "up", "pid", "restarts", "reason"),
@@ -4006,7 +4006,7 @@ fun OpsScreen(repo: MissionRepository) {
         }
         // ── 4.7 FLOW & LANES — ⇔ OPSVIEW pFlow: the alive ribbon → the three SLO legs → the ingest
         // lanes → the flow / CAG / take-rate kv trio.
-        ExecCard("Flow & lanes — what is genuinely alive", "get_continuity · get_bridge_lag · get_cag_stats") {
+        ExecCard("Flow & lanes: what is genuinely alive", "get_continuity · get_bridge_lag · get_cag_stats") {
             CkopsRibbonRich(rich {
                 b("The machine is alive. ")
                 append("This page is not about whether it runs. It is about whether you would know if it stopped.")
@@ -4061,7 +4061,7 @@ fun OpsScreen(repo: MissionRepository) {
                     b("§17.1 delivered: 0%. ")
                     append("Five metric groups, roughly 25 families, all ")
                     i("“exported for scrape”")
-                    append(" — and there is no scraper. Every live latency cell below is ")
+                    append(". And there is no scraper. Every live latency cell below is ")
                     b("hatched, not green")
                     append(". A budget you are not measuring is a wish.")
                 })
@@ -4072,7 +4072,7 @@ fun OpsScreen(repo: MissionRepository) {
                 }, "ok")
             }
             if (latRows0.isEmpty()) {
-                Note("get_latency_budgets not served — the budgets are honestly UNKNOWN.", UNK)
+                Note("get_latency_budgets not served: the budgets are honestly UNKNOWN.", UNK)
             } else {
                 MiniTable(
                     listOf("stage", "budget", "live"),
@@ -4124,22 +4124,22 @@ fun OpsScreen(repo: MissionRepository) {
         }
         // ── 4.9 ACCEPTANCE (§21) — ⇔ OPSVIEW pAccept: six classes graded from evidence + the
         // §21.3 punchline ribbon.
-        ExecCard("Acceptance catalog (§21) — graded from evidence", "get_decision_chain · list_incidents · get_journal") {
+        ExecCard("Acceptance catalog (§21): graded from evidence", "get_decision_chain · list_incidents · get_journal") {
             val acc = listOf(
                 Triple("§21.1", "Golden vectors (D5)" to "every commit (CI)", "UNKNOWN" to "no CI signal reaches the ledger"),
                 Triple(
-                    "§21.2", "Replay determinism (P4)" to "nightly — “one mismatch fails the night”",
+                    "§21.2", "Replay determinism (P4)" to "nightly: “one mismatch fails the night”",
                     when (chainVerified) {
-                        false -> "FAILING" to "chain_verified: false — the packet hop has no id. “One mismatch fails the night.”"
+                        false -> "FAILING" to "chain_verified: false. The packet hop has no id. “One mismatch fails the night.”"
                         true -> "PASSING" to "chain_verified: true on the sampled decision"
                         null -> "UNKNOWN" to "no replay run recorded"
                     },
                 ),
                 Triple(
-                    "§21.3", "State-machine properties — incl. duplicate delivery (F12)" to "CI",
+                    "§21.3", "State-machine properties: incl. duplicate delivery (F12)" to "CI",
                     "NEVER RUN" to (
-                        if (f12Violated) "this is the property test for duplicate delivery (F12) — the exact bug now live in two writers"
-                        else "the property test for duplicate delivery (F12) — never run"
+                        if (f12Violated) "this is the property test for duplicate delivery (F12): the exact bug now live in two writers"
+                        else "the property test for duplicate delivery (F12): never run"
                         ),
                 ),
                 Triple("§21.4", "Intelligence chaos" to "CI", "NEVER RUN" to "no chaos run recorded"),
@@ -4149,7 +4149,7 @@ fun OpsScreen(repo: MissionRepository) {
                 ),
                 Triple(
                     "§21.6", "Sim honesty (sim fills ⊆ real fills)" to "per micro-live week",
-                    "VACUOUS" to "0 real fills — the subset invariant is true by emptiness",
+                    "VACUOUS" to "0 real fills: the subset invariant is true by emptiness",
                 ),
             )
             acc.forEach { (sec, nameCad, vWhy) ->
@@ -4191,11 +4191,11 @@ fun OpsScreen(repo: MissionRepository) {
             ExecHr()
             KvRow("incidents", if (incidents == 0) "∅ EMPTY" else incidents.toString(), if (incidents == 0) UNK else NEUTRAL)
             KvRow("journal ${jn.text("date", "—")}", jn.text("note", jn.text("markdown", "—")), UNK)
-            KvRow("AT-DB1..10 hole report", "${holeReport.text("status", "absent")} — ${holeReport.text("note", "")}", UNK)
+            KvRow("AT-DB1..10 hole report", "${holeReport.text("status", "absent")}: ${holeReport.text("note", "")}", UNK)
             if (incidents == 0) {
                 CkopsRibbonRich(rich {
                     b("L-5 · silence from a drill is not a pass. ")
-                    append("Zero incidents — in a system with ")
+                    append("Zero incidents: in a system with ")
                     val claims = buildList {
                         if (chainVerified == false) add("a broken replay chain")
                         if (f12Violated) add("a violated idempotency invariant")
@@ -4207,12 +4207,12 @@ fun OpsScreen(repo: MissionRepository) {
                     append(", and the difference is the whole point of this page.")
                 })
             } else {
-                CkopsNote(rich { b("$incidents incidents recorded"); append(" — read them before trusting any quiet elsewhere (L-5).") })
+                CkopsNote(rich { b("$incidents incidents recorded"); append(": read them before trusting any quiet elsewhere (L-5).") })
             }
             CkopsGhostBtn("Propose action") {
                 Toast.makeText(
                     ctx,
-                    "L-7 — this page cannot restart a service, reset a breaker, or fire a drill. propose_action writes are not wired in this read-only client; a human runs it at triadctl.",
+                    "L-7: this page cannot restart a service, reset a breaker, or fire a drill. propose_action writes are not wired in this read-only client; a human runs it at triadctl.",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -4224,7 +4224,7 @@ fun OpsScreen(repo: MissionRepository) {
         val opsPend = listOf("get_standing_loops", "get_failure_matrix", "get_page_readiness", "get_process_supervision")
             .filter { d[it] == null }
         CkOpsFooter(
-            "TRIAD Mission Control · view 04 · Ops & Loops v1.0 — wiring: TRIAD-Ops-Wiring-v1.0.md",
+            "TRIAD Mission Control · view 04 · Ops & Loops v1.0 · wiring: TRIAD-Ops-Wiring-v1.0.md",
             opsPend,
             OPS_TOOLS.filter { d[it] == null && it !in opsPend },
             "L-1 a liveness probe is not a loop · L-2 the F-matrix is evidence · L-3 no detector = cannot page · " +
