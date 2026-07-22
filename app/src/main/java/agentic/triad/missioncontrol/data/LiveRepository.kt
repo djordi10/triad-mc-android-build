@@ -22,19 +22,30 @@ class LiveRepository(
 
     override suspend fun tool(name: String, args: JsonObject): ToolResult = try {
         val env = client.call(name, args)
-        val fresh = ToolResult.Fresh(env)
-        cache[name] = Cached(fresh, now())
-        fresh
-    } catch (t: Throwable) {
-        val last = cache[name]
-        if (last != null) {
-            ToolResult.Stale(last.result.envelope, t.message ?: "transport error", now() - last.at)
+        if (env.ok) {
+            val fresh = ToolResult.Fresh(env)
+            cache[name] = Cached(fresh, now())
+            fresh
         } else {
-            ToolResult.Fresh(
-                agentic.triad.missioncontrol.mcp.McpEnvelope(
-                    ok = false, error = t.message ?: "transport error",
-                ),
-            )
+            // A CloudFlare 502 / origin flap comes back as an ok=false envelope (data == null), NOT an
+            // exception — so it must be treated like a dropped uplink, never cached as a "fresh" result.
+            // Caching it would evict the last good value and blank the panel; a heavy tool (large scan /
+            // shadow read) that flaps mid-batch would revert to its fallback every poll. Degrade to Stale
+            // and keep the last truth (the honesty contract in this file's header).
+            staleOrError(name, env.error ?: "transport error")
+        }
+    } catch (t: Throwable) {
+        staleOrError(name, t.message ?: "transport error")
+    }
+
+    /** Last good envelope aged into [ToolResult.Stale], or an honest ok=false [ToolResult.Fresh] when
+     *  the tool has never once succeeded (no cache to fall back on). */
+    private fun staleOrError(name: String, reason: String): ToolResult {
+        val last = cache[name]
+        return if (last != null) {
+            ToolResult.Stale(last.result.envelope, reason, now() - last.at)
+        } else {
+            ToolResult.Fresh(agentic.triad.missioncontrol.mcp.McpEnvelope(ok = false, error = reason))
         }
     }
 

@@ -25,6 +25,14 @@ Status column every wiring pass (flip ⬜ → ✅). Source of truth for the wiri
 
 **Reference (already 100% live — the "done right" example):** `TradeLogsScreen`, `DatabankScreen`.
 
+**Poll resilience (2026-07-22)** — the origin (`triad-mc.bgzr.io`) flaps under load and drops the HEAVIEST reads
+(`get_scan_board` = 45-symbol scan, `get_bank_priced` = 169k-row shadow read) when they are one of ~20
+sequential calls in a view's batch poll, even though a direct single call succeeds. Two app-side fixes make a
+landed tool STICK: (1) `LiveRepository.tool` no longer caches an `ok=false` (CF 502) envelope — it degrades to
+`Stale(lastGood)` so a mid-batch flap never blanks a panel that already rendered; (2) `ToolsViewModel` retries a
+null tool once per poll (bounded `RETRY_BUDGET=3`) so a heavy tool gets a second chance to land. Verified: the
+Analytics emission board + regime went WIRED·LIVE and stayed live after landing once.
+
 ---
 
 ## OPERATE

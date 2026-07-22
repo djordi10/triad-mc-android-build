@@ -47,14 +47,29 @@ class ToolsViewModel(
     private suspend fun refreshOnce() {
         val map = mutableMapOf<String, JsonElement?>()
         var stale: String? = null
+        // Heavy tools (a 45-symbol scan, a 169k-row shadow read) transiently 502 when they are one of
+        // ~20 sequential calls against a flapping origin. Give a null result one quick retry so a single
+        // flap does not strand a panel on its fallback for the whole 30s poll. Bounded (RETRY_BUDGET per
+        // poll) so a view full of genuinely-unavailable tools never doubles the request load.
+        var retryBudget = RETRY_BUDGET
         for (t in tools) {
-            val res = repo.tool(t)
+            var res = repo.tool(t)
+            if (res.envelope.data == null && retryBudget > 0) {
+                retryBudget--
+                delay(RETRY_DELAY_MS)
+                res = repo.tool(t)
+            }
             map[t] = res.envelope.data
             if (res is ToolResult.Stale && stale == null) {
                 stale = "stale ${res.ageMs / 1000}s — ${res.reason}"
             }
         }
         _state.value = UiState(map, stale, false)
+    }
+
+    private companion object {
+        const val RETRY_BUDGET = 3
+        const val RETRY_DELAY_MS = 300L
     }
 
     class Factory(
