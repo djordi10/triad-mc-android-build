@@ -58,6 +58,7 @@ import agentic.triad.missioncontrol.ui.components.McCard
 import agentic.triad.missioncontrol.ui.components.MiniTable
 import agentic.triad.missioncontrol.ui.components.Note
 import agentic.triad.missioncontrol.ui.components.Ribbon
+import agentic.triad.missioncontrol.ui.components.SectionLabel
 import agentic.triad.missioncontrol.ui.components.Stance
 import agentic.triad.missioncontrol.ui.components.StatRow
 import agentic.triad.missioncontrol.ui.components.Tag
@@ -320,13 +321,16 @@ fun IntelligenceScreen(repo: MissionRepository) {
                 add(Bar("validator", takes.toDouble(), SEV, "−$invalidTrades REJECTED trades"))
                 add(Bar("governor", takes.toDouble(), if (takes > 0) GOOD else BAD, "reached the governor · 1 refused · 1 never filled"))
             }.filter { it.value > 0.0 || it.label == "governor" }
+            SectionLabel("the funnel", divider = false)
             Funnel(funnel)
-            Note("The gateway is a symptom; the validator is the wall — the widest kill in the system, and $invalidTrades proposals die there. An abstain is not a refusal (I-1).")
+            SectionLabel("what it means")
+            Note("The gateway is a symptom; the validator is the wall: the widest kill in the system, and $invalidTrades proposals die there. An abstain is not a refusal (I-1).")
         }
         McCard("The validator's kill sheet ($vrTotal rows, ${byCheck.size} checks)", "get_validator_rejects · by_check") {
             if (topKills.isEmpty()) {
-                Note("get_validator_rejects returned no rows — UNKNOWN.", UNK)
+                Note("get_validator_rejects returned no rows: UNKNOWN.", UNK)
             } else {
+                SectionLabel("the kills", divider = false)
                 HBarChart(
                     topKills.mapIndexed { i, (check, n) -> Bar(check, n, if (i < 3) SEV else BAD) },
                     unit = "kills",
@@ -339,13 +343,15 @@ fun IntelligenceScreen(repo: MissionRepository) {
                         row(check to BAD, n.toInt().toString() to BAD, "${fmt(share, 0)}%" to NEUTRAL)
                     },
                 )
-                Note("The top three (ttl_bounds · stop_distance · net_rr_floor) are one bug seen three ways — too fast, too tight, too thin for the venue's cost floor. Never overwrite conviction (I-1).")
+                SectionLabel("what it means")
+                Note("The top three (ttl_bounds · stop_distance · net_rr_floor) are one bug seen three ways: too fast, too tight, too thin for the venue's cost floor. Never overwrite conviction (I-1).")
             }
         }
         McCard("Model rejects", tool = "get_model_rejects · by_check", sub = "rejected trades, not invalid output") {
             if (!mrjLive || mrjChecks.isEmpty()) {
-                Note("get_model_rejects returned no rows — UNKNOWN.", UNK)
+                Note("get_model_rejects returned no rows: UNKNOWN.", UNK)
             } else {
+                SectionLabel("the rejects", divider = false)
                 StatRow(
                     Triple("rejected trades", mrjTotal?.toString() ?: "—", SEV),
                     Triple("conviction destroyed", mrjConvDestroyed?.toString() ?: "—", BAD),
@@ -358,14 +364,16 @@ fun IntelligenceScreen(repo: MissionRepository) {
                     unit = "kills",
                     labelWidth = 132,
                 )
+                SectionLabel("what it means")
                 Note(
-                    "These are the model's OWN proposals killed by the output validator — distinct from the governor's refusals. " +
+                    "These are the model's OWN proposals killed by the output validator, distinct from the governor's refusals. " +
                         (mrjTopCombo?.let { (combo, n) -> "Top combination $combo ×$n: one proposal killed several ways. " } ?: "") +
-                        "${mrjConvDestroyed ?: "—"} of them had their conviction destroyed on the way out — never overwrite conviction (I-1).",
+                        "${mrjConvDestroyed ?: "—"} of them had their conviction destroyed on the way out, never overwrite conviction (I-1).",
                 )
             }
         }
         McCard("The model is (almost) a constant (I-2)", "get_conviction_histogram") {
+            SectionLabel("the distribution", divider = false)
             StatRow(
                 Triple("mode $modeBucket", "$modeCount / $nonZero", WARN),
                 Triple("emitted 0", "$zeroBucket non-answers", GOOD),
@@ -384,36 +392,39 @@ fun IntelligenceScreen(repo: MissionRepository) {
                     voidRange = voidRange,
                 )
             }
-            Note("Every zero in the histogram is a non-answer (error / timeout / validator kill), not a real conviction — $zeroBucket of $freshTotal fresh calls. The model has never emitted a true 0.")
+            SectionLabel("what it means")
+            Note("Every zero in the histogram is a non-answer (error / timeout / validator kill), not a real conviction: $zeroBucket of $freshTotal fresh calls. The model has never emitted a true 0.")
         }
         McCard("Conviction truth", tool = "get_conviction_truth", sub = "real answers vs manufactured zeros") {
             if (!ctLive) {
-                Note("get_conviction_truth unavailable — UNKNOWN.", UNK)
+                Note("get_conviction_truth unavailable: UNKNOWN.", UNK)
             } else {
+                SectionLabel("the split", divider = false)
                 HBarChart(
                     buildList {
                         add(Bar("real answers", ctEmittedNonZero.toDouble(), GOOD, "raw non-zero conviction · ${ctSupport ?: "—"} support points"))
-                        add(Bar("ledger zeros", ctLedgerZeros.toDouble(), UNK, if (ctNeverZero) "all coerced — the model has never emitted 0" else ""))
+                        add(Bar("ledger zeros", ctLedgerZeros.toDouble(), UNK, if (ctNeverZero) "all coerced: the model has never emitted 0" else ""))
                         ctOverwritten.forEach { (reason, n) -> add(Bar("$reason → 0", n, if (reason == "error") SEV else BAD)) }
                     },
                     unit = "calls",
                     labelWidth = 132,
                 )
-                KvRow("model has emitted a true 0", if (ctNeverZero) "NEVER — every zero is manufactured" else "yes", if (ctNeverZero) SEV else NEUTRAL)
-                KvRow("void", if (ctVoid.size == 2) "${ctVoid[0]}–${ctVoid[1]} — nothing emitted" else "—", BAD)
+                KvRow("model has emitted a true 0", if (ctNeverZero) "NEVER: every zero is manufactured" else "yes", if (ctNeverZero) SEV else NEUTRAL)
+                KvRow("void", if (ctVoid.size == 2) "${ctVoid[0]}–${ctVoid[1]}: nothing emitted" else "—", BAD)
                 KvRow("threshold", ctThreshold?.let { "$it · ${if (ctThrInVoid) "INSIDE the void" else "outside the void"}" } ?: "—", SEV)
-                Note("Over ${ctTotal ?: "—"} decisions the model's raw answer is kept here, never the coerced 0 — overwritten_to_zero counts the gateway-manufactured zeros by abstain reason (I-3).")
+                SectionLabel("what it means")
+                Note("Over ${ctTotal ?: "—"} decisions the model's raw answer is kept here, never the coerced 0: overwritten_to_zero counts the gateway-manufactured zeros by abstain reason (I-3).")
             }
         }
         McCard("Threshold in a void (I-3)", "get_conviction_histogram · get_calibration") {
             KvRow("threshold", "60", SEV)
             KvRow("model output 38–59", if (voidBucket == 0) "nothing, ever" else "$voidBucket calls", if (voidBucket == 0) BAD else WARN)
-            KvRow("calibration_artifact", if (calAbsent) "$calStatus — UNCALIBRATED" else calStatus, BAD)
+            KvRow("calibration_artifact", if (calAbsent) "$calStatus: UNCALIBRATED" else calStatus, BAD)
             Note("An uncalibrated threshold is a guess (I-3): the model never lands in the 38–59 band it would need to cross to reach 60, and no artifact derives the 60.")
         }
         McCard("The long-think band (I-2)", "get_model_rejects · latency") {
             if (!mrjLive || mrjChecks.isEmpty()) {
-                Note("get_model_rejects unavailable — the latency×outcome band needs the decisions ledger. UNKNOWN.", UNK)
+                Note("get_model_rejects unavailable: the latency×outcome band needs the decisions ledger. UNKNOWN.", UNK)
             } else {
                 val latRows = mrjChecks.take(6).mapNotNull { c -> c.num("avg_latency_ms")?.let { c.text("check_id") to it } }
                 if (latRows.isNotEmpty()) {
@@ -425,7 +436,7 @@ fun IntelligenceScreen(repo: MissionRepository) {
                 }
                 Ribbon(
                     "The model never produces a skip when it thinks long",
-                    "The validator kills average ~4.9 s of inference; the takes averaged ~4.8 s — the same population. The take rate is 0.06% because the validator eats the model's convictions, not because the model is picky (I-2).",
+                    "The validator kills average ~4.9 s of inference; the takes averaged ~4.8 s: the same population. The take rate is 0.06% because the validator eats the model's convictions, not because the model is picky (I-2).",
                     SEV,
                 )
                 Note("The full latency × outcome matrix (error/timeout/invalid/skip/TAKE by 0ms/short/3.5–4.5s/>4.5s bands) is a decisions-ledger read; this native view surfaces the kill-latency signal live and leaves the per-band split honestly unmeasured.")
@@ -433,7 +444,7 @@ fun IntelligenceScreen(repo: MissionRepository) {
         }
         McCard("The arithmetic of the impossible (I-4)", "get_packet × get_limits") {
             if (!pkLive || minStopBps == null) {
-                Note("get_packet / get_limits unavailable — the feasibility arithmetic can't be constructed. UNKNOWN.", UNK)
+                Note("get_packet / get_limits unavailable: the feasibility arithmetic can't be constructed. UNKNOWN.", UNK)
             } else {
                 fun stopAtr(k: String): Double? { val a = atr.num(k); return if (minStop != null && a != null && a > 0) minStop / a else null }
                 KvRow("mark", fmt(mark, 2), NEUTRAL)
@@ -447,15 +458,16 @@ fun IntelligenceScreen(repo: MissionRepository) {
                 KvRow("minimum target", minTgt?.let { "${fmt(it, 2)} · ${fmt(minStopBps * (rrFloor ?: 0.0), 1)} bps within ${ttlS?.let { t -> (t / 60).toInt() } ?: "—"} min" } ?: "—", BAD)
                 VerdictBanner(
                     word = if (feasibleCalc) "FEASIBLE" else "NOT CONSTRUCTIBLE",
-                    said = "The stop must be ${fmt(stopOverStruct, 1)}× wider than the structure the detector trades, off an FVG ${structW?.let { fmt(it, 2) } ?: "—"} wide. The strategy and the risk envelope describe two different businesses (I-4) — the answer to \"why does nothing trade\".",
+                    said = "The stop must be ${fmt(stopOverStruct, 1)}× wider than the structure the detector trades, off an FVG ${structW?.let { fmt(it, 2) } ?: "—"} wide. The strategy and the risk envelope describe two different businesses (I-4): the answer to \"why does nothing trade\".",
                     wordTone = if (feasibleCalc) GOOD else SEV,
                 )
             }
         }
         McCard("Envelope feasibility", tool = "get_envelope_feasibility", sub = "the stop vs the structure (IN-4)") {
             if (efSymbols.isEmpty()) {
-                Note("get_envelope_feasibility returned no symbols — UNKNOWN.", UNK)
+                Note("get_envelope_feasibility returned no symbols: UNKNOWN.", UNK)
             } else {
+                SectionLabel("the symbols", divider = false)
                 StatRow(
                     Triple("symbols", efN?.toString() ?: "—", NEUTRAL),
                     Triple("infeasible", efInfeasible?.toString() ?: "—", if ((efInfeasible ?: 0) > 0) SEV else GOOD),
@@ -478,24 +490,26 @@ fun IntelligenceScreen(repo: MissionRepository) {
                         )
                     },
                 )
-                Note((efWorstReason?.let { "$it. " } ?: "") + "feasible:false must be loud; an absent input forces feasible=null — unknown is never a pass (IN-4).")
+                SectionLabel("what it means")
+                Note((efWorstReason?.let { "$it. " } ?: "") + "feasible:false must be loud; an absent input forces feasible=null: unknown is never a pass (IN-4).")
             }
         }
         McCard("Model registry (I-6)", tool = "get_model_registry", sub = "read-only, mutable:false") {
             KvRow("registry_schema", if (registrySchema) "present" else "absent", if (registrySchema) NEUTRAL else BAD)
             KvRow("slots_seen", if (slots.isEmpty()) "—" else slots.joinToString(","), WARN)
             KvRow("mutable", mutable, if (mutable == "false") GOOD else WARN)
-            Note("A schema with rows only in Slot A — Slot B (the challenger) has never been populated. The registry is never a path to change a model.")
+            Note("A schema with rows only in Slot A: Slot B (the challenger) has never been populated. The registry is never a path to change a model.")
         }
         McCard("CAG economics (I-5) · render (I-6)", "get_cag_stats") {
             KvRow("hit_rate", cagHitPct?.let { "${fmt(it, 2)}% ($cagCache / $cagTotal)" } ?: "—", WARN)
             KvRow("fresh vs cache", if (cagTotal != null) "$cagFresh fresh · $cagCache cache" else "—", NEUTRAL)
-            Note("A cache missing ~99% is overhead, not a memo — report the addressable capture-rate, not the hit vs total. You must see what you asked (I-6): the packet is excellent, the input is not the problem.")
+            Note("A cache missing ~99% is overhead, not a memo. Report the addressable capture-rate, not the hit vs total. You must see what you asked (I-6): the packet is excellent, the input is not the problem.")
         }
         McCard("CAG addressable", tool = "get_cag_addressable", sub = "capture-rate, not hit-rate") {
             if (!caLive) {
-                Note("get_cag_addressable unavailable — UNKNOWN.", UNK)
+                Note("get_cag_addressable unavailable: UNKNOWN.", UNK)
             } else {
+                SectionLabel("the capture", divider = false)
                 HBarChart(
                     listOf(
                         Bar("decisions", (caDecisions ?: 0).toDouble(), NEUTRAL),
@@ -507,18 +521,19 @@ fun IntelligenceScreen(repo: MissionRepository) {
                     labelWidth = 132,
                 )
                 KvRow("capture rate (vs addressable)", caCapture?.let { "${fmt(it * 100, 2)}%" } ?: "—", BAD)
-                KvRow("hit rate vs total — the wrong number", caVsTotal?.let { "${fmt(it * 100, 2)}%" } ?: "—", UNK)
+                KvRow("hit rate vs total: the wrong number", caVsTotal?.let { "${fmt(it * 100, 2)}%" } ?: "—", UNK)
                 KvRow("fanout per packet", caFanout?.let { fmt(it, 2) } ?: "—", NEUTRAL)
-                Note("Report the capture-rate against the ${caAddressable ?: "—"} addressable repeats, never the hit-rate vs total — duplicate contexts are concurrent siblings the cache cannot fill before its twin reads (I-5).")
+                SectionLabel("what it means")
+                Note("Report the capture-rate against the ${caAddressable ?: "—"} addressable repeats, never the hit-rate vs total: duplicate contexts are concurrent siblings the cache cannot fill before its twin reads (I-5).")
             }
         }
         McCard("What the model actually sees (I-6)", "get_packet · get_render") {
             if (!pkLive) {
-                Note("get_packet unavailable — the model input can't be inspected. UNKNOWN.", UNK)
+                Note("get_packet unavailable: the model input can't be inspected. UNKNOWN.", UNK)
             } else {
                 Ribbon(
                     "The input is not the problem",
-                    "The packet is rich, clean and current — ${tfKeys.size} timeframes, full SMC structure, derivatives, flow, depth, a clean data-quality stamp. The model is fed an excellent picture and punished for the trade it proposes from it.",
+                    "The packet is rich, clean and current: ${tfKeys.size} timeframes, full SMC structure, derivatives, flow, depth, a clean data-quality stamp. The model is fed an excellent picture and punished for the trade it proposes from it.",
                     INFO,
                 )
                 KvRow("schema", pk.text("schema"), NEUTRAL)
@@ -531,10 +546,10 @@ fun IntelligenceScreen(repo: MissionRepository) {
                 KvRow("data_quality", "gaps ${dq.bool("gaps")} · staleness ${dq.int("staleness_ms") ?: "—"}ms · degraded ${dq.arr("degraded_modules").size}", if (dq.bool("gaps")) BAD else GOOD)
                 Ribbon(
                     "I-6 · but you cannot re-render what you asked",
-                    "get_render → ${if (renderReachable) "reachable" else "render_context_missing"}. 45,692 context packets exist; not one is reachable from a decision. You cannot reproduce the prompt that produced any decision — so every claim about WHY the model said something is unfalsifiable.",
+                    "get_render → ${if (renderReachable) "reachable" else "render_context_missing"}. 45,692 context packets exist; not one is reachable from a decision. You cannot reproduce the prompt that produced any decision, so every claim about WHY the model said something is unfalsifiable.",
                     SEV,
                 )
-                Note("The model registry has a schema and no rows: nothing certifies which model is allowed to run — and the live model's name ends in -full-test.")
+                Note("The model registry has a schema and no rows: nothing certifies which model is allowed to run, and the live model's name ends in -full-test.")
             }
         }
         WhyBox("THE LAWS · I-1..I-7") {
@@ -680,7 +695,7 @@ fun ShadowScreen(repo: MissionRepository) {
         ),
     ) {
         Ribbon(
-            "COUNTERFEIT — the only P&L number this system has (S-1)",
+            "COUNTERFEIT: the only P&L number this system has (S-1)",
             (netR?.let { "The bank's net_pnl_r is ${fmt(it, 1)} R over ${bankTotal ?: "—"} counterfactual rows" }
                 ?: "The bank is unavailable") +
                 ", priced on synthesised first-touch geometry against trades nobody executed. A counterfactual " +
@@ -690,15 +705,16 @@ fun ShadowScreen(repo: MissionRepository) {
         McCard("Sim honesty", tool = "get_sim_gap", sub = "P-MIRROR (S-3)") {
             KvRow("real_fills", realFills?.toString() ?: "—", if ((realFills ?: 0) == 0) UNK else NEUTRAL)
             KvRow("sim_fills", simFills?.toString() ?: "—", NEUTRAL)
-            KvRow("fills ⊆ real", if (fillsSubset) "true (vacuously)" else "FALSE — breach", if (fillsSubset) UNK else SEV)
+            KvRow("fills ⊆ real", if (fillsSubset) "true (vacuously)" else "FALSE: breach", if (fillsSubset) UNK else SEV)
             KvRow("verdict", "$verdict on real_fills:${realFills ?: "—"}", UNK)
-            Note("∅ ⊆ anything is vacuous. verdict:HONEST at 0 real fills is not a passing check — an empty check isn't a passing check (S-3). The subset becomes a measured property the moment a real lane exists, and a breach pages.")
+            Note("∅ ⊆ anything is vacuous. verdict:HONEST at 0 real fills is not a passing check: an empty check isn't a passing check (S-3). The subset becomes a measured property the moment a real lane exists, and a breach pages.")
         }
         McCard("The fee dial (signature)", tool = "get_shadow_bank · by_outcome", sub = "net R by outcome") {
             if (!bankLive) {
-                Note("get_shadow_bank unavailable — no local bank on this deployment. UNKNOWN.", UNK)
+                Note("get_shadow_bank unavailable: no local bank on this deployment. UNKNOWN.", UNK)
             } else {
                 // The fee dial's raw material — the by_outcome row counts, the frictionless mix.
+                SectionLabel("the mix", divider = false)
                 HBarChart(
                     listOf(
                         Bar("win", winN.toDouble(), GOOD, if (winAvg != null) "avg ${fmt(winAvg, 4)} R" else ""),
@@ -708,21 +724,22 @@ fun ShadowScreen(repo: MissionRepository) {
                     ),
                     unit = "rows",
                 )
+                SectionLabel("what it means")
                 Note(
                     "Net ${fmt(netR, 1)} R across ${bankTotal ?: "—"} rows. The loss average sits near −1.0 (the frictionless " +
                         "tell, S-2): the sim charges ~10 bps and no fees. Drag the round-trip cost 0→20 bps and the total crosses " +
-                        "zero at ≈3.09 bps — unprofitable even at pure-maker 4 bps.",
+                        "zero at ≈3.09 bps: unprofitable even at pure-maker 4 bps.",
                 )
             }
         }
         McCard("The priced bank", tool = "get_bank_priced", sub = "the fee dial applied (S-1)") {
             if (!bpLive) {
-                Note("get_bank_priced unavailable — UNKNOWN.", UNK)
+                Note("get_bank_priced unavailable: UNKNOWN.", UNK)
             } else {
                 if (bpUnderwater) {
                     VerdictBanner(
                         word = "UNDERWATER",
-                        said = "gross expectancy ${fmt(bpGross, 4)} R per trade is below the ${fmt(bpCost, 4)} R the venue charges for it — " +
+                        said = "gross expectancy ${fmt(bpGross, 4)} R per trade is below the ${fmt(bpCost, 4)} R the venue charges for it: " +
                             "priced at the real ${fmt(bpRoundtrip, 1)} bps roundtrip the bank nets ${fmt(bpNet, 4)} R/trade, ${fmt(bpNetTotal, 0)} R " +
                             "over ${bpN ?: "—"} trades. The scalp loses after fees.",
                         wordTone = SEV,
@@ -745,7 +762,7 @@ fun ShadowScreen(repo: MissionRepository) {
         }
         McCard("The geometry is synthesised", tool = "get_shadow_bank · cf_entry / cf_sl / cf_tp1", sub = "and the stop is inside the fee (S-4)") {
             if (geo.isEmpty()) {
-                Note("get_shadow_bank returned no rows to price — the synthesised geometry can't be inspected. UNKNOWN.", UNK)
+                Note("get_shadow_bank returned no rows to price: the synthesised geometry can't be inspected. UNKNOWN.", UNK)
             } else {
                 val allRR25 = geo.all { it.rr != null && kotlin.math.abs((it.rr ?: 0.0) - 2.5) < 0.02 }
                 val btc = geo.firstOrNull { it.sym == "BTC" }
@@ -764,23 +781,23 @@ fun ShadowScreen(repo: MissionRepository) {
                 if (allRR25) {
                     Ribbon(
                         "Every single RR is exactly 2.50",
-                        "The geometry is not the model's — it is a formula: TP = entry ± 2.5 × (SL − entry). The bank calls it 'the candidate's provisional geometry'. The +${netR?.let { fmt(it, 0) } ?: "—"} R is the P&L of a trade plan no component of this system ever proposed.",
+                        "The geometry is not the model's. It is a formula: TP = entry ± 2.5 × (SL − entry). The bank calls it 'the candidate's provisional geometry'. The +${netR?.let { fmt(it, 0) } ?: "—"} R is the P&L of a trade plan no component of this system ever proposed.",
                         SEV,
                     )
                 }
                 if (btc != null && btc.stopBps > 0) {
                     Ribbon(
-                        "The BTC stop is ${fmt(btc.stopBps, 2)} bps — inside the fee",
+                        "The BTC stop is ${fmt(btc.stopBps, 2)} bps: inside the fee",
                         "Binance BTC-PERP taker is 9 bps round trip. The fee is ${fmt(9.0 / btc.stopBps, 1)}× the stop. That trade, booked at pnl_r −1.0, is really −${fmt(1 + 9.0 / btc.stopBps, 1)} R.",
                         SEV,
                     )
                 }
-                Note("S-4 · never inherit a lie. The VERY_LOW rows are the ones whose gate_reason begins invalid_output — the trades the model actually proposed, whose conviction the validator overwrote with 0. The bank files the model's only real ideas as its worst. Databank lanes: ${dbGated ?: "—"} GATED · ${dbReal ?: "—"} REAL · ${dbMissed ?: "—"} MISSED.")
+                Note("S-4 · never inherit a lie. The VERY_LOW rows are the ones whose gate_reason begins invalid_output: the trades the model actually proposed, whose conviction the validator overwrote with 0. The bank files the model's only real ideas as its worst. Databank lanes: ${dbGated ?: "—"} GATED · ${dbReal ?: "—"} REAL · ${dbMissed ?: "—"} MISSED.")
             }
         }
         McCard("The books", tool = "get_books_scoreboard", sub = "the sentence that should have stopped the project (S-5)") {
             if (bscBooks == null) {
-                Note("get_books_scoreboard unavailable — UNKNOWN.", UNK)
+                Note("get_books_scoreboard unavailable: UNKNOWN.", UNK)
             } else {
                 MiniTable(
                     listOf("book", "policy", "n", "pnl R"),
@@ -797,21 +814,23 @@ fun ShadowScreen(repo: MissionRepository) {
                 )
                 Ribbon(
                     "The server's own note, verbatim",
-                    "'an empty M1 with a positive B0 means the gate is skipping edge, a negative B0 means the setups are net-losers before the gate.' B0 is positive; M1 is empty — by the system's own rule it has concluded the gate is throwing away money, and it will keep concluding that until someone charges B0 a fee.",
+                    "'an empty M1 with a positive B0 means the gate is skipping edge, a negative B0 means the setups are net-losers before the gate.' B0 is positive; M1 is empty: by the system's own rule it has concluded the gate is throwing away money, and it will keep concluding that until someone charges B0 a fee.",
                     SEV,
                 )
-                Note("S-5 · a CI over duplicated rows is not a CI. B0's ci_excludes_zero:true is computed over rows that deduplicate ~2.93× and whose copies contradict each other — the standard error is too small by √2.93 = 1.71×. It is measuring noise the pipeline generated itself.")
+                Note("S-5 · a CI over duplicated rows is not a CI. B0's ci_excludes_zero:true is computed over rows that deduplicate ~2.93× and whose copies contradict each other: the standard error is too small by √2.93 = 1.71×. It is measuring noise the pipeline generated itself.")
             }
         }
         McCard("Bank dedup", tool = "get_bank_dedup", sub = "one decision, many rows (S-5)") {
             if (!bdLive) {
-                Note("get_bank_dedup unavailable — UNKNOWN.", UNK)
+                Note("get_bank_dedup unavailable: UNKNOWN.", UNK)
             } else {
+                SectionLabel("the totals", divider = false)
                 StatRow(
                     Triple("rows", bdRows?.toString() ?: "—", BAD),
                     Triple("distinct", bdDistinct?.toString() ?: "—", NEUTRAL),
                     Triple("inflation", bdInflation?.let { "${fmt(it, 2)}×" } ?: "—", SEV),
                 )
+                SectionLabel("by book")
                 MiniTable(
                     listOf("book", "rows", "distinct", "dup×"),
                     bdBooks.map { b ->
@@ -834,13 +853,13 @@ fun ShadowScreen(repo: MissionRepository) {
         }
         McCard("Resolver registry", tool = "get_resolver_registry", sub = "declared vs observed (S-2)") {
             if (!rrLive) {
-                Note("get_resolver_registry unavailable — UNKNOWN.", UNK)
+                Note("get_resolver_registry unavailable: UNKNOWN.", UNK)
             } else {
                 KvRow("declared", if (rrDeclared.isEmpty()) "—" else rrDeclared.joinToString(", "), NEUTRAL)
                 KvRow("observed writers", rrByResolver.size.toString(), if (rrByResolver.size > 1) BAD else GOOD)
-                KvRow("mismatch", if (rrMismatch) "TRUE — declared ≠ observed" else "false", if (rrMismatch) SEV else GOOD)
+                KvRow("mismatch", if (rrMismatch) "TRUE: declared ≠ observed" else "false", if (rrMismatch) SEV else GOOD)
                 if (rrByResolver.isEmpty()) {
-                    Note("no resolvers observed — no data", UNK)
+                    Note("no resolvers observed: no data", UNK)
                 } else {
                     MiniTable(
                         listOf("resolver", "rows", "declared?"),
@@ -859,11 +878,12 @@ fun ShadowScreen(repo: MissionRepository) {
         }
         McCard("Six personas, nothing asked (S-6)", "get_persona_scoreboard") {
             if (personas.isEmpty()) {
-                Note("get_persona_scoreboard returned no rows — UNKNOWN.", UNK)
+                Note("get_persona_scoreboard returned no rows: UNKNOWN.", UNK)
             } else {
                 // Scoreboard as bars — row count per persona; every zero-row persona is a question
                 // never asked. Uses n when any persona has run, else the pnl_r magnitudes.
                 val anyN = personas.any { (it.int("n") ?: 0) > 0 }
+                SectionLabel("the scoreboard", divider = false)
                 HBarChart(
                     personas.map { p ->
                         val n = p.int("n") ?: 0
@@ -874,12 +894,13 @@ fun ShadowScreen(repo: MissionRepository) {
                     unit = if (anyN) "n" else "R",
                     labelWidth = 128,
                 )
-                Note("All $personaN personas at n=0. The bank has ${bankTotal ?: "many"} rows and nothing is asking it anything — the books must disagree with the gate (S-6), but no persona has run.")
+                SectionLabel("what it means")
+                Note("All $personaN personas at n=0. The bank has ${bankTotal ?: "many"} rows and nothing is asking it anything: the books must disagree with the gate (S-6), but no persona has run.")
             }
         }
         McCard("Persona backfill", tool = "get_persona_backfill", sub = "coverage per question (S-6)") {
             if (pbPersonas.isEmpty()) {
-                Note("get_persona_backfill returned no personas — no data", UNK)
+                Note("get_persona_backfill returned no personas: no data", UNK)
             } else {
                 HBarChart(
                     pbPersonas.map { p ->
@@ -891,23 +912,25 @@ fun ShadowScreen(repo: MissionRepository) {
                     labelWidth = 116,
                 )
                 KvRow("addressable rows", pbAddressable?.toString() ?: "—", NEUTRAL)
-                KvRow("any persona run", if (pbAnyRun) "yes" else "NONE — never scheduled", if (pbAnyRun) GOOD else SEV)
+                KvRow("any persona run", if (pbAnyRun) "yes" else "NONE: never scheduled", if (pbAnyRun) GOOD else SEV)
                 Note(pb.optText("note") ?: "—")
             }
         }
         McCard("And the referee has never sat down (E-0)", "get_attribution_ledger") {
+            SectionLabel("the referee", divider = false)
             StatRow(
                 Triple("windows", alWindows.toString(), if (alWindows == 0) SEV else GOOD),
                 Triple("weeks", (alWeeks ?: 0).toString(), if ((alWeeks ?: 0) == 0) SEV else GOOD),
                 Triple("enough", if (alEnough) "true" else "false", if (alEnough) GOOD else SEV),
                 Triple("required", if (alRequired) "true" else "false", if (alRequired) WARN else NEUTRAL),
             )
-            Note("E-0 attribution is REQUIRED at R1 (TRIAD-EDGE-ACT §2 GE-8) and has never run. It is the referee that decides whether the edge is real or the judgment is real — 'enough' = CI-positive ΔB0 AND CI-positive M1−B0 over ≥4 weeks / ≥300 forward candidates. Nobody has called it.")
+            SectionLabel("what it means")
+            Note("E-0 attribution is REQUIRED at R1 (TRIAD-EDGE-ACT §2 GE-8) and has never run. It is the referee that decides whether the edge is real or the judgment is real: 'enough' = CI-positive ΔB0 AND CI-positive M1−B0 over ≥4 weeks / ≥300 forward candidates. Nobody has called it.")
         }
         McCard("The reversal", tool = "get_shadow_bank · geometry", sub = "a priced floor survives (S-7)") {
             KvRow("10 bps stop → cost", "≈0.90 R (fatal)", BAD)
             KvRow("45 bps floor → cost", "≈0.20 R (survivable)", GOOD)
-            Note("The 45 bps stop floor the validator enforces is the fee model, correctly applied — the 'gate is skipping edge' note is quoted and refuted. Never inherit a lie (S-4): one decision, one resolution.")
+            Note("The 45 bps stop floor the validator enforces is the fee model, correctly applied: the 'gate is skipping edge' note is quoted and refuted. Never inherit a lie (S-4): one decision, one resolution.")
         }
         WhyBox("THE LAWS · S-1..S-7") {
             LawBlock(
@@ -945,8 +968,8 @@ private val SQL_CONV =
 // as side-by-side quote boxes: the source doc labels each verbatim GBT-gate specification.
 private val B1_SPEC = listOf(
     "MASTER-SPEC §14.4" to "Parallel evaluation tracks over identical candidates: B0 deterministic-all, B1 GBT-gated, M1 LLM-gated.",
-    "PLAN §6.4" to "Three-book runner — B0 deterministic-all, B1 GBT-gated, M1 LLM-gated on identical candidates; per-candidate verdicts ledgered forever (§14.4).",
-    "STATUS-M6" to "Three-book runner (learning/books.py) — B0 (deterministic-all), B1 (GBT gate), M1 (LLM…)",
+    "PLAN §6.4" to "Three-book runner: B0 deterministic-all, B1 GBT-gated, M1 LLM-gated on identical candidates; per-candidate verdicts ledgered forever (§14.4).",
+    "STATUS-M6" to "Three-book runner (learning/books.py): B0 (deterministic-all), B1 (GBT gate), M1 (LLM…)",
     "CHECKLIST" to "GBT baseline (B1) walk-forward, matched take-rate, T0 discipline",
 )
 
@@ -1040,7 +1063,7 @@ fun BooksScreen(repo: MissionRepository) {
         } else {
             listOf(
                 Triple("registry entry", "EMPTY", "registry_schema_present:$mrSchema · no entries"),
-                Triple("slot B", "NEVER RUN", "$slotsSeenN distinct slot — only A"),
+                Triple("slot B", "NEVER RUN", "$slotsSeenN distinct slot: only A"),
                 Triple("race vs B0", "UNPRICED", "B0 ${book("B0").num("pnl_r")?.let { fmt(it, 0) } ?: "—"} R at zero fee"),
                 Triple("race vs B1", "REFLECTION", "spec'd GBT, shipped a conviction rule"),
                 Triple("race vs K1", "NOT WIRED", "aux_events has 0 rows"),
@@ -1074,9 +1097,9 @@ fun BooksScreen(repo: MissionRepository) {
     ) {
         VerdictBanner(
             "DEADLOCKED",
-            "GE-5 — the system's own single biggest judgment-side unlock — needs a fresh-decisions curve: conviction " +
+            "GE-5, the system's own single biggest judgment-side unlock, needs a fresh-decisions curve: conviction " +
                 "joined to outcome. The conviction lives in DuckDB. The outcome lives in a SQLite file on a Mac. No view, no " +
-                "join and no tool connects them — and the bank records only a tier that relabels the abstain reason. Meanwhile the " +
+                "join and no tool connects them, and the bank records only a tier that relabels the abstain reason. Meanwhile the " +
                 "ladder that would promote a model demands a race in slot B against B0, B1 and K1: slot B has never run, B1 was " +
                 "spec'd as a GBT and shipped as a conviction rule, K1 is not wired, and M1 has zero rows because the gate has " +
                 "accepted zero trades. The learning loop is not slow. It is deadlocked.",
@@ -1088,7 +1111,7 @@ fun BooksScreen(repo: MissionRepository) {
             SEV,
         )
         Ribbon(
-            "The learning loop is not slow — it is deadlocked (C-7)",
+            "The learning loop is not slow: it is deadlocked (C-7)",
             "go_live needs edge → edge needs M1 rows → M1 needs a trade → a trade needs go_live. A dependency " +
                 "cycle is a stop-work condition; the only edge cut from outside is envelope.feasible. The ladder never skips the race.",
             SEV,
@@ -1097,24 +1120,24 @@ fun BooksScreen(repo: MissionRepository) {
             CycleDeadlockDiagram(cycleNodes)
             Ribbon(
                 "A dependency cycle is not a status. It is a stop-work condition.",
-                "No amount of tuning inside the cycle will break it — every knob is downstream of another knob in there. Exactly one edge must be cut from outside, and there is only one candidate: envelope.feasible. Either the limits move to fit the strategy, or the detector moves to fit the limits.",
+                "No amount of tuning inside the cycle will break it: every knob is downstream of another knob in there. Exactly one edge must be cut from outside, and there is only one candidate: envelope.feasible. Either the limits move to fit the strategy, or the detector moves to fit the limits.",
                 SEV,
             )
-            Note("The evidence, live: by_class → { REAL ${dbReal ?: "—"}, GATED ${dbGated ?: "—"}, MISSED ${dbMissed ?: "—"} } — the gate has accepted nothing, ever, so M1.n = 0 by construction. get_attribution_ledger → { windows $alWindows, weeks ${alWeeks ?: 0}, enough $alEnough, required $alRequired } — and M1 − B0 is undefined when M1 is empty.")
+            Note("The evidence, live: by_class → { REAL ${dbReal ?: "—"}, GATED ${dbGated ?: "—"}, MISSED ${dbMissed ?: "—"} }: the gate has accepted nothing, ever, so M1.n = 0 by construction. get_attribution_ledger → { windows $alWindows, weeks ${alWeeks ?: 0}, enough $alEnough, required $alRequired }, and M1 − B0 is undefined when M1 is empty.")
         }
         McCard("Calibration is one join. The join does not exist. (C-2)", "get_bank_join · get_shadow_bank") {
             KvRow("the conviction", "DuckDB · the ledger", NEUTRAL)
             KvRow("fields", "conviction · decision_id · verdict · context_hash", NEUTRAL)
-            KvRow("reachable?", "yes — decisions is in the run_select allowlist", GOOD)
+            KvRow("reachable?", "yes: decisions is in the run_select allowlist", GOOD)
             Ribbon(
                 "NO VIEW · NO JOIN · NO TOOL",
-                "The conviction lives in DuckDB; the outcome lives in a SQLite file on a Mac. No view, no join and no tool connects them — and the one allowlisted outcome view (outcomes) has 0 rows and always has.",
+                "The conviction lives in DuckDB; the outcome lives in a SQLite file on a Mac. No view, no join and no tool connects them, and the one allowlisted outcome view (outcomes) has 0 rows and always has.",
                 SEV,
             )
             KvRow("the outcome", "SQLite · a file on a Mac", NEUTRAL)
             KvRow("bank", "$bankPath · ${bankTotal ?: "—"} rows", NEUTRAL)
             KvRow("fields", "shadow_outcome · pnl_r · decision_id · conviction_tier", NEUTRAL)
-            KvRow("reachable?", "no — not in the allowlisted view catalog", SEV)
+            KvRow("reachable?", "no: not in the allowlisted view catalog", SEV)
             if (bjLive) KvRow("get_bank_join", "joined ${bjJoined ?: "—"} · unjoinable ${bjUnjoinable ?: "—"}", if ((bjJoined ?: 0) > 0) GOOD else SEV)
             MiniTable(
                 listOf("gate_reason", "means", "tier"),
@@ -1124,11 +1147,11 @@ fun BooksScreen(repo: MissionRepository) {
                     row("invalid_output:context_stale" to NEUTRAL, "validator killed a TRADE" to NEUTRAL, "VERY_LOW" to SEV),
                 ),
             )
-            Note("C-3 · a tier is not a score. The bank does not record conviction at all — only conviction_tier, a relabelling of the abstain reason (VERY_LOW ⟺ the validator killed a trade, LOW ⟺ the model skipped). It carries zero bits about the model's score. Calibration is not unfinished — it is unreachable.")
+            Note("C-3 · a tier is not a score. The bank does not record conviction at all: only conviction_tier, a relabelling of the abstain reason (VERY_LOW ⟺ the validator killed a trade, LOW ⟺ the model skipped). It carries zero bits about the model's score. Calibration is not unfinished: it is unreachable.")
         }
         McCard("The four-book scoreboard (C-5)", "get_books_scoreboard") {
             if (books == null) {
-                Note("get_books_scoreboard unavailable — UNKNOWN.", UNK)
+                Note("get_books_scoreboard unavailable: UNKNOWN.", UNK)
             } else {
                 // Scoreboard as bars — net_pnl_r per book when any book has rows, else expectancy.
                 // Zero-row books read BAD (never run); the one book with rows carries the whole chart.
@@ -1145,6 +1168,7 @@ fun BooksScreen(repo: MissionRepository) {
                     Triple(k, tone, if (pnl != null && n > 0) pnl else (exp ?: 0.0) * n)
                 }
                 val anyBookRows = bookRows.any { it.third != 0.0 }
+                SectionLabel("the scoreboard", divider = false)
                 if (anyBookRows) {
                     HBarChart(
                         bookRows.map { (k, tone, v) -> Bar(k, v, tone) },
@@ -1155,10 +1179,10 @@ fun BooksScreen(repo: MissionRepository) {
                 // C-5 · the per-book "why it is zero" column — three books are zero for three distinct
                 // reasons, and the one book with rows is priced at zero fee (BCVIEW pBooks `why`).
                 fun bookWhy(k: String): String = when (k) {
-                    "B0" -> "only book with rows — fee-free, 2.93× duplicated, first-touch (taker) fills the ruling forbids"
+                    "B0" -> "only book with rows: fee-free, 2.93× duplicated, first-touch (taker) fills the ruling forbids"
                     "B1" -> "the wrong book shipped: spec GBT gate, reality a threshold on M1's conviction; no row has reached MED"
-                    "M1" -> "the gate has accepted nothing, ever — by_class REAL ${dbReal ?: 0} / GATED ${dbGated ?: 0}"
-                    "K1" -> "not wired — needs the Kronos-fused decision join; aux_events has 0 rows"
+                    "M1" -> "the gate has accepted nothing, ever: by_class REAL ${dbReal ?: 0} / GATED ${dbGated ?: 0}"
+                    "K1" -> "not wired: needs the Kronos-fused decision join; aux_events has 0 rows"
                     else -> "—"
                 }
                 MiniTable(
@@ -1182,21 +1206,22 @@ fun BooksScreen(repo: MissionRepository) {
                         )
                     },
                 )
+                SectionLabel("what it means")
                 Note(
-                    "B0 (take-every-candidate) is net-negative over ${book("B0").int("n") ?: "—"} rows — the setups lose before " +
+                    "B0 (take-every-candidate) is net-negative over ${book("B0").int("n") ?: "—"} rows: the setups lose before " +
                         "the gate. B1 shipped 'take conviction ≥ MED', NOT the spec's GBT gate (C-4); racing M1 against a reflection " +
                         "of itself measures nothing. M1 = ${book("M1").int("n") ?: 0} rows, K1 not wired. Total ${totalDecisions ?: "—"} decisions.",
                 )
                 Ribbon(
                     "EDGE-ACTIVATION-RULING, verbatim",
-                    "No backtest evidence for M1, B1, K1, or any aux-calibrated component — the contamination boundary (§0.1) is " +
+                    "No backtest evidence for M1, B1, K1, or any aux-calibrated component: the contamination boundary (§0.1) is " +
                         "not softened by enthusiasm. No T2+ before the T1 gate is green. No simultaneous edge+judgment windows. " +
                         "No taker entries anywhere including sim. No threshold move without a pin.",
                     SEV,
                 )
                 Ribbon(
                     "\"No taker entries anywhere including sim.\"",
-                    "The bank's resolver is triad-cf/1 (first-touch), and a first-touch fill is a taker entry — the ruling's " +
+                    "The bank's resolver is triad-cf/1 (first-touch), and a first-touch fill is a taker entry: the ruling's " +
                         "explicit prohibition is violated ${bankTotal ?: "—"} times, in sim. It is exactly why B0 reads " +
                         "+${book("B0").num("pnl_r")?.let { fmt(it, 0) } ?: "989"} R at zero cost and −645 R once it pays the 9 bps it would owe.",
                     SEV,
@@ -1204,11 +1229,12 @@ fun BooksScreen(repo: MissionRepository) {
             }
         }
         McCard("Calibration", tool = "get_calibration", sub = "occupancy, not slope (C-1)") {
-            KvRow("status", if (calAbsent) "$calStatus — UNCALIBRATED" else calStatus, if (calAbsent) BAD else GOOD)
+            KvRow("status", if (calAbsent) "$calStatus: UNCALIBRATED" else calStatus, if (calAbsent) BAD else GOOD)
             KvRow("threshold 60", "design-default, not derived", SEV)
-            Note("A threshold you didn't derive is a design default (C-1). With no artifact, the check is occupancy — is there dispersion to calibrate at all? — not reliability slope.")
+            Note("A threshold you didn't derive is a design default (C-1). With no artifact, the check is occupancy (is there dispersion to calibrate at all?), not reliability slope.")
         }
         McCard("Calibration curve", tool = "get_calibration_curve", sub = "feasible:false is LOUD (C-6)") {
+            SectionLabel("the curve", divider = false)
             StatRow(
                 Triple("support pts", supportPts?.toString() ?: "—", BAD),
                 Triple("mass@1 value", mass?.let { "${fmt(it * 100, 1)}%" } ?: "—", BAD),
@@ -1235,16 +1261,17 @@ fun BooksScreen(repo: MissionRepository) {
                     },
                 )
             }
-            Note("feasible:false — a curve needs conviction dispersion, and with ${mass?.let { "${fmt(it * 100, 0)}%" } ?: "most"} of the mass piled on one value there are not ten deciles to fill (n=${curveN ?: "—"}). You can't calibrate against a verdict you derived (C-5).")
+            SectionLabel("what it means")
+            Note("feasible:false. A curve needs conviction dispersion, and with ${mass?.let { "${fmt(it * 100, 0)}%" } ?: "most"} of the mass piled on one value there are not ten deciles to fill (n=${curveN ?: "—"}). You can't calibrate against a verdict you derived (C-5).")
         }
         McCard("You cannot calibrate a score against a verdict you derived from it (C-5)", "run_select · decisions · get_limits") {
             KvRow("verdict rule", "verdict := (conviction ≥ ${threshold ?: 60})", SEV)
             KvRow("support points", supportPts?.toString() ?: "—", BAD)
-            KvRow("pin", if (calPinned) "pinned" else "unpinned — the threshold cannot move", if (calPinned) GOOD else SEV)
+            KvRow("pin", if (calPinned) "pinned" else "unpinned: the threshold cannot move", if (calPinned) GOOD else SEV)
             // The live conviction/verdict table — run_select(decisions), one row per distinct conviction.
             // takes flips from 0 to 1 exactly at the threshold: the verdict IS the threshold applied to the score.
             if (convRows == null) {
-                Note("run_select(decisions) unserved — the conviction↔verdict evidence table is UNKNOWN.", UNK)
+                Note("run_select(decisions) unserved: the conviction↔verdict evidence table is UNKNOWN.", UNK)
             } else {
                 val thr = threshold ?: 60
                 MiniTable(
@@ -1267,7 +1294,7 @@ fun BooksScreen(repo: MissionRepository) {
                 }
                 if (circular) {
                     Note(
-                        "takes = 1 exactly when conviction ≥ $thr — with no exceptions, across all ${convRows!!.size} support " +
+                        "takes = 1 exactly when conviction ≥ $thr: with no exceptions, across all ${convRows!!.size} support " +
                             "points. Calibrating conviction against verdict reports perfect accuracy forever and means nothing.",
                         SEV,
                     )
@@ -1275,31 +1302,32 @@ fun BooksScreen(repo: MissionRepository) {
             }
             Ribbon(
                 "takes = 1 exactly when conviction ≥ ${threshold ?: 60}",
-                "The verdict IS the threshold applied to the score. Calibrating conviction against verdict is calibrating a number against itself — it reports perfect accuracy forever and means nothing. The only external signal is the outcome, and the outcome is behind the join that does not exist.",
+                "The verdict IS the threshold applied to the score. Calibrating conviction against verdict is calibrating a number against itself: it reports perfect accuracy forever and means nothing. The only external signal is the outcome, and the outcome is behind the join that does not exist.",
                 SEV,
             )
-            Note("C-1 · GE-5, verbatim from EDGE-ACTIVATION-RULING: 'derived conviction threshold replacing the design-default 60 — the single biggest judgment-side unlock.' The system already knows 60 was typed, and 'no threshold move without a pin' — the pin that would unfreeze it cannot be created.")
+            Note("C-1 · GE-5, verbatim from EDGE-ACTIVATION-RULING: 'derived conviction threshold replacing the design-default 60, the single biggest judgment-side unlock.' The system already knows 60 was typed, and 'no threshold move without a pin': the pin that would unfreeze it cannot be created.")
         }
         McCard("B1 was specified as a GBT. It shipped as a copy of M1. (C-4)", "get_book_definitions × get_books_scoreboard") {
-            Note("Four documents (MASTER-SPEC §14.4, PLAN §6.4, STATUS-M6, CHECKLIST) specify B1 as a GBT gate — a gradient-boosted tree on the same features, the honest control that answers 'do we even need the LLM?'.")
+            Note("Four documents (MASTER-SPEC §14.4, PLAN §6.4, STATUS-M6, CHECKLIST) specify B1 as a GBT gate: a gradient-boosted tree on the same features, the honest control that answers 'do we even need the LLM?'.")
             // C-4 · what four documents say B1 is — the verbatim spec quotes as side-by-side quote boxes
             // (explain_id("B1")). Each is a GBT-gate specification; what shipped is a threshold on M1.
             Note("what four documents say B1 is", UNK)
             B1_SPEC.forEach { (source, quote) -> Ribbon(source, quote, NEUTRAL) }
             KvRow("what shipped", "take conviction ≥ MED", SEV)
-            KvRow("independent of M1", when (bdefIndependent) { "true" -> "true"; "false" -> "FALSE — a function of M1's output"; else -> "FALSE — a function of M1's output" }, if (bdefIndependent == "true") GOOD else SEV)
+            KvRow("independent of M1", when (bdefIndependent) { "true" -> "true"; "false" -> "FALSE: a function of M1's output"; else -> "FALSE: a function of M1's output" }, if (bdefIndependent == "true") GOOD else SEV)
             KvRow("B1 rows, ever", (book("B1").int("n") ?: 0).toString(), if ((book("B1").int("n") ?: 0) == 0) SEV else NEUTRAL)
             Ribbon(
                 "Racing M1 against a copy of M1 measures nothing",
-                "What shipped is a threshold on the LLM's own conviction — a mirror, not a control. §14.5 promotion ('uplift over B0 AND B1 CIs exclude 0') is not hard to satisfy — it is UNSATISFIABLE. And B1.n = 0 proves no row has ever reached MED: conviction_tier only emits LOW and VERY_LOW.",
+                "What shipped is a threshold on the LLM's own conviction: a mirror, not a control. §14.5 promotion ('uplift over B0 AND B1 CIs exclude 0') is not hard to satisfy: it is UNSATISFIABLE. And B1.n = 0 proves no row has ever reached MED: conviction_tier only emits LOW and VERY_LOW.",
                 SEV,
             )
         }
         McCard("Bridge lag", tool = "get_bridge_lag", sub = "the ingest heartbeats (C-3)") {
             if (lanes.isEmpty()) {
-                Note("get_bridge_lag unavailable — UNKNOWN.", UNK)
+                Note("get_bridge_lag unavailable: UNKNOWN.", UNK)
             } else {
                 // Per-lane heartbeat ages as bars — a tall bar is a stale lane (>300s BAD, >120s WARN).
+                SectionLabel("the lanes", divider = false)
                 HBarChart(
                     lanes.map { l ->
                         val age = l.num("age_s") ?: 0.0
@@ -1327,13 +1355,15 @@ fun BooksScreen(repo: MissionRepository) {
                         row(l.text("match_value") to NEUTRAL, (age?.let { fmt(it, 0) } ?: "—") to tone, l.text("note") to NEUTRAL)
                     },
                 )
-                Note("The outcome lane (SQLite on a Mac) and the conviction lane (the DuckDB ledger) never join — no view, no join, no tool. Calibration needs conviction joined to outcome (C-2), and the bank throws conviction away, mapping tier off gate_reason not the score.")
+                SectionLabel("what it means")
+                Note("The outcome lane (SQLite on a Mac) and the conviction lane (the DuckDB ledger) never join: no view, no join, no tool. Calibration needs conviction joined to outcome (C-2), and the bank throws conviction away, mapping tier off gate_reason not the score.")
             }
         }
         McCard("The promotion ladder", tool = "get_ladder_status × live", sub = "every rung, and its blocker (C-6)") {
             if (ladderRungs.isEmpty()) {
-                Note("get_ladder_status unavailable and the estate could not be assembled — UNKNOWN.", UNK)
+                Note("get_ladder_status unavailable and the estate could not be assembled: UNKNOWN.", UNK)
             } else {
+                SectionLabel("the rungs", divider = false)
                 MiniTable(
                     listOf("rung", "status", "blocker"),
                     ladderRungs.map { (id, st, ev) ->
@@ -1341,7 +1371,8 @@ fun BooksScreen(repo: MissionRepository) {
                         row(id to NEUTRAL, st to tone, ev to NEUTRAL)
                     },
                 )
-                Note("C-6 · the ladder never skips the race — so the ladder never starts. Every rung requires slot B, and slot B has never run: $slotsSeenN distinct slot, only A. The whole mechanism by which a challenger earns its way into production has never executed once. Six rungs, six blockers — not one is a tuning problem.")
+                SectionLabel("what it means")
+                Note("C-6 · the ladder never skips the race, so the ladder never starts. Every rung requires slot B, and slot B has never run: $slotsSeenN distinct slot, only A. The whole mechanism by which a challenger earns its way into production has never executed once. Six rungs, six blockers: not one is a tuning problem.")
             }
         }
         WhyBox("THE LAWS · C-1..C-7") {
@@ -1389,8 +1420,8 @@ private data class PipeRung(val tier: String, val name: String, val desc: String
 private val LADDER_RUNGS = listOf(
     PipeRung("T5", "Continual refresh · TIES/DARE", "rolling window + replay buffer", "T1–T3 to exist · replay buffer", "needs T1–T3"),
     PipeRung("T4", "Rationale distillation", "reverse-reasoning + teacher labels", "teacher access + forward packets", "get_render is broken"),
-    PipeRung("T3", "GRPO — reinforcement", "RL on the verifiable reward", "simulator ≥ 50 evals/s · the CUDA box", "the reward is poisoned"),
-    PipeRung("T2", "KTO / DPO — preference", "prefer the trades that worked", "≥ 2,000 outcome-labeled decisions", "1,091 / 2,000 · usable: 0"),
+    PipeRung("T3", "GRPO: reinforcement", "RL on the verifiable reward", "simulator ≥ 50 evals/s · the CUDA box", "the reward is poisoned"),
+    PipeRung("T2", "KTO / DPO: preference", "prefer the trades that worked", "≥ 2,000 outcome-labeled decisions", "1,091 / 2,000 · usable: 0"),
     PipeRung("T1", "SFT / LoRA", "teach the format and the rule-book's judgment", "≥ 5,000 labeled candidates", "1,091 / 5,000 · usable: 0"),
 )
 private val GATE_BLOCKERS = listOf("slot B never run (only A)", "B1 is a reflection of M1", "K1 not wired (aux 0 rows)", "M1 has 0 rows")
@@ -1404,7 +1435,7 @@ private val AUDITS = listOf(
     Mitigation("threshold derived post-hoc", "NOT DERIVED", "60 was typed · artifact_hash null"),
     Mitigation("audit TP-distance vs T1", "NO T1", "no T1 checkpoint to compare"),
     Mitigation("LLM-judge rationale-contradiction check", "BLOCKED", "get_render → render_context_missing"),
-    Mitigation("SPEC-SHADOW-SIM honesty gates", "VACUOUS", "∅ ⊆ anything — cannot fail"),
+    Mitigation("SPEC-SHADOW-SIM honesty gates", "VACUOUS", "∅ ⊆ anything: cannot fail"),
 )
 
 // §2 — the reward function, verbatim (FINE-TUNING-PLAYBOOK §2 / LPVIEW pReward). Rendered as a mono
@@ -1422,11 +1453,11 @@ private val REWARD_FORMULA = """
 
 private data class RewardTermNote(val w: String, val status: String, val note: String, val tone: Tone)
 private val REWARD_TERM_NOTES = listOf(
-    RewardTermNote("w_fmt", "COMPUTABLE", "exists — and it rejects 689 of 691 model trades", GOOD),
+    RewardTermNote("w_fmt", "COMPUTABLE", "exists, and it rejects 689 of 691 model trades", GOOD),
     RewardTermNote("w_pnl", "POISONED", "zero-fee · first-touch · 3 resolvers · 2.93× counted", SEV),
-    RewardTermNote("w_cal", "CANNOT COMPUTE", "the join does not exist — conviction in DuckDB, outcome in SQLite", BAD),
+    RewardTermNote("w_cal", "CANNOT COMPUTE", "the join does not exist: conviction in DuckDB, outcome in SQLite", BAD),
     RewardTermNote("w_tr", "MEASURABLE", "take rate is 0.06%, the band is 10–60%", WARN),
-    RewardTermNote("w_kl", "CANNOT COMPUTE", "there is no T1 — nothing to anchor to", BAD),
+    RewardTermNote("w_kl", "CANNOT COMPUTE", "there is no T1: nothing to anchor to", BAD),
 )
 
 @Composable
@@ -1544,7 +1575,7 @@ fun LearningPipelineScreen(repo: MissionRepository) {
     ) {
         VerdictBanner(
             word = "POISONED",
-            said = "Every reward rung consumes one number — net_pnl_r from the counterfactual simulator. §0.3 requires it be cost-adjusted, from conservative fills, from the one simulator. It is zero-fee, first-touch, and there are three simulators that disagree. The learning pipeline is not five problems — it is one number, and it is wrong.",
+            said = "Every reward rung consumes one number: net_pnl_r from the counterfactual simulator. §0.3 requires it be cost-adjusted, from conservative fills, from the one simulator. It is zero-fee, first-touch, and there are three simulators that disagree. The learning pipeline is not five problems: it is one number, and it is wrong.",
             pills = listOf(
                 "THE SOURCE · RED · wrong 4 ways" to SEV,
                 "THE GATE · RED · locked · shared by 5 rungs" to SEV,
@@ -1557,21 +1588,22 @@ fun LearningPipelineScreen(repo: MissionRepository) {
             "One number, wrong in four independent ways (T-1)",
             "The pipeline SLO is worst-of six lanes = ${lpVerdict.uppercase()}. Every reward rung collapses to one " +
                 "shared POISONED source (net_pnl_r: zero-fee, first-touch, three resolvers) and one shared LOCKED gate. " +
-                "The reward function is the product — cost-adjusted, conservative fills, one simulator.",
+                "The reward function is the product: cost-adjusted, conservative fills, one simulator.",
             SEV,
         )
         McCard("The ladder", tool = "get_training_readiness · FINE-TUNING-PLAYBOOK §1 · §5", sub = "five rungs, one source, one gate") {
-            LadderCap("🔒", "THE GATE — identical for all rungs", "LOCKED", "registry → slot B → race vs B0/B1/K1 → CI-positive uplift", GATE_BLOCKERS, SEV)
+            LadderCap("🔒", "THE GATE: identical for all rungs", "LOCKED", "registry → slot B → race vs B0/B1/K1 → CI-positive uplift", GATE_BLOCKERS, SEV)
             LADDER_RUNGS.forEach { r -> LadderRung(r.tier, r.name, r.desc, r.needs, r.why, "BLOCKED", SEV) }
-            LadderCap("☠", "THE SOURCE — identical for all rungs", "POISONED", "net_pnl_r from the counterfactual simulator", SOURCE_FAULTS, SEV)
+            LadderCap("☠", "THE SOURCE: identical for all rungs", "POISONED", "net_pnl_r from the counterfactual simulator", SOURCE_FAULTS, SEV)
             Ribbon(
                 "This is why the page is short",
-                "The pipeline looks like ten subsystems. It has exactly two failure points: the well at the bottom and the lock at the top. Every rung draws from the same number and exits through the same gate — so they do not fail five times, they fail twice. Fix those two and the whole ladder unlocks.",
+                "The pipeline looks like ten subsystems. It has exactly two failure points: the well at the bottom and the lock at the top. Every rung draws from the same number and exits through the same gate, so they do not fail five times, they fail twice. Fix those two and the whole ladder unlocks.",
                 SEV,
             )
         }
         McCard("The one number (§0.3)", "FINE-TUNING-PLAYBOOK §0.3 × get_shadow_bank") {
             Note("§0.3, verbatim: 'Good trade = cost-adjusted, counterfactual, per the one simulator. Net pnl_r under the active exit profile, conservative fills, from SPEC-SHADOW-SIM. Every reward, label, and preference in this document derives from that single number plus calibration quality.'")
+            SectionLabel("the one number", divider = false)
             MiniTable(
                 listOf("requirement", "reality", "evidence"),
                 listOf(
@@ -1586,14 +1618,16 @@ fun LearningPipelineScreen(repo: MissionRepository) {
                 Triple("no label", (lqUnlabeled ?: 0).toString(), UNK),
                 Triple("usable", (lqUsable ?: 0).toString(), if ((lqUsable ?: 0) == 0) SEV else GOOD),
             )
-            Note("T-5 · volume is not the blocker, truth is. Every label is priced at zero fees, filled at first touch, resolved by three simulators that disagree, and counted 2.93 times. usable_for_training is the only number that matters — and it is ${lqUsable ?: 0}, not ${lqLabeled ?: "—"}.")
+            SectionLabel("what it means")
+            Note("T-5 · volume is not the blocker, truth is. Every label is priced at zero fees, filled at first touch, resolved by three simulators that disagree, and counted 2.93 times. usable_for_training is the only number that matters, and it is ${lqUsable ?: 0}, not ${lqLabeled ?: "—"}.")
         }
         McCard("Pipeline SLO", tool = "get_learning_pipeline", sub = "worst-of six lanes") {
             if (lanesObj == null) {
-                Note("get_learning_pipeline unavailable — UNKNOWN.", UNK)
+                Note("get_learning_pipeline unavailable: UNKNOWN.", UNK)
             } else {
                 // The six lanes as a status bar-chart — each lane scored GREEN=1/YELLOW=0.5/RED=0/UNK=0
                 // so the worst-of collapse is visible as a wall of short bars. Same statuses as the table.
+                SectionLabel("the lanes", divider = false)
                 HBarChart(
                     laneKeys.map { k ->
                         val st = laneStatus(k)
@@ -1612,17 +1646,18 @@ fun LearningPipelineScreen(repo: MissionRepository) {
                         row(k.uppercase() to NEUTRAL, st to tone, (lanesObj.obj(k)).text("note") to NEUTRAL)
                     },
                 )
-                Note("An unmeasurable lane is YELLOW, never fake-green (T-3): an audit that can't fail isn't an audit. CAG=0 hits, corpus/eval/race not yet started — pre-P3/P4.")
+                SectionLabel("what it means")
+                Note("An unmeasurable lane is YELLOW, never fake-green (T-3): an audit that can't fail isn't an audit. CAG=0 hits, corpus/eval/race not yet started: pre-P3/P4.")
             }
         }
         McCard("Training readiness", tool = "get_training_readiness", sub = "the five-rung ladder") {
             if (trdRungs.isEmpty()) {
-                Note("get_training_readiness returned no rungs — UNKNOWN.", UNK)
+                Note("get_training_readiness returned no rungs: UNKNOWN.", UNK)
             } else {
                 VerdictBanner(
                     word = if (trdRunnable) "A RUNG IS RUNNABLE" else "NO RUNG RUNNABLE",
                     said = "shared source ${trdSource.text("id")} is ${if (trdSource.bool("healthy")) "healthy" else "UNHEALTHY"} and shared gate " +
-                        "${trdGate.text("id")} is ${if (trdGate.bool("locked")) "LOCKED" else "open"} — five rungs collapse onto these two " +
+                        "${trdGate.text("id")} is ${if (trdGate.bool("locked")) "LOCKED" else "open"}: five rungs collapse onto these two " +
                         "failure points; fix the source and the gate, not five symptoms.",
                     pills = trdFaults.map { it to SEV },
                     wordTone = if (trdRunnable) GOOD else SEV,
@@ -1647,43 +1682,45 @@ fun LearningPipelineScreen(repo: MissionRepository) {
         }
         McCard("Failure histogram (24h)", tool = "get_analytics · checks_failed", sub = "checks_failed") {
             if (checksFailed.isEmpty()) {
-                Note("get_analytics returned no checks_failed rows — UNKNOWN.", UNK)
+                Note("get_analytics returned no checks_failed rows: UNKNOWN.", UNK)
             } else {
                 // The 24h failure census as bars — the same checks the validator kills on, seen at the
                 // pipeline scale (context_stale = scheduler debt; ttl_bounds dies at grammar v1.1).
+                SectionLabel("the census", divider = false)
                 HBarChart(
                     checksFailed.take(8).map { (check, n) -> Bar(check, n, BAD) },
                     unit = "fails",
                     labelWidth = 132,
                 )
+                SectionLabel("what it means")
                 Note("Stale-context is scheduler debt (curriculum-banned); ttl_bounds/stop_distance/net_rr_floor are the venue-cost floor seen three ways. Volume isn't the blocker, truth is (T-5).")
             }
         }
         McCard("Corpus counter vs the T1 gate (§5)", "get_corpus_status") {
             if (!corpusBuilt) {
-                KvRow("manifest", "not built — triad-corpus build", BAD)
+                KvRow("manifest", "not built: triad-corpus build", BAD)
                 KvRow("closed-horizon TRIAD-A feed", "${closedTriadA ?: "—"} rows available", NEUTRAL)
                 Note("Volume isn't the blocker, truth is (T-5): ${closedTriadA ?: "—"} closed rows are available to the builder, but no manifest progresses toward the $t1Gate T1 gate because usable_for_training is 0.")
             } else {
                 StatRow(Triple("n_labeled", "${nLabeled ?: 0} / $t1Gate", BAD))
-                Note("Blocked on truth, not data — the corpus cannot be built while get_render fails and labels are unusable.")
+                Note("Blocked on truth, not data: the corpus cannot be built while get_render fails and labels are unusable.")
             }
         }
         McCard("Label quality", tool = "get_label_quality", sub = "usable_for_training (T-5)") {
             if (!lqLive) {
-                Note("get_label_quality unavailable — UNKNOWN.", UNK)
+                Note("get_label_quality unavailable: UNKNOWN.", UNK)
             } else {
                 HBarChart(
                     listOf(
                         Bar("rows", (lqRows ?: 0).toDouble(), NEUTRAL),
                         Bar("labeled", (lqLabeled ?: 0).toDouble(), WARN),
                         Bar("unlabeled", (lqUnlabeled ?: 0).toDouble(), UNK),
-                        Bar("usable", (lqUsable ?: 0).toDouble(), if ((lqUsable ?: 0) == 0) BAD else GOOD, if ((lqUsable ?: 0) == 0) "ZERO — every label carries all four faults" else ""),
+                        Bar("usable", (lqUsable ?: 0).toDouble(), if ((lqUsable ?: 0) == 0) BAD else GOOD, if ((lqUsable ?: 0) == 0) "ZERO: every label carries all four faults" else ""),
                     ),
                     unit = "rows",
                     labelWidth = 96,
                 )
-                KvRow("priced", if (lqPriced) "true" else "FALSE — ${fmt(lqFeeApplied, 0)} bps applied", if (lqPriced) GOOD else SEV)
+                KvRow("priced", if (lqPriced) "true" else "FALSE: ${fmt(lqFeeApplied, 0)} bps applied", if (lqPriced) GOOD else SEV)
                 KvRow("fill model", "$lqFill (required: $lqFillReq)", if (lqFill == lqFillReq) GOOD else BAD)
                 KvRow("resolvers writing", lqResolvers?.toString() ?: "—", if ((lqResolvers ?: 1) > 1) BAD else GOOD)
                 KvRow("resolver agreement", lqAgreement?.let { fmt(it, 2) } ?: "— (unmeasured)", UNK)
@@ -1693,14 +1730,14 @@ fun LearningPipelineScreen(repo: MissionRepository) {
         }
         McCard("Corpus export", tool = "get_corpus_export", sub = "(render → output) pairs") {
             if (!ceLive) {
-                Note("get_corpus_export unavailable — UNKNOWN.", UNK)
+                Note("get_corpus_export unavailable: UNKNOWN.", UNK)
             } else {
                 StatRow(Triple("exportable pairs", ceN?.toString() ?: "—", if ((ceN ?: 0) == 0) BAD else GOOD))
                 KvRow("format", ce.text("format"), NEUTRAL)
                 KvRow("cohort", "${ce.text("cohort")} · banned era ${if (ce.bool("banned_era_excluded")) "excluded" else "INCLUDED"}", NEUTRAL)
                 KvRow("blocked on", ce.optText("blocked_on") ?: "—", SEV)
                 if (ceChannels.isEmpty()) {
-                    Note("no channels — the export has never produced a batch.", UNK)
+                    Note("no channels: the export has never produced a batch.", UNK)
                 } else {
                     HBarChart(ceChannels.map { (k, v) -> Bar(k, v, INFO) }, unit = "pairs")
                 }
@@ -1709,7 +1746,7 @@ fun LearningPipelineScreen(repo: MissionRepository) {
         }
         McCard("Eval report", tool = "get_eval_report", sub = "the seven gates (§5)") {
             if (!evalBuilt) {
-                KvRow("report", "unavailable — no checkpoint scored (pre-P3)", BAD)
+                KvRow("report", "unavailable: no checkpoint scored (pre-P3)", BAD)
                 Note("A checkpoint has not been scored: the seven pre-registered pass/fail gates cannot render until triad-eval run writes a report. An audit that can't fail isn't an audit (T-3).")
             } else if (evalGates != null) {
                 MiniTable(
@@ -1721,10 +1758,11 @@ fun LearningPipelineScreen(repo: MissionRepository) {
                     },
                 )
             } else {
-                Note("Eval report present but no gate rows — UNKNOWN.", UNK)
+                Note("Eval report present but no gate rows: UNKNOWN.", UNK)
             }
         }
         McCard("The reward function, term by term (§2)", "FINE-TUNING-PLAYBOOK §2 · the live ledger") {
+            SectionLabel("the formula", divider = false)
             // §2 verbatim — the reward is the product of five terms; the mono block keeps the ASCII
             // alignment (scrolls sideways rather than wrapping). The per-term notes below carry the why.
             Box(
@@ -1736,6 +1774,7 @@ fun LearningPipelineScreen(repo: MissionRepository) {
             ) {
                 Text(REWARD_FORMULA, color = Ink, fontFamily = Mono, fontSize = 10.sp, lineHeight = 15.sp)
             }
+            SectionLabel("term by term")
             MiniTable(
                 listOf("term", "status", "why"),
                 REWARD_TERM_NOTES.map { t ->
@@ -1752,12 +1791,13 @@ fun LearningPipelineScreen(repo: MissionRepository) {
                 max = 1.0,
                 labelWidth = 128,
             )
-            Note("Three of five reward terms cannot be computed today; the one that can (w_fmt) fails 99.7% of proposals. The reward function is the product (T-1) — and it is poisoned before any RL runs.")
+            SectionLabel("what it means")
+            Note("Three of five reward terms cannot be computed today; the one that can (w_fmt) fails 99.7% of proposals. The reward function is the product (T-1), and it is poisoned before any RL runs.")
         }
         McCard("§3 is not a risk list. It is a diagnosis.", "get_reward_audit · FINE-TUNING-PLAYBOOK §3 × the live ledger") {
-            Note("The playbook names six ways RL will break the model. Five of them are already present — in a model that has never been tuned.")
+            Note("The playbook names six ways RL will break the model. Five of them are already present: in a model that has never been tuned.")
             if (raHacks.isEmpty()) {
-                Note("get_reward_audit returned no rows — UNKNOWN.", UNK)
+                Note("get_reward_audit returned no rows: UNKNOWN.", UNK)
             } else {
                 StatRow(
                     Triple("present pre-training", "${raPresent ?: "—"} / ${raOf ?: "—"}", SEV),
@@ -1774,13 +1814,13 @@ fun LearningPipelineScreen(repo: MissionRepository) {
                         row(h.text("id") to NEUTRAL, h.text("metric") to NEUTRAL, label to tone)
                     },
                 )
-                Note((ra.optText("note")?.let { "$it. " } ?: "") + "RL will not cause these — RL will amplify them; the hacks arrive before the RL (T-4).")
+                Note((ra.optText("note")?.let { "$it. " } ?: "") + "RL will not cause these: RL will amplify them; the hacks arrive before the RL (T-4).")
                 Note("§3 · AND EVERY AUDIT THAT WOULD CATCH THEM", SEV)
                 MiniTable(
                     listOf("mitigation §3 promises", "status", "why"),
                     AUDITS.map { m -> row(m.text to NEUTRAL, m.status to SEV, m.why to NEUTRAL) },
                 )
-                Note("T-3 · an audit that cannot fail is not an audit. Six mitigations, zero of them can fire — not one is wired to a number that could go red.")
+                Note("T-3 · an audit that cannot fail is not an audit. Six mitigations, zero of them can fire: not one is wired to a number that could go red.")
             }
         }
         McCard("$principlesViolated of 12 normative principles violated", tool = "MASTER-SPEC §1.3", sub = "and every one is a learning input") {
@@ -1790,12 +1830,12 @@ fun LearningPipelineScreen(repo: MissionRepository) {
             )
             Ribbon(
                 "P9 is the one that hurts",
-                "'Repair hides defects; rejection surfaces them.' The validator repaired 689 rejected trades — set conviction 0, verdict skip, wrote them to the ledger — and the defect stayed hidden for the entire run. The spec named the failure mode, named the mechanism, and forbade it. It happened anyway.",
+                "'Repair hides defects; rejection surfaces them.' The validator repaired 689 rejected trades (set conviction 0, verdict skip, wrote them to the ledger) and the defect stayed hidden for the entire run. The spec named the failure mode, named the mechanism, and forbade it. It happened anyway.",
                 SEV,
             )
             Ribbon(
                 "P8 is HONORED",
-                "The counterfactual runs on the forward tape, never on historical replay. The contamination boundary is real and respected — credit where it is due, this is the hardest principle to keep and it was kept.",
+                "The counterfactual runs on the forward tape, never on historical replay. The contamination boundary is real and respected: credit where it is due, this is the hardest principle to keep and it was kept.",
                 GOOD,
             )
         }
@@ -1803,34 +1843,34 @@ fun LearningPipelineScreen(repo: MissionRepository) {
             KvRow("base assumed", "qwen3-8B (v5 lineage), LoRA artifacts", NEUTRAL)
             KvRow("FinGPT", "stays in the BIAS role per TRIAD-ALIGN", NEUTRAL)
             KvRow("model_id (live)", "fingpt-crypto:v5-full-test", SEV)
-            KvRow("registry entries", "NONE — schema present · slots [${lpSlots.joinToString(",")}]", SEV)
-            KvRow("slot B", "NEVER RUN — the race has never happened", SEV)
+            KvRow("registry entries", "NONE: schema present · slots [${lpSlots.joinToString(",")}]", SEV)
+            KvRow("slot B", "NEVER RUN: the race has never happened", SEV)
             Ribbon(
                 "Either the naming is misleading, or the bias model is adjudicating",
-                "Nothing in this system can tell you which — get_model_registry returns a schema and no entries. The one artifact that exists precisely to answer this question is empty. And the model's name ends in -full-test.",
+                "Nothing in this system can tell you which: get_model_registry returns a schema and no entries. The one artifact that exists precisely to answer this question is empty. And the model's name ends in -full-test.",
                 SEV,
             )
             Note("T-6 · everything foreign enters as a slot-B challenger, or not at all. §6.1: 'unknown training data = unknown contamination... its demo metrics are fiction for our purposes.' Slot B has never run, because the race has never been held.")
         }
         McCard("Two fixes. Not ten.", "the shape of the problem · get_books_scoreboard") {
             Ribbon(
-                "Five rungs share one source and one gate — there are exactly two things to repair",
+                "Five rungs share one source and one gate: there are exactly two things to repair",
                 "Everything else on this page is a consequence of these two.",
                 INFO,
             )
-            Note("1 · PRICE THE SIMULATOR — charge fees, use conservative fills not first-touch, stop two of the three resolvers, deduplicate. Then net_pnl_r means something and every rung becomes trainable at once. B0 reads +${lpB0pnl?.let { fmt(it, 0) } ?: "989"} R at zero fee; priced at the venue's real 9 bps it reads −645 R. Until that number is honest, every label, preference and reward gradient points the wrong way.")
-            Note("2 · RUN SLOT B — the gate is one mechanism (registry → slot B → race → CI-positive uplift) and it has never executed once. Fix B1 (spec'd as a GBT, shipped as a reflection of M1), wire K1, and give M1 something to be compared against. The ladder never skips the race — so the ladder never starts.")
+            Note("1 · PRICE THE SIMULATOR: charge fees, use conservative fills not first-touch, stop two of the three resolvers, deduplicate. Then net_pnl_r means something and every rung becomes trainable at once. B0 reads +${lpB0pnl?.let { fmt(it, 0) } ?: "989"} R at zero fee; priced at the venue's real 9 bps it reads −645 R. Until that number is honest, every label, preference and reward gradient points the wrong way.")
+            Note("2 · RUN SLOT B: the gate is one mechanism (registry → slot B → race → CI-positive uplift) and it has never executed once. Fix B1 (spec'd as a GBT, shipped as a reflection of M1), wire K1, and give M1 something to be compared against. The ladder never skips the race, so the ladder never starts.")
             Ribbon(
                 "What NOT to do: buy the CUDA box",
-                "T3 (GRPO) is the rung that 'needs the CUDA box' and the playbook calls it 'the strongest argument for it'. It is not. GRPO on a poisoned reward is a machine for finding the seams faster — and §3's six seams are already open. The GPU cannot fix the number it is optimising against. It can only cash it in.",
+                "T3 (GRPO) is the rung that 'needs the CUDA box' and the playbook calls it 'the strongest argument for it'. It is not. GRPO on a poisoned reward is a machine for finding the seams faster, and §3's six seams are already open. The GPU cannot fix the number it is optimising against. It can only cash it in.",
                 SEV,
             )
         }
         McCard("Attribution ledger", tool = "get_attribution_ledger", sub = "empty until the race (E-0)") {
             KvRow("windows / weeks", "${alWeeks ?: 0}", if ((alWeeks ?: 0) == 0) BAD else NEUTRAL)
-            KvRow("enough", if (alEnough) "true" else "false — not yet", if (alEnough) GOOD else BAD)
+            KvRow("enough", if (alEnough) "true" else "false: not yet", if (alEnough) GOOD else BAD)
             KvRow("required at R1", if (alRequired) "true" else "false", if (alRequired) SEV else NEUTRAL)
-            Note("Everything foreign enters as a slot-B challenger (T-6). 'enough' = CI-positive ΔB0 AND CI-positive M1−B0 over ≥4 weeks / ≥300 forward candidates — ${slotBForward ?: 0} slot-B forward decisions so far, so the referee has no windows.")
+            Note("Everything foreign enters as a slot-B challenger (T-6). 'enough' = CI-positive ΔB0 AND CI-positive M1−B0 over ≥4 weeks / ≥300 forward candidates: ${slotBForward ?: 0} slot-B forward decisions so far, so the referee has no windows.")
         }
         WhyBox("THE LAWS · T-1..T-7") {
             LawBlock(
