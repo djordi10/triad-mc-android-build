@@ -1634,8 +1634,12 @@ fun DatabankScreen(repo: MissionRepository) {
                     labelWidth = 72,
                 )
             }
-            KvRow("schema · nonulls", "${bank.text("schema", "—")} · ${bank.text("nonulls", "—")}", if (bank.text("nonulls").contains("green")) GOOD else INFO)
-            KvRow("resolver lag", bank.num("lag_min")?.let { "${fmt(it, 1)} min" } ?: "— (no lag reported)", if (bank.num("lag_min") == null) UNK else NEUTRAL)
+            LeverTable(
+                listOf(
+                    Triple("schema · nonulls", "${bank.text("schema", "—")} · ${bank.text("nonulls", "—")}", if (bank.text("nonulls").contains("green")) GOOD else INFO),
+                    Triple("resolver lag", bank.num("lag_min")?.let { "${fmt(it, 1)} min" } ?: "— (no lag reported)", if (bank.num("lag_min") == null) UNK else NEUTRAL),
+                ),
+            )
             SectionLabel("what it means", divider = true)
             Note("`nonulls: AT-DTB11 green` is printed beside the real counts. An asserted green is measured only if the class census agrees (D-6). GATED dominating the census is the staleness-veto regime, not a low-signal market.")
         }
