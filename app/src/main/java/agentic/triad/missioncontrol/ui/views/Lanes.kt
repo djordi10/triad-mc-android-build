@@ -31,6 +31,8 @@ import agentic.triad.missioncontrol.mcp.McpEnvelope
 import agentic.triad.missioncontrol.mcp.ProposeAction
 import agentic.triad.missioncontrol.ui.ToolsViewModel
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.Lever
+import agentic.triad.missioncontrol.ui.components.LeverTable
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -299,23 +301,17 @@ fun LanesScreen(repo: MissionRepository) {
             ),
         ),
     ) {
-        Ribbon(
-            "ONE: five lanes, one preset, one fingerprint (AT-L2)",
-            "CSL-1 asks for five lanes resolving to two preset identities. The config store serves ONE " +
-                "preset ($presetName, $fpShort, $dirtyLabel) and there is no candidate. Five lanes, one " +
-                "fingerprint, because there is only one thing to bind to. Read-only; the only write is " +
-                "propose_action (AT-L13).",
-            INFO,
-        )
-
-        // ── the KPI strip — mirrors CSLVIEW host.strip([...]) ──
-        StatRow(
-            Triple("presets", "1", BAD),
-            Triple("candidate", "NONE", BAD),
-            Triple("lanes", "5", NEUTRAL),
-            Triple("lane schema", "ABSENT", BAD),
-            Triple("ledger", "$ledgerCount", if (ledgerCount == 0) BAD else NEUTRAL),
-            Triple("applied fp", fpShort, NEUTRAL),
+        // Hero: the title, and the one-preset thesis this view exists to hold. Folds the AT-L2 ribbon so
+        // the meaning lives in one place; the KPI strip was dropped as a restatement of the stance pills
+        // (preset, fingerprint, state, lanes, candidate) and the panels below (contracts, ledger).
+        VerdictBanner(
+            title = "Lanes",
+            word = "one",
+            said = "The plan asks for five lanes resolving to two preset identities. The config store serves ONE " +
+                "preset ($presetName, $fpShort, $dirtyLabel) and there is no candidate, so all five lanes bind to " +
+                "one fingerprint: there is only one thing to bind to. This view reads the store and files change" +
+                "-plans; it applies nothing, triadctl does.",
+            wordTone = INFO,
         )
 
         // ── the propose result ribbon — the returned proposal_id or the error, shown LOUD ──
@@ -334,12 +330,14 @@ fun LanesScreen(repo: MissionRepository) {
             Row(androidx.compose.ui.Modifier.fillMaxWidth()) {
                 Column(androidx.compose.ui.Modifier.weight(1f).padding(end = 6.dp)) {
                     Tag("APPLIED · promoted", INFO)
-                    KvRow("preset", presetName, NEUTRAL)
-                    KvRow("fp", fpShort, NEUTRAL)
-                    KvRow("schema", doc.text("schema"), NEUTRAL)
-                    KvRow("state", dirtyLabel, dirtyTone)
-                    KvRow("created", meta.text("created").take(10), NEUTRAL)
-                    KvRow("domains · symbols", "$domainCount · $symbolCount", NEUTRAL)
+                    LeverTable(buildList<Lever> {
+                        add(Lever("preset", presetName, NEUTRAL))
+                        add(Lever("fp", fpShort, NEUTRAL))
+                        add(Lever("schema", doc.text("schema"), NEUTRAL))
+                        add(Lever("state", dirtyLabel, dirtyTone))
+                        add(Lever("created", meta.text("created").take(10), NEUTRAL))
+                        add(Lever("domains · symbols", "$domainCount · $symbolCount", NEUTRAL))
+                    })
                 }
                 Column(androidx.compose.ui.Modifier.weight(1f).padding(start = 6.dp)) {
                     Tag("CANDIDATE · draft", UNK)
@@ -358,8 +356,8 @@ fun LanesScreen(repo: MissionRepository) {
             Note("L-3 · paper is a pointer, not a copy · L-4 · shadow is a lens, not a profile. Both true by construction: 'paper follows live' stops being discipline and becomes arithmetic.", INFO)
         }
 
-        // ── §1 · P0 finding: D2's premise is false (AT-L6) ──
-        McCard("§1 · D2's premise is false", tool = "get_config_preset", sub = "the fingerprint would leave the prompt behind (P0)") {
+        // ── P0 finding: the fingerprint would leave the prompt behind (AT-L6) ──
+        McCard("The fingerprint would leave the prompt behind", tool = "get_config_preset", sub = "P0 · the promise D2 can't keep") {
             KvRow(
                 "intelligence.model_tag",
                 if (modelPinned) "$modelTag · pinned ✅" else "absent ❌",
@@ -375,9 +373,11 @@ fun LanesScreen(repo: MissionRepository) {
                 Note("The template field exists and is non-empty, the immutable unit holds.", GOOD)
             } else {
                 KvRow("intelligence.prompt_template", "THE FIELD DOES NOT EXIST ❌", BAD)
-                KvRow("  prompt_draft_system", if (draftSystem.isEmpty()) "\"\" (empty)" else draftSystem, UNK)
-                KvRow("  prompt_draft_notes", if (draftNotes.isEmpty()) "\"\" (empty)" else draftNotes, UNK)
-                KvRow("  get_render", "render_context_missing", BAD)
+                LeverTable(buildList<Lever> {
+                    add(Lever("prompt draft (system)", if (draftSystem.isEmpty()) "\"\" (empty)" else draftSystem, UNK))
+                    add(Lever("prompt draft (notes)", if (draftNotes.isEmpty()) "\"\" (empty)" else draftNotes, UNK))
+                    add(Lever("get_render", "render_context_missing", BAD))
+                })
                 Ribbon(
                     "L-2 · a fingerprint must cover everything it promotes",
                     "Build the promoter exactly as D2 specifies and it graduates the model and the knobs, and " +
@@ -390,10 +390,12 @@ fun LanesScreen(repo: MissionRepository) {
             }
         }
 
-        // ── §2 · the example.com placeholder in a CLEAN preset (AT-L7) ──
-        McCard("§2 · the applied preset is CLEAN and contains a placeholder", "get_config_preset · domains.mcp") {
-            KvRow("domains.mcp.http_url", mcpUrl, if (urlIsPlaceholder) BAD else NEUTRAL)
-            KvRow("state", dirtyLabel, dirtyTone)
+        // ── the example.com placeholder in a CLEAN preset (AT-L7) ──
+        McCard("A clean preset pointing at a dead URL", "get_config_preset · domains.mcp", sub = "committed, fingerprinted, and wrong") {
+            LeverTable(listOf(
+                Triple("mcp endpoint (domains.mcp.http_url)", mcpUrl, if (urlIsPlaceholder) BAD else NEUTRAL),
+                Triple("state", dirtyLabel, dirtyTone),
+            ))
             if (urlIsPlaceholder) {
                 Ribbon(
                     "Committed, clean, and fingerprinted: attesting to a dead URL",
@@ -408,8 +410,8 @@ fun LanesScreen(repo: MissionRepository) {
             }
         }
 
-        // ── §3 · the lane board — five expandable cards (AT-L1/L4/L5/L11/L12) ──
-        McCard("§3 · the lane board", tool = "get_config_active · get_go_no_go_status", sub = "five lanes, one thing to bind to") {
+        // ── the lane board — five expandable cards (AT-L1/L4/L5/L11/L12) ──
+        McCard("The five lanes", tool = "get_config_active · get_go_no_go_status", sub = "one thing to bind to") {
             Note("Tap a lane to open its drawer: binding · env · real-money · guard · what it would take.", INFO)
             lanes.forEachIndexed { i, lane ->
                 if (i > 0) Box(Modifier.fillMaxWidth().padding(top = 8.dp).height(1.dp).background(Line))
@@ -433,16 +435,14 @@ fun LanesScreen(repo: MissionRepository) {
                     Tag(if (open) "▾" else "▸", NEUTRAL)
                 }
                 if (open) {
-                    KvRow("binding", lane.binds, if (lane.absent) UNK else NEUTRAL)
-                    KvRow("env", lane.env, NEUTRAL)
-                    KvRow("real money", lane.realMoney, lane.realTone)
-                    KvRow(
-                        "effective fingerprint",
-                        if (lane.absent) "— · ABSENT, no candidate to bind" else "$fpShort (strategy alone)",
-                        if (lane.absent) UNK else NEUTRAL,
-                    )
-                    KvRow("guard", lane.guard, if (lane.absent) UNK else INFO)
-                    KvRow("what it would take", lane.toMakeReal, WARN)
+                    LeverTable(buildList<Lever> {
+                        add(Lever("binding", lane.binds, if (lane.absent) UNK else NEUTRAL))
+                        add(Lever("env", lane.env, NEUTRAL))
+                        add(Lever("real money", lane.realMoney, lane.realTone))
+                        add(Lever("effective fingerprint", if (lane.absent) "— · ABSENT, no candidate to bind" else "$fpShort (strategy alone)", if (lane.absent) UNK else NEUTRAL))
+                        add(Lever("guard", lane.guard, if (lane.absent) UNK else INFO))
+                        add(Lever("what it would take", lane.toMakeReal, WARN))
+                    })
                     if (lane.name == "live") {
                         Ribbon(
                             "The live lane REFUSES: interlocked, no propose button (AT-L12)",
@@ -498,8 +498,8 @@ fun LanesScreen(repo: MissionRepository) {
             }
         }
 
-        // ── §5 · contracts — the three named absences (AT-L3) ──
-        McCard("§5 · contracts", tool = "list_contracts", sub = "three schemas the lane overhaul needs are NOT VENDORED") {
+        // ── contracts — the three named absences (AT-L3) ──
+        McCard("The contracts the overhaul needs", tool = "list_contracts", sub = "three schemas, NOT VENDORED") {
             KvRow("vendored schemas", "$schemaCount", NEUTRAL)
             MiniTable(
                 listOf("schema", "status"),
@@ -518,18 +518,20 @@ fun LanesScreen(repo: MissionRepository) {
             }
         }
 
-        // ── §6 · the applied preset (AT-L9) ──
-        McCard("§6 · the applied preset", tool = "get_config_preset", sub = "its real shape") {
+        // ── the applied preset (AT-L9) ──
+        McCard("The applied preset", tool = "get_config_preset", sub = "its real shape") {
             SectionLabel("the shape", divider = false)
-            KvRow("preset", presetName, NEUTRAL)
-            KvRow("schema", doc.text("schema"), NEUTRAL)
-            KvRow("real domains", "$domainCount", NEUTRAL)
-            KvRow("universe (symbols whitelist)", "$symbolCount", NEUTRAL)
-            KvRow("FinGPT model pin", if (modelPinned) modelTag else "—", if (modelPinned) INFO else UNK)
-            if (meta != null) {
-                KvRow("created", meta.text("created"), NEUTRAL)
-                KvRow("author · ums", meta.text("author") + " · " + meta.text("ums"), NEUTRAL)
-            }
+            LeverTable(buildList<Lever> {
+                add(Lever("preset", presetName, NEUTRAL))
+                add(Lever("schema", doc.text("schema"), NEUTRAL))
+                add(Lever("real domains", "$domainCount", NEUTRAL))
+                add(Lever("universe (symbols whitelist)", "$symbolCount", NEUTRAL))
+                add(Lever("FinGPT model pin", if (modelPinned) modelTag else "—", if (modelPinned) INFO else UNK))
+                if (meta != null) {
+                    add(Lever("created", meta.text("created"), NEUTRAL))
+                    add(Lever("author · ums", meta.text("author") + " · " + meta.text("ums"), NEUTRAL))
+                }
+            })
             SectionLabel("what it means")
             Note(
                 "Live: $domainCount domains served, $symbolCount-symbol whitelist, and the FinGPT pin " +
@@ -600,72 +602,8 @@ fun LanesScreen(repo: MissionRepository) {
             )
         }
 
-        // ── §7 · the promotion ledger headline — live numbers, honestly (AT-L8) ──
-        McCard("§7 · promotion ledger", tool = "get_promotion_ledger", sub = "$ledgerCount ENTRIES") {
-            SectionLabel("the count", divider = false)
-            KvRow("entries", "$ledgerCount", if (ledgerCount == 0) UNK else NEUTRAL)
-            KvRow(
-                "chain_verified",
-                if (chainVerified) "true" else if (ledgerCount == 0) "false · no chain to verify yet" else "false",
-                if (chainVerified) GOOD else if (ledgerCount == 0) UNK else BAD,
-            )
-            SectionLabel("what it means")
-            Note(
-                "The applied preset ($presetName) was created ${meta.text("created")} and NOTHING records how it " +
-                    "got there. get_promotion_ledger is LIVE now and reports $ledgerCount entries: the empty " +
-                    "ledger is served honestly rather than back-filled. Full panel in §5.2 below.",
-                WARN,
-            )
-        }
-
-        // ── §5 · the CSL-1 lane tools — LIVE on the server now, wired below ──
-        Note(
-            "The four CSL-1 lane tools are LIVE on the server now (get_lanes · get_promotion_ledger · " +
-                "get_preset_lineage · export_config_bundle). The panels below read them directly, never faked. " +
-                "triad-lane/1 is still NOT vendored as a contract schema, and the live/paper guard (may bind only " +
-                "`applied`) must still be enforced AT VERIFY, not warned about in a GUI.",
-            INFO,
-        )
-
-        // ── §5.1 · get_lanes — the lane board, from the store itself (D4) ──
-        McCard("§5.1 · the lane board", tool = "get_lanes", sub = "live from the store") {
-            KvRow("strategy_fp", shortFp(strategyFp), NEUTRAL)
-            if (laneRows.isEmpty()) {
-                Note("no data: get_lanes returned no lanes.", UNK)
-            } else {
-                MiniTable(
-                    listOf("lane", "binds", "env", "overlay_fp", "effective_fp", "status"),
-                    laneRows.map { l ->
-                        val real = l.bool("real_money")
-                        val status = l.text("status")
-                        val effShort = shortFp(nn(l, "effective_fp"))
-                        val statusTone = when {
-                            status.startsWith("INTERLOCKED") -> SEV
-                            status.startsWith("ABSENT") -> UNK
-                            status == "active" -> GOOD
-                            else -> NEUTRAL
-                        }
-                        listOf(
-                            l.text("lane") to (if (real) SEV else NEUTRAL),
-                            l.text("binds") to NEUTRAL,
-                            nn(l, "env") to NEUTRAL,
-                            shortFp(l.text("overlay_fp")) to NEUTRAL,
-                            effShort to (if (effShort == "—") UNK else GOOD),
-                            status to statusTone,
-                        )
-                    },
-                )
-                Note(
-                    "D4 · effective_fp = sha256(strategy_fp ‖ overlay_fp). The three applied-bound lanes " +
-                        "resolve; both playground lanes serve effective_fp null: no candidate to bind.",
-                    INFO,
-                )
-            }
-            Note(nn(lanesEnv, "note"), NEUTRAL)
-        }
-
-        // ── §5.2 · get_promotion_ledger — the D5 promoter ledger, chain verdict LOUD ──
-        McCard("§5.2 · the promotion ledger", tool = "get_promotion_ledger", sub = "append-only, hash-chained (D5/L-6)") {
+        // ── the promotion ledger — the D5 promoter ledger, chain verdict LOUD (AT-L8) ──
+        McCard("The promotion ledger", tool = "get_promotion_ledger", sub = "append-only, hash-chained (D5/L-6)") {
             if (ledgerEnv == null) {
                 Note("no data: get_promotion_ledger not served.", UNK)
             } else {
@@ -693,7 +631,8 @@ fun LanesScreen(repo: MissionRepository) {
                 }
                 if (ledgerEntries.isEmpty()) {
                     Note(
-                        "0 entries: no promotions yet. Every promote/rollback lands here as a NEW row " +
+                        "0 entries: no promotions yet. The applied preset ($presetName) was created ${meta.text("created")} " +
+                            "and nothing records how it got there. Every promote/rollback lands here as a NEW row " +
                             "(a rollback is action:rollback, never a rewrite), chained prev_hash → hash.",
                         UNK,
                     )
@@ -715,8 +654,8 @@ fun LanesScreen(repo: MissionRepository) {
             }
         }
 
-        // ── §5.3 · get_preset_lineage — versions + the candidate callout ──
-        McCard("§5.3 · preset lineage", tool = "get_preset_lineage", sub = "versions and the candidate") {
+        // ── preset lineage — versions + the candidate callout ──
+        McCard("Preset lineage", tool = "get_preset_lineage", sub = "versions and the candidate") {
             SectionLabel("the versions", divider = false)
             KvRow("preset", lineageEnv.text("preset"), NEUTRAL)
             if (versions.isEmpty()) {
@@ -800,45 +739,22 @@ fun LanesScreen(repo: MissionRepository) {
             Note(nn(lineageEnv, "note"), NEUTRAL)
         }
 
-        // ── §5.4 · export_config_bundle — the offline-reproducibility manifest ──
-        McCard("§5.4 · the offline bundle", tool = "export_config_bundle", sub = "reproduce the config away from the box") {
+        // ── the offline bundle — export_config_bundle reproducibility manifest ──
+        McCard("The offline bundle", tool = "export_config_bundle", sub = "reproduce the config away from the box") {
             if (bundle == null) {
                 Note("no data: export_config_bundle not served.", UNK)
             } else {
-                KvRow("bundle schema", bundle.text("schema"), NEUTRAL)
-                KvRow(
-                    "strategy preset",
-                    bundlePreset.text("name") + " · " + shortFp(bundlePreset.text("fingerprint")),
-                    NEUTRAL,
-                )
-                KvRow("preset schema", bundlePreset.text("schema"), NEUTRAL)
-                KvRow(
-                    "domains",
-                    "${bundleDomains.size}" +
-                        if (bundleDomains.isEmpty()) "" else " · " + bundleDomains.joinToString(" "),
-                    NEUTRAL,
-                )
-                KvRow(
-                    "lane_overlay",
-                    nn(bundle, "lane_overlay"),
-                    if (bundle.obj("lane_overlay") == null) UNK else NEUTRAL,
-                )
-                KvRow(
-                    "lineage · ledger rows",
-                    "${guardDerive(0) { bundle.field("lineage").rows().size }} · " +
-                        "${guardDerive(0) { bundle.field("ledger").rows().size }}",
-                    NEUTRAL,
-                )
-                KvRow(
-                    "prompt_template",
-                    if (bundlePromptPinned) "PINNED" else "null, NOT pinned",
-                    if (bundlePromptPinned) GOOD else BAD,
-                )
-                KvRow(
-                    "effective_fp",
-                    bundleEffFp.take(24) + if (bundleEffFp.length > 24) "…" else "",
-                    NEUTRAL,
-                )
+                LeverTable(buildList<Lever> {
+                    add(Lever("bundle schema", bundle.text("schema"), NEUTRAL))
+                    add(Lever("strategy preset", bundlePreset.text("name") + " · " + shortFp(bundlePreset.text("fingerprint")), NEUTRAL))
+                    add(Lever("preset schema", bundlePreset.text("schema"), NEUTRAL))
+                    add(Lever("domains", "${bundleDomains.size}" + if (bundleDomains.isEmpty()) "" else " · " + bundleDomains.joinToString(" "), NEUTRAL))
+                    add(Lever("lane_overlay", nn(bundle, "lane_overlay"), if (bundle.obj("lane_overlay") == null) UNK else NEUTRAL))
+                    add(Lever("lineage · ledger rows", "${guardDerive(0) { bundle.field("lineage").rows().size }} · ${guardDerive(0) { bundle.field("ledger").rows().size }}", NEUTRAL))
+                    add(Lever("prompt_template", if (bundlePromptPinned) "PINNED" else "null, NOT pinned", if (bundlePromptPinned) GOOD else BAD))
+                    add(Lever("effective_fp", bundleEffFp.take(24) + if (bundleEffFp.length > 24) "…" else "", NEUTRAL))
+                    add(Lever("exported_at (µs epoch)", bundle.text("exported_at"), NEUTRAL))
+                })
                 if (bundleEffFp.startsWith("sha256:sha256:")) {
                     Note(
                         "Observed quirk: the bundle serves effective_fp with a doubled sha256: prefix, " +
@@ -846,7 +762,6 @@ fun LanesScreen(repo: MissionRepository) {
                         WARN,
                     )
                 }
-                KvRow("exported_at (µs epoch)", bundle.text("exported_at"), NEUTRAL)
                 if (bundlePromptPinned) {
                     Note("prompt_pinned:true, the bundle covers the prompt (L-2 holds).", GOOD)
                 } else {
