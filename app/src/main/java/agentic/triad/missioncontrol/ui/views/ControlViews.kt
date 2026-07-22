@@ -144,13 +144,15 @@ fun ConfigScreen(repo: MissionRepository) {
             INFO,
         )
 
-        StatRow(
-            Triple("preset", if (preset == "—") "—" else preset, NEUTRAL),
-            Triple("state", stateLabel, stateTone),
-            Triple("fingerprint", fpShort, NEUTRAL),
-            Triple("domains", (domains?.size ?: 0).toString(), if (domains == null) UNK else NEUTRAL),
-            Triple("apply path", "triadctl only", INFO),
-        )
+        McCard("Applied baseline", tool = "get_config_preset · get_config_active", sub = "read-only · apply only via triadctl") {
+            StatRow(
+                Triple("preset", if (preset == "—") "—" else preset, NEUTRAL),
+                Triple("state", stateLabel, stateTone),
+                Triple("fingerprint", fpShort, NEUTRAL),
+                Triple("domains", (domains?.size ?: 0).toString(), if (domains == null) UNK else NEUTRAL),
+                Triple("apply path", "triadctl only", INFO),
+            )
+        }
 
         // ── the editor topbar chrome (mirrors CFGSTORE's SHELL top bar, config_00) ──
         // A viewer + propose surface: the profile selector + Save/Discard/Import/Export chips are the
