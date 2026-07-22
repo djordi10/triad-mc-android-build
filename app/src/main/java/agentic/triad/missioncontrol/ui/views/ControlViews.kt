@@ -24,6 +24,7 @@ import agentic.triad.missioncontrol.ui.components.Bar
 import agentic.triad.missioncontrol.ui.components.ConfigSeal
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.Lever
 import agentic.triad.missioncontrol.ui.components.LeverTable
 import agentic.triad.missioncontrol.ui.components.SettingGroup
 import agentic.triad.missioncontrol.ui.components.TradeSummaryBanner
@@ -185,10 +186,14 @@ fun ConfigScreen(repo: MissionRepository) {
                 whatItControls = "What decides a trade, how big it is, and when it stops for the day.",
                 detailLabel = "ALL RISK · EXECUTION · REGIMES · EDGE LEVERS",
                 surfaced = {
-                    KvRow("conviction threshold", num(risk, "conviction_threshold"), NEUTRAL)
-                    KvRow("min stop width", num(risk, "min_stop_width_bps") + " bps · the 45bps fee law", WARN)
-                    KvRow("risk % equity · exposure cap %", num(risk, "risk_pct_equity") + " · " + num(risk, "global_exposure_cap_pct"), NEUTRAL)
-                    KvRow("daily / weekly DD halt %", num(risk, "dd_daily_pct") + " / " + num(risk, "dd_weekly_pct"), NEUTRAL)
+                    LeverTable(
+                        listOf(
+                            Lever("conviction threshold", num(risk, "conviction_threshold"), NEUTRAL, "The minimum confidence score a setup needs before the system takes it. Higher means fewer, stronger trades."),
+                            Lever("min stop width · 45bps law", num(risk, "min_stop_width_bps") + " bps", WARN, "The tightest stop-loss allowed, in basis points. It has to clear the round-trip fee (about 45bps) so a win actually pays."),
+                            Lever("risk % · exposure cap %", num(risk, "risk_pct_equity") + " · " + num(risk, "global_exposure_cap_pct"), NEUTRAL, "How much of the account is risked on one trade, and the ceiling on how much can be at risk across all open trades at once."),
+                            Lever("daily / weekly DD halt %", num(risk, "dd_daily_pct") + " / " + num(risk, "dd_weekly_pct"), NEUTRAL, "If the account draws down this percent in a day or a week, trading stops until it resets."),
+                        ),
+                    )
                 },
                 detail = {
                     SectionLabel("Risk & execution", divider = false, accent = true)
@@ -246,8 +251,12 @@ fun ConfigScreen(repo: MissionRepository) {
                 whatItControls = "The model and cached signals it judges each setup with.",
                 detailLabel = "ALL INTELLIGENCE · CAG · AUX LEVERS",
                 surfaced = {
-                    KvRow("serving · model", intel.text("serving") + " · " + intel.text("model_tag"), INFO)
-                    KvRow("cag2 enabled · ttl (s)", (cag?.bool("cag2_enabled") ?: false).yn() + " · " + num(cag, "ttl_s"), NEUTRAL)
+                    LeverTable(
+                        listOf(
+                            Lever("serving · model", intel.text("serving") + " · " + intel.text("model_tag"), INFO, "Which engine runs the model, and which model version judges each setup."),
+                            Lever("cag2 enabled · ttl (s)", (cag?.bool("cag2_enabled") ?: false).yn() + " · " + num(cag, "ttl_s"), NEUTRAL, "Whether cached analysis (CAG) is on, and how many seconds a cached read stays valid before it is recomputed."),
+                        ),
+                    )
                 },
                 detail = {
                     SectionLabel("LLM", divider = false, accent = true)
@@ -291,8 +300,12 @@ fun ConfigScreen(repo: MissionRepository) {
                 whatItControls = "Which markets it trades and which price patterns it reads.",
                 detailLabel = "ALL DETECTORS · STRUCTURES · INDICATORS · TIMEFRAMES · SYMBOLS",
                 surfaced = {
-                    KvRow("universe whitelist", wl.size.toString() + " symbols", NEUTRAL)
-                    KvRow("detectors live", "$detOn of $detTot on", if (detOn == 0) UNK else NEUTRAL)
+                    LeverTable(
+                        listOf(
+                            Lever("universe whitelist", wl.size.toString() + " symbols", NEUTRAL, "How many symbols the system is allowed to trade."),
+                            Lever("detectors live", "$detOn of $detTot on", if (detOn == 0) UNK else NEUTRAL, "How many pattern detectors are switched on, out of the total available."),
+                        ),
+                    )
                 },
                 detail = {
                     SectionLabel("Universe", divider = false, accent = true)
@@ -334,8 +347,12 @@ fun ConfigScreen(repo: MissionRepository) {
                 whatItControls = "How it tunes itself, and the gates a new model must clear before it counts.",
                 detailLabel = "ALL TUNING · SWEEP GATE LEVERS",
                 surfaced = {
-                    KvRow("T1 min labeled", num(tune, "t1_min_labeled"), WARN)
-                    KvRow("sweep pbo max · dsr min", num(tune, "sweep_pbo_max") + " · " + num(tune, "sweep_dsr_prob_min"), NEUTRAL)
+                    LeverTable(
+                        listOf(
+                            Lever("T1 min labeled", num(tune, "t1_min_labeled"), WARN, "How many labeled examples must pile up before a first fine-tune (T1) is allowed to run."),
+                            Lever("sweep pbo max · dsr min", num(tune, "sweep_pbo_max") + " · " + num(tune, "sweep_dsr_prob_min"), NEUTRAL, "Overfitting guards for a parameter sweep: the most probability-of-backtest-overfitting allowed, and the least deflated Sharpe required, before a result is trusted."),
+                        ),
+                    )
                 },
                 detail = {
                     SectionLabel("Reward weights", divider = false, accent = true)
@@ -372,10 +389,15 @@ fun ConfigScreen(repo: MissionRepository) {
                 whatItControls = "Who can touch money, the two-person guard, and the shadow books.",
                 detailLabel = "ALL USER · PERSONA LEVERS",
                 surfaced = {
-                    KvRow("operator", users.text("operator"), NEUTRAL)
                     val approver = users.text("second_approver").ifBlank { "none" }
-                    KvRow("second approver", approver, if (approver == "none") UNK else NEUTRAL)
-                    KvRow("two-person ceremony", (users?.bool("ceremony_two_person") ?: false).yn(), if (users?.bool("ceremony_two_person") == true) GOOD else WARN)
+                    val ceremonyOn = users?.bool("ceremony_two_person") == true
+                    LeverTable(
+                        listOf(
+                            Lever("operator", users.text("operator"), NEUTRAL, "The person who owns and runs this configuration."),
+                            Lever("second approver", approver, if (approver == "none") UNK else NEUTRAL, "A second person required to sign off before a money-touching change goes through. 'none' means no second sign-off is set."),
+                            Lever("two-person ceremony", ceremonyOn.yn(), if (ceremonyOn) GOOD else WARN, "Whether a change needs two people to apply it. On is safer for anything that touches money."),
+                        ),
+                    )
                 },
                 detail = {
                     val approverD = users.text("second_approver").ifBlank { "none" }
@@ -414,8 +436,12 @@ fun ConfigScreen(repo: MissionRepository) {
                 whatItControls = "Logging cadence, and where this preset came from.",
                 detailLabel = "ALL LOGGER + PRESET METADATA",
                 surfaced = {
-                    KvRow("during cadence (min)", num(logger, "during_cadence_min"), NEUTRAL)
-                    KvRow("schema · source", active.text("schema") + " · " + active.text("src"), NEUTRAL)
+                    LeverTable(
+                        listOf(
+                            Lever("during cadence (min)", num(logger, "during_cadence_min"), NEUTRAL, "How often, in minutes, the logger writes a snapshot during an active trade."),
+                            Lever("schema · source", active.text("schema") + " · " + active.text("src"), NEUTRAL, "The config format version, and where this served preset was loaded from."),
+                        ),
+                    )
                 },
                 detail = {
                     SectionLabel("Logger", divider = false, accent = true)
@@ -429,12 +455,12 @@ fun ConfigScreen(repo: MissionRepository) {
                     Note("Tier-2 enrichment stays walled.", WARN)
                     SectionLabel("This preset", accent = true)
                     LeverTable(
-                        buildList {
-                            add(Triple("schema", active.text("schema"), NEUTRAL))
-                            add(Triple("source", active.text("src"), NEUTRAL))
+                        buildList<Lever> {
+                            add(Lever("schema", active.text("schema"), NEUTRAL))
+                            add(Lever("source", active.text("src"), NEUTRAL))
                             if (meta != null) {
-                                add(Triple("preset file", presetEnv.text("file"), NEUTRAL))
-                                add(Triple("author · ums", meta.text("author") + " · " + meta.text("ums"), NEUTRAL))
+                                add(Lever("preset file", presetEnv.text("file"), NEUTRAL))
+                                add(Lever("author · ums", meta.text("author") + " · " + meta.text("ums"), NEUTRAL))
                             }
                         },
                     )

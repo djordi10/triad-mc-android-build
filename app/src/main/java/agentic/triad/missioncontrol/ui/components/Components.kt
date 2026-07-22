@@ -725,28 +725,70 @@ fun SectionLabel(label: String, divider: Boolean = true, accent: Boolean = false
     }
 }
 
+/** One row of a [LeverTable]: the lever name, its value, an optional tone, and an optional plain-language
+ *  [info] blurb. When [info] is set, an ⓘ appears by the name and taps open the blurb below the row. */
+data class Lever(val key: String, val value: String, val tone: Tone = Tone.NEUTRAL, val info: String = "")
+
+@Composable
+private fun InfoDot(onClick: () -> Unit) {
+    Text(
+        "ⓘ", color = Emerald, fontFamily = Mono, fontSize = 11.sp,
+        modifier = Modifier.padding(start = 6.dp).clip(CircleShape).clickable(onClick = onClick).padding(2.dp),
+    )
+}
+
 /**
  * A headerless key→value table — the compact tabular readout for a lever dump: each row is the lever name
  * (left) and its value (right, tone-tinted), closed by a hairline, so a run of settings reads as an aligned
- * table instead of loose rows. Like [MiniTable] but for the 2-column value case with no column headers.
+ * table instead of loose rows. Like [MiniTable] but for the 2-column value case with no column headers. A
+ * long value drops to its own full-width line so it never gets squeezed. A row with a [Lever.info] blurb
+ * shows an ⓘ by its name; tapping it reveals a plain-language description below the row (a glossary in place,
+ * for the jargon). The [Triple] overload is the plain no-info form used by the exhaustive detail dumps.
  */
 @Composable
-fun LeverTable(rows: List<Triple<String, String, Tone>>) {
+fun LeverTable(rows: List<Lever>) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-        rows.forEach { (k, v, tone) ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.Top) {
-                Text(k, color = Ink2, fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp, modifier = Modifier.weight(1.4f).padding(end = 10.dp))
-                Text(
-                    v, color = if (tone == Tone.NEUTRAL) Ink else tone.fg(),
-                    fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp,
-                    fontWeight = if (tone == Tone.NEUTRAL) FontWeight.Normal else FontWeight.SemiBold,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1f),
-                )
+        rows.forEach { lev ->
+            var open by remember(lev.key) { mutableStateOf(false) }
+            val vColor = if (lev.tone == Tone.NEUTRAL) Ink else lev.tone.fg()
+            val vWeight = if (lev.tone == Tone.NEUTRAL) FontWeight.Normal else FontWeight.SemiBold
+            Column(Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
+                if (lev.value.length > 18) {
+                    // long value: name (+ ⓘ) on one line, the value on its own full-width line below.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(lev.key, color = Ink2, fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp)
+                        if (lev.info.isNotEmpty()) InfoDot { open = !open }
+                    }
+                    Text(lev.value, color = vColor, fontFamily = Mono, fontWeight = vWeight, fontSize = 11.5.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 2.dp))
+                } else {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.weight(1f).padding(end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(lev.key, color = Ink2, fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp)
+                            if (lev.info.isNotEmpty()) InfoDot { open = !open }
+                        }
+                        Text(
+                            lev.value, color = vColor, fontFamily = Mono, fontSize = 11.5.sp, lineHeight = 15.sp,
+                            fontWeight = vWeight, textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                if (open && lev.info.isNotEmpty()) {
+                    Text(
+                        lev.info, color = Ink2, fontSize = 11.sp, lineHeight = 16.sp,
+                        modifier = Modifier.fillMaxWidth().padding(top = 7.dp)
+                            .background(EmeraldSoft, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+                    )
+                }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(HairLine))
         }
     }
 }
+
+@Composable
+@JvmName("leverTableTriples")
+fun LeverTable(rows: List<Triple<String, String, Tone>>) =
+    LeverTable(rows.map { Lever(it.first, it.second, it.third) })
 
 /**
  * A wire-status stamp — a soft-tinted pill that names a panel's feed and colours itself by state:
