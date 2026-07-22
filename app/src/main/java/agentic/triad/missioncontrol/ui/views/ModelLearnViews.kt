@@ -52,6 +52,7 @@ import agentic.triad.missioncontrol.ui.components.Funnel
 import agentic.triad.missioncontrol.ui.components.HBarChart
 import agentic.triad.missioncontrol.ui.components.Histogram
 import agentic.triad.missioncontrol.ui.components.KvRow
+import agentic.triad.missioncontrol.ui.components.LeverTable
 import agentic.triad.missioncontrol.ui.components.LawBlock
 import agentic.triad.missioncontrol.ui.components.WhyBox
 import agentic.triad.missioncontrol.ui.components.McCard
@@ -447,15 +448,19 @@ fun IntelligenceScreen(repo: MissionRepository) {
                 Note("get_packet / get_limits unavailable: the feasibility arithmetic can't be constructed. UNKNOWN.", UNK)
             } else {
                 fun stopAtr(k: String): Double? { val a = atr.num(k); return if (minStop != null && a != null && a > 0) minStop / a else null }
-                KvRow("mark", fmt(mark, 2), NEUTRAL)
-                KvRow("ATR 1m / 5m / 15m / 1h", "${fmt(atr.num("1m"), 2)} / ${fmt(atr.num("5m"), 2)} / ${fmt(atr.num("15m"), 2)} / ${fmt(atr.num("1h"), 2)}", NEUTRAL)
-                KvRow("detector FVGs", if (structW != null && mark != null) "${fmt(structW, 2)} wide · ≈${fmt(structW / mark * 10000, 1)} bps" else "—", WARN)
-                KvRow("min_stop_width_bps", fmt(minStopBps, 0), SEV)
-                KvRow("gross_rr_floor", fmt(rrFloor, 1), NEUTRAL)
-                KvRow("max_entry_ttl_s", fmt(ttlS, 0), NEUTRAL)
-                KvRow("minimum stop", minStop?.let { "${fmt(it, 2)} = ${fmt(stopAtr("1m"), 2)}× ATR(1m)" } ?: "—", BAD)
-                KvRow("stop / structure", stopOverStruct?.let { "${fmt(it, 1)}× the structure it trades" } ?: "—", if ((stopOverStruct ?: 0.0) > 1) SEV else NEUTRAL)
-                KvRow("minimum target", minTgt?.let { "${fmt(it, 2)} · ${fmt(minStopBps * (rrFloor ?: 0.0), 1)} bps within ${ttlS?.let { t -> (t / 60).toInt() } ?: "—"} min" } ?: "—", BAD)
+                LeverTable(
+                    listOf(
+                        Triple("mark", fmt(mark, 2), NEUTRAL),
+                        Triple("ATR 1m / 5m / 15m / 1h", "${fmt(atr.num("1m"), 2)} / ${fmt(atr.num("5m"), 2)} / ${fmt(atr.num("15m"), 2)} / ${fmt(atr.num("1h"), 2)}", NEUTRAL),
+                        Triple("detector FVGs", if (structW != null && mark != null) "${fmt(structW, 2)} wide · ≈${fmt(structW / mark * 10000, 1)} bps" else "—", WARN),
+                        Triple("min_stop_width_bps", fmt(minStopBps, 0), SEV),
+                        Triple("gross_rr_floor", fmt(rrFloor, 1), NEUTRAL),
+                        Triple("max_entry_ttl_s", fmt(ttlS, 0), NEUTRAL),
+                        Triple("minimum stop", minStop?.let { "${fmt(it, 2)} = ${fmt(stopAtr("1m"), 2)}× ATR(1m)" } ?: "—", BAD),
+                        Triple("stop / structure", stopOverStruct?.let { "${fmt(it, 1)}× the structure it trades" } ?: "—", if ((stopOverStruct ?: 0.0) > 1) SEV else NEUTRAL),
+                        Triple("minimum target", minTgt?.let { "${fmt(it, 2)} · ${fmt(minStopBps * (rrFloor ?: 0.0), 1)} bps within ${ttlS?.let { t -> (t / 60).toInt() } ?: "—"} min" } ?: "—", BAD),
+                    ),
+                )
                 VerdictBanner(
                     word = if (feasibleCalc) "FEASIBLE" else "NOT CONSTRUCTIBLE",
                     said = "The stop must be ${fmt(stopOverStruct, 1)}× wider than the structure the detector trades, off an FVG ${structW?.let { fmt(it, 2) } ?: "—"} wide. The strategy and the risk envelope describe two different businesses (I-4): the answer to \"why does nothing trade\".",
@@ -536,14 +541,18 @@ fun IntelligenceScreen(repo: MissionRepository) {
                     "The packet is rich, clean and current: ${tfKeys.size} timeframes, full SMC structure, derivatives, flow, depth, a clean data-quality stamp. The model is fed an excellent picture and punished for the trade it proposes from it.",
                     INFO,
                 )
-                KvRow("schema", pk.text("schema"), NEUTRAL)
-                KvRow("timeframes", if (tfKeys.isEmpty()) "—" else tfKeys.joinToString(" · "), NEUTRAL)
-                KvRow("mark", fmt(mark, 2), NEUTRAL)
-                KvRow("regime", pk.obj("volatility").text("regime"), NEUTRAL)
-                KvRow("spread", "${pk.obj("spread_depth").text("spread_bps")} bps", NEUTRAL)
-                KvRow("session", pk.obj("session").text("name"), NEUTRAL)
                 val dq = pk.obj("data_quality")
-                KvRow("data_quality", "gaps ${dq.bool("gaps")} · staleness ${dq.int("staleness_ms") ?: "—"}ms · degraded ${dq.arr("degraded_modules").size}", if (dq.bool("gaps")) BAD else GOOD)
+                LeverTable(
+                    listOf(
+                        Triple("schema", pk.text("schema"), NEUTRAL),
+                        Triple("timeframes", if (tfKeys.isEmpty()) "—" else tfKeys.joinToString(" · "), NEUTRAL),
+                        Triple("mark", fmt(mark, 2), NEUTRAL),
+                        Triple("regime", pk.obj("volatility").text("regime"), NEUTRAL),
+                        Triple("spread", "${pk.obj("spread_depth").text("spread_bps")} bps", NEUTRAL),
+                        Triple("session", pk.obj("session").text("name"), NEUTRAL),
+                        Triple("data_quality", "gaps ${dq.bool("gaps")} · staleness ${dq.int("staleness_ms") ?: "—"}ms · degraded ${dq.arr("degraded_modules").size}", if (dq.bool("gaps")) BAD else GOOD),
+                    ),
+                )
                 Ribbon(
                     "I-6 · but you cannot re-render what you asked",
                     "get_render → ${if (renderReachable) "reachable" else "render_context_missing"}. 45,692 context packets exist; not one is reachable from a decision. You cannot reproduce the prompt that produced any decision, so every claim about WHY the model said something is unfalsifiable.",
@@ -694,19 +703,30 @@ fun ShadowScreen(repo: MissionRepository) {
             Stance("priced net", bpNetTotal?.let { "${fmt(it, 0)} R" } ?: "—", if ((bpNetTotal ?: 0.0) < 0) SEV else NEUTRAL),
         ),
     ) {
+        VerdictBanner(
+            word = "counterfeit",
+            said = "The only P&L number this system has is priced on synthesised first-touch geometry against " +
+                "trades nobody executed. A counterfactual has to be priced: charge the real round-trip fee and " +
+                "the sign flips.",
+            wordTone = SEV,
+            title = "Shadow",
+        )
         Ribbon(
-            "COUNTERFEIT: the only P&L number this system has (S-1)",
+            "The pricing that flips the sign (S-1)",
             (netR?.let { "The bank's net_pnl_r is ${fmt(it, 1)} R over ${bankTotal ?: "—"} counterfactual rows" }
                 ?: "The bank is unavailable") +
-                ", priced on synthesised first-touch geometry against trades nobody executed. A counterfactual " +
-                "must be priced: charge the real round-trip fee and the sign flips. Break-even ≈ 3.09 bps; Binance taker is 9 bps.",
+                ", priced on synthesised first-touch geometry. Break-even ≈ 3.09 bps; Binance taker is 9 bps.",
             SEV,
         )
         McCard("Sim honesty", tool = "get_sim_gap", sub = "P-MIRROR (S-3)") {
-            KvRow("real_fills", realFills?.toString() ?: "—", if ((realFills ?: 0) == 0) UNK else NEUTRAL)
-            KvRow("sim_fills", simFills?.toString() ?: "—", NEUTRAL)
-            KvRow("fills ⊆ real", if (fillsSubset) "true (vacuously)" else "FALSE: breach", if (fillsSubset) UNK else SEV)
-            KvRow("verdict", "$verdict on real_fills:${realFills ?: "—"}", UNK)
+            LeverTable(
+                listOf(
+                    Triple("real_fills", realFills?.toString() ?: "—", if ((realFills ?: 0) == 0) UNK else NEUTRAL),
+                    Triple("sim_fills", simFills?.toString() ?: "—", NEUTRAL),
+                    Triple("fills ⊆ real", if (fillsSubset) "true (vacuously)" else "FALSE: breach", if (fillsSubset) UNK else SEV),
+                    Triple("verdict", "$verdict on real_fills:${realFills ?: "—"}", UNK),
+                ),
+            )
             Note("∅ ⊆ anything is vacuous. verdict:HONEST at 0 real fills is not a passing check: an empty check isn't a passing check (S-3). The subset becomes a measured property the moment a real lane exists, and a breach pages.")
         }
         McCard("The fee dial (signature)", tool = "get_shadow_bank · by_outcome", sub = "net R by outcome") {
