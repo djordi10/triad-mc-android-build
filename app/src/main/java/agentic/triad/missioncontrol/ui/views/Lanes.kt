@@ -327,24 +327,21 @@ fun LanesScreen(repo: MissionRepository) {
 
         // ── the two identities — one of them is missing (pIdentities) ──
         McCard("The two identities", tool = "get_config_preset · D1", sub = "one of them is missing") {
-            Row(androidx.compose.ui.Modifier.fillMaxWidth()) {
-                Column(androidx.compose.ui.Modifier.weight(1f).padding(end = 6.dp)) {
-                    Tag("APPLIED · promoted", INFO)
-                    LeverTable(buildList<Lever> {
-                        add(Lever("preset", presetName, NEUTRAL))
-                        add(Lever("fp", fpShort, NEUTRAL))
-                        add(Lever("schema", doc.text("schema"), NEUTRAL))
-                        add(Lever("state", dirtyLabel, dirtyTone))
-                        add(Lever("created", meta.text("created").take(10), NEUTRAL))
-                        add(Lever("domains · symbols", "$domainCount · $symbolCount", NEUTRAL))
-                    })
-                }
-                Column(androidx.compose.ui.Modifier.weight(1f).padding(start = 6.dp)) {
-                    Tag("CANDIDATE · draft", UNK)
-                    KvRow("preset", "DOES NOT EXIST", UNK)
-                    Note("No second preset. No draft identity. The entire candidate track (both playground lanes) has nothing to run.", UNK)
-                }
-            }
+            // Stacked top-to-bottom (not side-by-side): on a phone the two-column split squeezed every
+            // value onto two wrapped lines. APPLIED on top, CANDIDATE below, each full-width.
+            Tag("APPLIED · promoted", INFO)
+            LeverTable(buildList<Lever> {
+                add(Lever("preset", presetName, NEUTRAL))
+                add(Lever("fp", fpShort, NEUTRAL))
+                add(Lever("schema", doc.text("schema"), NEUTRAL))
+                add(Lever("state", dirtyLabel, dirtyTone))
+                add(Lever("created", meta.text("created").take(10), NEUTRAL))
+                add(Lever("domains · symbols", "$domainCount · $symbolCount", NEUTRAL))
+            })
+            Box(Modifier.padding(top = 12.dp))
+            Tag("CANDIDATE · draft", UNK)
+            KvRow("preset", "DOES NOT EXIST", UNK)
+            Note("No second preset. No draft identity. The entire candidate track (both playground lanes) has nothing to run.", UNK)
             Ribbon(
                 "D2 defaults candidate.model_tag = applied.model_tag: a good call",
                 "It means the engine serves ONE model until you deliberately test a new one, and only the " +
