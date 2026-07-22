@@ -2108,6 +2108,19 @@ private fun CkPlaneGroup(plane: String, comps: List<JsonObject>, depthOf: (JsonO
                 }
             }
         }
+        // Name the components behind the coloured cells (the HTML cell-drawer showed each by name); an
+        // UNKNOWN one is tagged so you can see WHICH component is unprobed, not just that a square is grey.
+        val names = comps.map { c ->
+            val id = c.text("id", c.text("name", "?"))
+            if (c.text("status", "UNKNOWN") == "UNKNOWN") "$id ?" else id
+        }
+        if (names.isNotEmpty()) {
+            Text(
+                names.joinToString("   "),
+                color = Ink2, fontFamily = ExMono, fontSize = 8.5.sp, lineHeight = 12.sp,
+                modifier = Modifier.fillMaxWidth().padding(top = 5.dp),
+            )
+        }
     }
 }
 
@@ -2214,7 +2227,7 @@ private fun OpsHeadBox(modifier: Modifier, k: String, v: String, vc: Color, sev:
  *  read red-tinted (`.fm tr.violated`). */
 @Composable
 private fun OpsFRow(
-    id: String, failure: String, detection: String, why: String, kind: String,
+    id: String, failure: String, detection: String, behaviour: String, why: String, kind: String,
     present: Boolean, violated: Boolean, verdict: String,
 ) {
     Column(
@@ -2233,9 +2246,17 @@ private fun OpsFRow(
                     fontWeight = if (violated) FontWeight.SemiBold else FontWeight.Medium,
                 )
                 Text(detection, color = Ink2, fontFamily = ExMono, fontSize = 9.5.sp, lineHeight = 13.sp, modifier = Modifier.padding(top = 3.dp))
+                // §10 · the required, tested response for this failure mode (the spec's mandatory behaviour).
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = Pine, fontWeight = FontWeight.SemiBold)) { append("required response  ") }
+                        withStyle(SpanStyle(color = Ink2)) { append(behaviour) }
+                    },
+                    fontSize = 10.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 4.dp),
+                )
                 Text(
                     why, color = if (violated) Sev else ExNeverText, fontFamily = ExMono, fontSize = 9.sp,
-                    lineHeight = 12.sp, modifier = Modifier.padding(top = 2.dp),
+                    lineHeight = 12.sp, modifier = Modifier.padding(top = 3.dp),
                 )
                 Row(Modifier.padding(top = 5.dp)) {
                     when {
@@ -2502,22 +2523,22 @@ RULES  (L-4)
 
 /* ---- the §10 failure matrix — ALWAYS 14, ALWAYS in spec order (AT-OPS1). Static columns from the
    spec; detector presence / why / verdict are live-derived per poll. ---- */
-private class OpsFSpec(val id: String, val fail: String, val det: String)
+private class OpsFSpec(val id: String, val fail: String, val det: String, val beh: String)
 private val OPS_FMATRIX = listOf(
-    OpsFSpec("F1", "Intelligence down / timeout / garbage", "gateway deadline, validator"),
-    OpsFSpec("F2", "Model returns schema-valid nonsense (out-of-zone, wrong-side stop)", "output validator"),
-    OpsFSpec("F3", "Slow bus degraded / backlogged", "lag monitors"),
-    OpsFSpec("F4", "Feed degraded (gaps, staleness) on a symbol", "adapter health, data_quality"),
-    OpsFSpec("F5", "Execution ↔ venue disconnect", "adapter session"),
-    OpsFSpec("F6", "Edge box crash", "—"),
-    OpsFSpec("F7", "Watchdog stale (> 3 s heartbeat)", "manager"),
-    OpsFSpec("F8", "Risk governor down", "health"),
-    OpsFSpec("F9", "Clock skew > 250 ms vs NTP", "time sync monitor"),
-    OpsFSpec("F10", "Reconciler divergence (unknown order / size mismatch)", "diff"),
-    OpsFSpec("F11", "Ledger / lake unreachable", "writer backpressure"),
-    OpsFSpec("F12", "Duplicate delivery anywhere", "consumer dedupe"),
-    OpsFSpec("F13", "Breaker trip (daily / weekly DD)", "governor counters"),
-    OpsFSpec("F14", "Kill switch", "operator"),
+    OpsFSpec("F1", "Intelligence down / timeout / garbage", "gateway deadline, validator", "Synthetic skip; candidates keep flowing to B0/B1; zero effect on open positions"),
+    OpsFSpec("F2", "Model returns schema-valid nonsense (out-of-zone, wrong-side stop)", "output validator", "Reject → skip with checks_failed; never repaired (P9)"),
+    OpsFSpec("F3", "Slow bus degraded / backlogged", "lag monitors", "Entries halt when candidate staleness > threshold; fast path unaffected (§7.3)"),
+    OpsFSpec("F4", "Feed degraded (gaps, staleness) on a symbol", "adapter health, data_quality", "Symbol → defensive; if staleness > T_hard, close positions on that symbol"),
+    OpsFSpec("F5", "Execution ↔ venue disconnect", "adapter session", "Venue cancel-on-disconnect pre-armed; reconciler runs before any new intent"),
+    OpsFSpec("F6", "Edge box crash", "—", "Venue-resident stops protect every open position; restart → journal replay → reconcile → defensive until ack"),
+    OpsFSpec("F7", "Watchdog stale (> 3 s heartbeat)", "manager", "Manager degrades to defensive: venue stops only, halt entries, page"),
+    OpsFSpec("F8", "Risk governor down", "health", "OMS accepts no intents; manager continues exits; page"),
+    OpsFSpec("F9", "Clock skew > 250 ms vs NTP", "time sync monitor", "Entries halt (timestamps are load-bearing for TTLs and replay); exits continue"),
+    OpsFSpec("F10", "Reconciler divergence (unknown order / size mismatch)", "diff", "Venue wins (P10); symbol defensive; operator ack required"),
+    OpsFSpec("F11", "Ledger / lake unreachable", "writer backpressure", "Trade on local WAL buffer; above high-water, entries halt (P4 outranks new risk); exits continue"),
+    OpsFSpec("F12", "Duplicate delivery anywhere", "consumer dedupe", "No-op by message ID: required idempotency (§7.2)"),
+    OpsFSpec("F13", "Breaker trip (daily / weekly DD)", "governor counters", "Cancel resting entries; close-or-manage per config; entries locked until human reset"),
+    OpsFSpec("F14", "Kill switch", "operator", "§11.6 immediately, all scopes"),
 )
 
 /* ---- the §17.2 paging list — ALWAYS 8, ALWAYS in spec order ---- */
@@ -2974,11 +2995,20 @@ fun CheckupScreen(repo: MissionRepository) {
             }, "am")
             if (workGroups.isEmpty()) Note("No UNKNOWN components to group.", UNK)
             workGroups.forEachIndexed { i, w ->
-                CkopsNumRow(i + 1, w.name, w.ev.firstOrNull()) {
+                // every evidence line this group rests on (not just the first), and the exact probe ids
+                // it would unblock — the actionable payload of C-3 (which unknowns does this source clear).
+                CkopsNumRow(i + 1, w.name, w.ev.joinToString(" · ").ifEmpty { null }) {
                     Column(horizontalAlignment = Alignment.End) {
                         Text("${w.ids.size}", color = Amber, fontFamily = ExDisp, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Text("probes", color = Ink2, fontFamily = ExMono, fontSize = 8.5.sp)
                     }
+                }
+                if (w.ids.isNotEmpty()) {
+                    Text(
+                        "unblocks  " + w.ids.joinToString(" "),
+                        color = Ink2, fontFamily = ExMono, fontSize = 9.sp, lineHeight = 13.sp,
+                        modifier = Modifier.fillMaxWidth().padding(start = 40.dp, end = 8.dp, bottom = 6.dp),
+                    )
                 }
             }
             CkopsGhostBtn("Export as task list") {
@@ -3463,13 +3493,13 @@ fun OpsScreen(repo: MissionRepository) {
         "F13" to Triple(!breakerUnknown, if (!breakerUnknown) "ok" else "no", if (breakerUnknown) "breaker state is 'unknown': 0 events in the ledger" else "breaker state known"),
         "F14" to Triple(!killUnknown, if (!killUnknown) "ok" else "no", if (killUnknown) "kill state is 'unknown': 0 events in the ledger" else "kill state known"),
     )
-    class FRow2(val id: String, val fail: String, val det: String, val present: Boolean, val kind: String, val why: String, val violated: Boolean) {
+    class FRow2(val id: String, val fail: String, val det: String, val beh: String, val present: Boolean, val kind: String, val why: String, val violated: Boolean) {
         // drilled is structurally NEVER — §21.5 has zero drill records anywhere; GREEN is unreachable
         val verdict = if (violated) "VIOLATED" else if (!present) "BLIND" else "UNDRILLED"
     }
     val fmatrix: List<FRow2> = OPS_FMATRIX.map { specRow ->
         val (present, kind, why) = fDet[specRow.id] ?: Triple(false, "no", "—")
-        FRow2(specRow.id, specRow.fail, specRow.det, present, kind, why, specRow.id == "F12" && f12Violated)
+        FRow2(specRow.id, specRow.fail, specRow.det, specRow.beh, present, kind, why, specRow.id == "F12" && f12Violated)
     }
     val fViolated = fmatrix.count { it.verdict == "VIOLATED" }
     val fBlind = fmatrix.count { it.verdict == "BLIND" }
@@ -3725,7 +3755,7 @@ fun OpsScreen(repo: MissionRepository) {
                 b("Every row below is a required, tested behavior (§21.5), not a hope.")
             })
             fmatrix.forEachIndexed { idx, f ->
-                OpsFRow(f.id, f.fail, f.det, f.why, f.kind, f.present, f.violated, f.verdict)
+                OpsFRow(f.id, f.fail, f.det, f.beh, f.why, f.kind, f.present, f.violated, f.verdict)
                 if (idx < fmatrix.size - 1) Box(Modifier.fillMaxWidth().height(1.dp).background(ExHair))
             }
             CkopsNote(rich {
