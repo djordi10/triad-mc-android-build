@@ -1,6 +1,7 @@
 package agentic.triad.missioncontrol.ui.nav
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,6 +44,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -202,6 +206,20 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
     // top bar reliably re-renders — a slot-local read alone does not always invalidate the Scaffold slot.
     val viewStanceRow = viewStance.value
 
+    // Collapse the two status rows (global stance + per-view badges) as the content scrolls DOWN, and
+    // bring them back on scroll UP. The app bar and the chip nav below them stay pinned. A nested-scroll
+    // connection on the content flips this flag by scroll direction.
+    var statusVisible by remember { mutableStateOf(true) }
+    val statusScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -3f) statusVisible = false
+                else if (available.y > 3f) statusVisible = true
+                return Offset.Zero
+            }
+        }
+    }
+
     CompositionLocalProvider(LocalViewStance provides viewStance) {
     Scaffold(
         containerColor = Paper,
@@ -254,7 +272,19 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
                         ) { Box(Modifier.size(10.dp).background(if (live) LiveOn else LiveOff, CircleShape)) }
                     }
                 }
-                // ── #chiprow — only the current segment's views (the web sync()) ──
+                // ── the collapsible status section — global stance strip + the per-view badge row.
+                //    Sits between the app bar and the chip nav, and slides away on scroll-down. ──
+                AnimatedVisibility(visible = statusVisible) {
+                    Column {
+                        StanceStrip(
+                            overview, updatedAt,
+                            onRefresh = { stanceTick++ },
+                            onPropose = { nav.go(ROUTE_PROPOSE) },
+                        )
+                        if (viewStanceRow.isNotEmpty()) ViewStanceRow(viewStanceRow)
+                    }
+                }
+                // ── #chiprow — the current segment's views; pinned right above the content ──
                 Row(
                     Modifier.fillMaxWidth().background(Paper).drawBottomHairline(Line)
                         .horizontalScroll(rememberScrollState())
@@ -264,19 +294,11 @@ fun MissionNav(app: TriadApp, widthClass: WindowWidthSizeClass) {
                 ) {
                     View.bySegment(seg).forEach { v -> ViewChip(v, active = route == v.route) { nav.go(v.route) } }
                 }
-                // ── header.top — the stance strip: PHASE · ENTRIES · MODE · PNL TODAY · … ──
-                StanceStrip(
-                    overview, updatedAt,
-                    onRefresh = { stanceTick++ },
-                    onPropose = { nav.go(ROUTE_PROPOSE) },
-                )
-                // ── the current view's own stats, as a second row of the same status section ──
-                if (viewStanceRow.isNotEmpty()) ViewStanceRow(viewStanceRow)
             }
         },
         bottomBar = { if (!wide) TabBar(seg) { s -> nav.go(View.bySegment(s).first().route) } },
     ) { pad ->
-        Row(Modifier.fillMaxSize().padding(pad)) {
+        Row(Modifier.fillMaxSize().padding(pad).nestedScroll(statusScroll)) {
             if (wide) SegmentedRail(route) { nav.go(it) }
             NavHost(nav, startDestination = View.start.route, modifier = Modifier.fillMaxSize()) {
                 graph(app, nav)
