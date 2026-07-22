@@ -72,7 +72,7 @@ private fun srow(vararg cells: Pair<String, Tone>) = cells.toList()
 
 // ── 21 · Suite Overview — the aggregate profitability answer ─────────────────────────────────────────
 private val SUITE_OVERVIEW_TOOLS = listOf(
-    "get_bank_priced", "get_take_rate", "get_pnl_summary", "get_bank_dedup",
+    "get_bank_priced", "get_take_rate", "get_pnl_summary", "get_bank_dedup", "get_decision_census",
 )
 
 /** One symbol's aggregate row across the two lenses (snapshot seed from the doc's `sec0` table). */
@@ -139,11 +139,24 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
     val netExp = bp.num("net_expectancy")
     val medStop = bp.num("median_stop_bps")
 
+    // ── the ACCEPTED-vs-rest split — LIVE from census / take-rate / P&L (needs no databank DSN) ──
+    val census = s.data["get_decision_census"] as? kotlinx.serialization.json.JsonObject
+    val takeRate = s.data["get_take_rate"] as? kotlinx.serialization.json.JsonObject
+    val pnl = s.data["get_pnl_summary"] as? kotlinx.serialization.json.JsonObject
+    val censusTotal = census.int("total")
+    val byReason = census.field("by_reason").rows()
+    val takeN = takeRate.obj("by_verdict").int("take")
+        ?: byReason.firstOrNull { it.text("reason") == "take" }.int("n")
+    val pnlGroups = pnl.field("groups").rows()
+    val pnlResolved = pnlGroups.sumOf { it.int("count") ?: 0 }
+    val pnlNet = if (pnlGroups.isEmpty()) null else pnlGroups.sumOf { it.num("pnl_r_sum") ?: 0.0 }
+    val pnlWins = pnlGroups.sumOf { it.int("wins") ?: 0 }
+
     ViewScaffold(
         View.SUITE_OVERVIEW,
         stance = listOf(
-            Stance("candidates", "22,356", NEUTRAL),
-            Stance("takes", "109", NEUTRAL),
+            Stance("candidates", censusTotal?.let { "%,d".format(it) } ?: "22,356", NEUTRAL),
+            Stance("takes", takeN?.let { "%,d".format(it) } ?: "109", if ((takeN ?: 0) > 0) GOOD else NEUTRAL),
             Stance("bank rows", bankN?.let { "%,d".format(it) } ?: "89,350", NEUTRAL),
             Stance("net R", netTotalR?.let { "${fmt1(it)}R" } ?: "—", if ((netTotalR ?: 0.0) >= 0) GOOD else BAD),
             Stance("gross BE", "28.6%", INFO),
@@ -163,6 +176,66 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
             wordTone = GOOD,
             title = "Overview",
         )
+
+        // ── the accepted lane — LIVE from census / take-rate / P&L, works without the databank DSN ──
+        if (census != null || takeRate != null) {
+            McCard("Accepted vs the rest", tool = "get_take_rate · get_decision_census", sub = "the clean take split") {
+                Verdict(
+                    "${takeN?.let { "%,d".format(it) } ?: "—"} accepted (take)" +
+                        (censusTotal?.let { " of ${"%,d".format(it)} decisions" } ?: ""),
+                    "The take lane is the only ACCEPTED path: everything else is skip, shed, or a gateway " +
+                        "error, kept separate (never blended into accepted). Take rate " +
+                        "${takeRate.num("take_rate")?.let { fmt1(it * 100) + "%" } ?: "—"}" +
+                        (takeRate?.bool("in_band")?.let { if (it) ", in band" else ", below band" } ?: "") + ".",
+                    if ((takeN ?: 0) > 0) GOOD else UNK,
+                )
+                val verdictSplit = takeRate.obj("by_verdict")
+                if (byReason.isNotEmpty()) {
+                    // rich split from the census (shed / timeout / error / model / take / …)
+                    SectionLabel("Where every decision went", divider = false)
+                    MiniTable(
+                        headers = listOf("REASON", "N", "SHARE"),
+                        rows = byReason.sortedByDescending { it.int("n") ?: 0 }.map { r ->
+                            val reason = r.text("reason")
+                            srow(
+                                reason to (if (reason == "take") GOOD else NEUTRAL),
+                                (r.int("n")?.let { "%,d".format(it) } ?: "—") to NEUTRAL,
+                                (r.num("pct")?.let { fmt1(it * 100) + "%" } ?: "—") to NEUTRAL,
+                            )
+                        },
+                    )
+                } else if (verdictSplit != null) {
+                    // census absent this poll — fall back to take-rate's own take / wait / skip split
+                    val tot = (censusTotal ?: verdictSplit.int("take")?.let { t ->
+                        t + (verdictSplit.int("wait") ?: 0) + (verdictSplit.int("skip") ?: 0)
+                    })?.toDouble()
+                    SectionLabel("Where every decision went", divider = false)
+                    MiniTable(
+                        headers = listOf("VERDICT", "N", "SHARE"),
+                        rows = listOf("take", "wait", "skip").mapNotNull { k ->
+                            val n = verdictSplit.int(k) ?: return@mapNotNull null
+                            srow(
+                                k to (if (k == "take") GOOD else NEUTRAL),
+                                "%,d".format(n) to NEUTRAL,
+                                (tot?.takeIf { it > 0 }?.let { fmt1(n / it * 100) + "%" } ?: "—") to NEUTRAL,
+                            )
+                        },
+                    )
+                }
+                SectionLabel("Resolution", divider = true)
+                if (pnlGroups.isEmpty()) {
+                    Note("get_pnl_summary reports no closed outcomes this poll: nothing has resolved yet, or the resolver is idle.", UNK)
+                } else {
+                    Note(
+                        "The resolver is running: ${"%,d".format(pnlResolved)} closed outcome(s), net " +
+                            "${pnlNet?.let { netCell(it).first } ?: "—"}, $pnlWins win(s). Accepted takes " +
+                            "resolve into real P&L here.",
+                        if ((pnlNet ?: 0.0) >= 0) GOOD else WARN,
+                    )
+                }
+                Note("Accepted count is live (census + take-rate). The bank tables below need the server's databank DSN (see the priced-bank card).", UNK)
+            }
+        }
 
         // ── live priced-bank aggregate (the one card that IS live; the per-symbol tables stay snapshot) ──
         if (bp != null) {
@@ -185,6 +258,17 @@ fun SuiteOverviewScreen(repo: MissionRepository) {
                 )
                 SectionLabel("Why it matters", divider = true)
                 Note("S-1: breakeven_roundtrip_bps decides whether the business exists: gross edge is worthless below the venue's real roundtrip cost.", UNK)
+            }
+        } else {
+            McCard("Priced bank", tool = "get_bank_priced", sub = "needs the databank DSN") {
+                Note(
+                    "get_bank_priced is transport:unavailable because the server's TRIAD_DATABANK_DSN is " +
+                        "unset. The priced-bank aggregate, the per-symbol tables, dedup and the book " +
+                        "scoreboard all read from that bank. This is a server config gap, not a missing " +
+                        "number: set a sqlite TRIAD_DATABANK_DSN and run triad-databank-resolve and these " +
+                        "light up with no app change. The accepted-lane card above stays live regardless.",
+                    WARN,
+                )
             }
         }
 
