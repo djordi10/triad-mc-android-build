@@ -184,7 +184,7 @@ If neither exists, the tables stay snapshot (honest) until the DSN is set and we
 
 `triad-mc.bgzr.io/mcp` runs on liko's Mac Studio behind a cloudflared tunnel (`:8801`). A
 Cloudflare 502 `origin_bad_gateway` = the mcp process hung (the pgrep watchdog catches a crash,
-not a hang). Fix: `sshpass -p 2026 ssh liko@sshmac.transportech.ai`, `pgrep -fl triad-mcp`,
+not a hang). Fix: SSH to the Mac (credentials off-repo), `pgrep -fl triad-mcp`,
 `kill <PID>` — the keeper respawns it. Do NOT bounce the whole stack (live trading runs there).
 During this work it flapped 502 twice and self-recovered within minutes each time; SSH to the
 Mac also timed out during a 502 window (so a hard 502 may need liko, not just a kill).
