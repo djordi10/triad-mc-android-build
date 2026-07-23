@@ -297,7 +297,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
     // honestly-labelled demo rowset; the ribbon flips to LIVE the moment real rows arrive.
     var liveRows by remember { mutableStateOf<List<ARow>>(emptyList()) }
     LaunchedEffect(Unit) {
-        val res = repo.tool("get_shadow_bank", buildJsonObject { put("limit", 1200) })
+        val res = repo.tool("get_shadow_bank", buildJsonObject { put("limit", 1200); put("resolved_only", true) })
         val bankRows = (res.envelope.data as? JsonObject).field("rows").rows()
         liveRows = bankRows
             .sortedWith(compareBy({ it.num("opened_at") ?: 0.0 }, { it.text("opened_at") }))
