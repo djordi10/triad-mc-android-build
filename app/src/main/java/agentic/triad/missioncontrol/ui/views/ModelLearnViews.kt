@@ -665,7 +665,9 @@ fun ShadowScreen(repo: MissionRepository) {
     val bdDistinct = bd.int("distinct_decisions")
     val bdInflation = bd.num("inflation")
     val bdBooks = guardDerive(emptyList<JsonObject>()) { bd.arr("by_book").rows() }
-    val bdContradicted = guardDerive(0) { bd.arr("contradictions").size }
+    // W-72: the server now caps the contradiction DETAIL array (contradictions_detail_cap=100)
+    // while the counter stays exact — prefer the counter, fall back to the array size for old servers.
+    val bdContradicted = guardDerive(0) { bd.int("contradictory_decisions") ?: bd.arr("contradictions").size }
     val bdDisagreement = bd.num("disagreement_rate")
 
     // Resolver registry (wave-2) — who is writing the shared bank (S-2): declared vs observed.
