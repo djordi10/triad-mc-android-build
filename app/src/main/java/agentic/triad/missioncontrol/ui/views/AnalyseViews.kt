@@ -1241,12 +1241,21 @@ fun TradeLogsScreen(repo: MissionRepository) {
                     MiniTable(
                         listOf("group", "n", "net R", "avg R"),
                         pnlGroups.take(10).map { g ->
-                            val net = g.num("net_r") ?: g.num("net_pnl_r")
+                            // live shape (verified): {symbol, label, count, pnl_r_sum, wins};
+                            // old keys kept as fallbacks for older servers.
+                            val n = g.int("count") ?: g.int("n")
+                            val net = g.num("pnl_r_sum") ?: g.num("net_r") ?: g.num("net_pnl_r")
+                            val label = listOf(
+                                g.text("symbol").removeSuffix("-USDT-PERP"), g.text("label"),
+                            ).filter { it.isNotBlank() }.joinToString(" · ")
+                                .ifBlank { g.text("key", g.text("group")) }
+                            val avg = g.num("avg_r")
+                                ?: if (net != null && (n ?: 0) > 0) net / n!! else null
                             row(
-                                g.text("key", g.text("group")) to NEUTRAL,
-                                "${g.int("n") ?: "—"}" to NEUTRAL,
+                                label to NEUTRAL,
+                                "${n ?: "—"}" to NEUTRAL,
                                 (net?.let { fmt(it, 2) } ?: "—") to pnlTone(net),
-                                (g.num("avg_r")?.let { fmt(it, 3) } ?: "—") to NEUTRAL,
+                                (avg?.let { fmt(it, 3) } ?: "—") to NEUTRAL,
                             )
                         },
                     )
