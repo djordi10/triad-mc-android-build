@@ -1,5 +1,11 @@
 # TRIAD Mission Control — live-wiring diagnosis + connect plan (LIVE-VERIFIED 2026-07-22)
 
+> **STATUS UPDATE 2026-07-23 — READ SECTION 9 FIRST.** Much of the diagnosis below has since
+> been FIXED and deployed: the DSN is set (bank tools live), the guard bug is patched, the bank
+> tools are SQL-ified, the client timeout is raised, Lab saves are durable. Section 9 is the
+> current state + the remaining work, with a clear owner split (app / MCP server / Mac box /
+> engine). Sections 0-8 are kept as the diagnosis record.
+
 This doc covers **live-data wiring across the whole app**. Sections 0-6 are the SUITE deep-dive
 (where the work started); **section 7 is the app-wide inventory** of everything else that is not
 yet wired, grouped by whose job it is to fix.
@@ -336,3 +342,46 @@ target. This changes what the MCP serves and needs a server restart, so it is mo
 than the guard patch: back up the launch config first, and ideally do it with liko's awareness.
 Once set, `get_bank_priced` / `get_shadow_bank` / `get_bank_dedup` — and the SUITE Overview + Symbols
 bank tables — light up with no app change.
+
+---
+
+## 9. CURRENT STATE (2026-07-23) — what landed, what remains, who owns it
+
+### 9.1 Fixed + deployed since the diagnosis above
+
+| Fix | Where | Detail |
+|---|---|---|
+| **DSN set — bank tools LIVE** | Mac (server env) | `TRIAD_DATABANK_DSN=sqlite:///$TRIAD/databank/triad.db` added to `~/triad/TriadEngine/deploy/macstudio/triad_mcp_keeper.sh` (the watchdog respawn path — it was missing there while present in `run_stack.sh`; the keeper's respawn used to silently drop it). `get_bank_priced` / `get_shadow_bank` / `get_bank_dedup` / `get_books_scoreboard` answer with real data now. Section 4B/8.5 is DONE. |
+| **Guard bug patched** | Mac (`~/triad/bin/sqlite_guard.sh`) | `database is locked/busy` now logs + skips instead of triggering a destructive `.recover` on the live 2.8 GB sqlite (section 8.4). Verified over multiple cron ticks. |
+| **sqlite WAL + indexes** | Mac (`~/triad/databank/triad.db`) | WAL journal mode + `idx_opened_at` + `idx_shadow_outcome` so `ORDER BY opened_at` reads go ~32s (tool_timeout) → ~6s. ⚠ OPEN: something on the box periodically wipes custom indexes and reverts WAL→delete (suspects: pg_to_sqlite_bridge recreate, `triad_mcp_maintenance.sh` 09:00 cron, ledger compact). Durable fix pending: `CREATE INDEX IF NOT EXISTS` + `PRAGMA journal_mode=WAL` in the writer's ensure-schema, or appended to the guard script. |
+| **Bank tools SQL-ified** | MCP server (branch `sqlify-bank-tools`, cherry-picked on the Mac) | `get_bank_priced` + `get_bank_dedup` moved from fetch-all-rows-into-Python to SQL aggregates; `get_shadow_bank` gained `resolved_only:Bool` (row sample narrowed to win/loss/expired with `pnl_r`, bank totals stay whole-population). Heavy reads no longer time out. |
+| **Client timeout 60s** | app (`LiveMcpClient.kt`, `fb52684`) | ktor/OkHttp default 10s read timeout silently nulled ~15s bank reads. Now 60s request/socket. Also dropped unrendered `get_bank_dedup` from the Overview poll (it cost ~85s of poll stall for a tool no card read). |
+| **Lab saves durable** | app (`fbd2931`) | SAVE writes `propose_action(kind=other, type:lab_save)` and the books read BACK from the server proposals registry (merged with the device copy, `REG ✓` tag). No approval step — the proposals inbox is used as an append-only registry, disposition ignored. Survives reinstall. |
+| **TradeLogs P&L parse** | app (`4e4fe76`) | `AnalyseViews.kt` now reads the live shape (`count`/`pnl_r_sum`/`symbol`+`label`) — the section-2 NOTE is fixed. |
+| **Analytics workbench LIVE** | app (`bca3796`, `5194076`) | The workbench (equity curve, cohort chips, outcome mix) aggregates the live `get_shadow_bank` rowset (resolved rows, chronological), demo rowset only as fallback. |
+
+### 9.2 Remaining work, by owner
+
+**Ours — app** (small, additive, the SUITE-Overview pattern):
+- Bucket A unchanged: Connections 19 `get_config_preset`/`get_continuity`; Reader/Writer 05
+  `get_feed_health`/`get_view_catalog` — fetched but never rendered.
+
+**Ours — MCP server** (deploy path proven: branch off TriadLearning main → cherry-pick on the
+Mac → `pkill -f triad_core.mcp.server`, keeper respawns):
+- `get_books_scoreboard` redesign — it fetches all rows AND trains a GBT per call; needs
+  precompute/cache or SQL. Parked.
+- `get_vr_scoreboard` — times out on big windows; same treatment. Parked.
+- Bucket B tools if/when wanted: the Overview PEND trio, `get_detector_split`. NOTE:
+  `get_combo_registry` should NOT be built as speced here — it is superseded by the upcoming
+  SUITE experiment-registry design (per-coin config sets, forward clocks per cell).
+
+**Ours — Mac box** (careful, live trading runs there):
+- The index-wiper / WAL-reverter hunt + durable schema fix (see 9.1 row 3). This is the one
+  fragile piece left under the bank tools.
+
+**Liko — infra/engine** (the ONLY truly engine-side items):
+- Prometheus transport for Executor 02 / Ops 04 latency+lane reads (bucket C).
+- Market feed liveness (feed_absent windows on `get_scan_board`).
+- Judge fan-out / structure-split facelift (WITH-LLM arm is data-sparse outside M1 until it lands).
+- M-LIVE promote/routing consumption for the SUITE rebuild — contract to be agreed via his
+  config doc (pending).
