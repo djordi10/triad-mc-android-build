@@ -79,11 +79,8 @@ import agentic.triad.missioncontrol.ui.nav.View
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.put
-import agentic.triad.missioncontrol.ui.components.Verdict
 
 private fun row(vararg cells: Pair<String, Tone>) = cells.toList()
 
@@ -294,13 +291,53 @@ fun AnalyticsScreen(repo: MissionRepository) {
     var fSide by remember { mutableStateOf("ALL") }
     var fHours by remember { mutableStateOf("ALL") }
     val demoRows = remember { anaDemoRows() }
-    val sel = demoRows.filter {
+
+    // ── the LIVE rowset — get_shadow_bank's most recent rows mapped into the workbench shape ──
+    // One-shot on open (limit 1200, chronological). While it has not landed the workbench keeps the
+    // honestly-labelled demo rowset; the ribbon flips to LIVE the moment real rows arrive.
+    var liveRows by remember { mutableStateOf<List<ARow>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        val res = repo.tool("get_shadow_bank", buildJsonObject { put("limit", 1200) })
+        val bankRows = (res.envelope.data as? JsonObject).field("rows").rows()
+        liveRows = bankRows
+            .sortedWith(compareBy({ it.num("opened_at") ?: 0.0 }, { it.text("opened_at") }))
+            .mapNotNull { r ->
+                val pnl = r.num("pnl_r")
+                val out = when (r.text("shadow_outcome")) {
+                    "win" -> "win"; "loss" -> "loss"
+                    "expired" -> if (pnl != null) "expired" else "no_fill"
+                    else -> "no_fill" // open / gap / no_fill / pending — not resolved
+                }
+                val entry = r.num("cf_entry_price"); val slp = r.num("cf_sl_price")
+                val bps = if (entry != null && entry > 0 && slp != null) kotlin.math.abs(entry - slp) / entry * 10000 else null
+                val sb = when { bps == null -> 18; bps < 8 -> 6; bps < 14 -> 10; bps < 26 -> 18; bps < 42 -> 35; bps < 65 -> 50; else -> 80 }
+                val openedUs = r.num("opened_at")
+                val hr = if (openedUs != null && openedUs > 1e12) ((openedUs.toLong() / 1_000_000 / 3600) % 24).toInt()
+                else r.text("opened_at").getOrNull(11)?.let { r.text("opened_at").substring(11, 13).toIntOrNull() } ?: 0
+                ARow(
+                    co = r.text("cohort").ifBlank { return@mapNotNull null },
+                    sym = r.text("instrument_id").removeSuffix("-USDT-PERP").ifBlank { "?" },
+                    hr = hr, side = r.text("side").uppercase().ifBlank { "?" },
+                    sb = sb, out = out, r = pnl ?: 0.0,
+                )
+            }
+    }
+    val rowsLive = liveRows.isNotEmpty()
+    val baseRows = if (rowsLive) liveRows else demoRows
+    val rowsetTool = if (rowsLive) "get_shadow_bank" else "rowset"
+    // cohort chips follow the data when live (top-4 by volume); the selection heals if it vanishes.
+    val cohortChips =
+        if (rowsLive) liveRows.groupingBy { it.co }.eachCount().entries.sortedByDescending { it.value }.take(4).map { it.key }
+        else listOf("TRIAD-A", "VR-BASE", "P-LADDER", "P-CONFIRM")
+    LaunchedEffect(cohortChips) { if (cohortChips.isNotEmpty() && fCohort !in cohortChips) fCohort = cohortChips.first() }
+
+    val sel = baseRows.filter {
         it.co == fCohort &&
             (fSymbol == "ALL" || it.sym == fSymbol) &&
             (fSide == "ALL" || it.side == fSide) &&
             (fHours == "ALL" || (fHours == "0-12Z" && it.hr < 12) || (fHours == "12-24Z" && it.hr >= 12))
     }
-    val selResolved = sel.filter { it.out == "win" || it.out == "loss" }
+    val selResolved = sel.filter { it.out == "win" || it.out == "loss" || it.out == "expired" }
     val rowsN = sel.size
     val fillRate = if (rowsN > 0) selResolved.size.toDouble() / rowsN else 0.0
     val posRate = if (selResolved.isNotEmpty()) selResolved.count { it.r > 0 }.toDouble() / selResolved.size else 0.0
@@ -325,36 +362,12 @@ fun AnalyticsScreen(repo: MissionRepository) {
             title = "Analytics",
         )
 
-        // ── the LIVE 24h equity curve — get_analytics.equity_curve (49 pts · 30-min steps) ──
-        // Distinct from the workbench's selection curve below (demo rowset): this one is the real
-        // ledger-derived cumulative R. Guarded: renders only when the tool answered with a series.
-        run {
-            val eqLive = guardDerive(emptyList<Double>()) {
-                analytics.field("equity_curve").list().mapNotNull { (it as? JsonPrimitive)?.doubleOrNull }
-            }
-            val pnl24 = guardDerive(null) { analytics.num("pnl_r_24h") } ?: eqLive.lastOrNull()
-            if (eqLive.size >= 2) {
-                McCard("Equity curve (24h)", tool = "get_analytics.equity_curve", sub = "cumulative R · 30-min steps") {
-                    Verdict(
-                        "${pnl24?.let { (if (it > 0) "+" else "") + fmt(it, 1) } ?: "—"}R over the last 24h",
-                        "Ledger-derived cumulative R, 49 points at 30-minute steps. The window anchors to the " +
-                            "newest ledger row.",
-                        when { (pnl24 ?: 0.0) > 0.0 -> GOOD; (pnl24 ?: 0.0) < 0.0 -> BAD; else -> NEUTRAL },
-                    )
-                    LineChart(eqLive)
-                    Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("-24h", color = agentic.triad.missioncontrol.ui.theme.Unk, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
-                        Text("now", color = agentic.triad.missioncontrol.ui.theme.Unk, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
-                    }
-                }
-            }
-        }
-
         McCard("Analytics workbench", "selections re-aggregate every chart") {
             Row(Modifier.fillMaxWidth().padding(bottom = 2.dp)) {
-                Tag("demo rowset: live per-cohort feed lands with get_vr_scoreboard", WARN)
+                if (rowsLive) Tag("LIVE rowset · get_shadow_bank · last ${liveRows.size} rows (chronological)", GOOD)
+                else Tag("demo rowset: live per-cohort feed lands with get_shadow_bank", WARN)
             }
-            AnaFilterGroup("cohort", listOf("TRIAD-A", "VR-BASE", "P-LADDER", "P-CONFIRM"), fCohort) { fCohort = it }
+            AnaFilterGroup("cohort", cohortChips, fCohort) { fCohort = it }
             AnaFilterGroup("symbol", listOf("ALL", "ETH", "BTC", "SOL", "LINK", "XRP", "AVAX", "SUI", "DOGE", "BNB"), fSymbol) { fSymbol = it }
             AnaFilterGroup("side", listOf("ALL", "LONG", "SHORT"), fSide) { fSide = it }
             AnaFilterGroup("hours", listOf("ALL", "0-12Z", "12-24Z"), fHours) { fHours = it }
@@ -369,7 +382,7 @@ fun AnalyticsScreen(repo: MissionRepository) {
             SectionLabel("the definitions")
             Note("Definitions: positive outcome = pnl_r > 0, full win = pnl_r ≥ 1.9. Never sum net_r across cohorts. Every win rate shows its Wilson CI against breakeven (BE 28.6%, single-TP).", INFO)
         }
-        McCard("Equity curve", tool = "rowset", sub = "selected cohort") {
+        McCard("Equity curve", tool = rowsetTool, sub = "selected cohort") {
             val eq = guardDerive(emptyList<Double>()) {
                 var acc = 0.0
                 selResolved.map { acc += it.r; acc }
@@ -377,43 +390,45 @@ fun AnalyticsScreen(repo: MissionRepository) {
             if (eq.size >= 2) LineChart(eq) else Note("Fewer than two resolved rows in the selection, so there is no curve to draw.", UNK)
             Note("Cumulative R over resolved rows in selection order.")
         }
-        McCard("Outcome mix", "rowset") {
-            val win = sel.count { it.out == "win" }; val loss = sel.count { it.out == "loss" }; val nf = sel.count { it.out == "no_fill" }
+        McCard("Outcome mix", rowsetTool) {
+            val win = sel.count { it.out == "win" }; val loss = sel.count { it.out == "loss" }
+            val exp = sel.count { it.out == "expired" }; val nf = sel.count { it.out == "no_fill" }
             HBarChart(
                 listOf(
                     Bar("win ${if (rowsN > 0) win * 100 / rowsN else 0}%", win.toDouble(), GOOD),
                     Bar("loss ${if (rowsN > 0) loss * 100 / rowsN else 0}%", loss.toDouble(), BAD),
+                    Bar("expired ${if (rowsN > 0) exp * 100 / rowsN else 0}%", exp.toDouble(), NEUTRAL),
                     Bar("no_fill ${if (rowsN > 0) nf * 100 / rowsN else 0}%", nf.toDouble(), UNK),
                 ),
                 labelWidth = 96,
             )
             Note("The current selection holds $rowsN rows: $win win · $loss loss · $nf no_fill.")
         }
-        McCard("Win rate by symbol · Wilson CI vs breakeven", "rowset") {
+        McCard("Win rate by symbol · Wilson CI vs breakeven", rowsetTool) {
             val bars = guardDerive(emptyList<Bar>()) {
                 anaWrBars(selResolved) { it.sym }.sortedByDescending { it.value }.take(9)
             }
             if (bars.isEmpty()) Note("No resolved rows in the selection.", UNK) else HBarChart(bars, unit = "%", labelWidth = 72)
             Note("A green bar clears breakeven even on the low side of its confidence interval, red fails even on the high side, amber straddles. BE 28.6%; label is (wins/n).")
         }
-        McCard("Win rate by stop-width bucket", "rowset") {
+        McCard("Win rate by stop-width bucket", rowsetTool) {
             SectionLabel("the buckets", divider = false)
             val bars = guardDerive(emptyList<Bar>()) { anaWrBars(selResolved) { "${it.sb}bps" }.sortedBy { it.label.removeSuffix("bps").toIntOrNull() ?: 0 } }
             if (bars.isEmpty()) Note("No resolved rows in the selection.", UNK) else HBarChart(bars, unit = "%", labelWidth = 72)
             SectionLabel("what it means")
             Note("The scale law: wider structural stops clear breakeven, sub-floor stops bleed. BE 28.6%.")
         }
-        McCard("Win rate by side", "rowset") {
+        McCard("Win rate by side", rowsetTool) {
             val bars = guardDerive(emptyList<Bar>()) { anaWrBars(selResolved) { it.side } }
             if (bars.isEmpty()) Note("No resolved rows in the selection.", UNK) else HBarChart(bars, unit = "%", labelWidth = 72)
             Note("BE 28.6%.")
         }
-        McCard("Win rate by hour block", "rowset") {
+        McCard("Win rate by hour block", rowsetTool) {
             val bars = guardDerive(emptyList<Bar>()) { anaWrBars(selResolved) { anaHourBlock(it.hr) } }
             if (bars.isEmpty()) Note("No resolved rows in the selection.", UNK) else HBarChart(bars, unit = "%", labelWidth = 72)
             Note("WR% by 6-hour UTC block. BE 28.6%.")
         }
-        McCard("Payoff distribution (selection)", "rowset") {
+        McCard("Payoff distribution (selection)", rowsetTool) {
             SectionLabel("the payoff", divider = false)
             val neg = selResolved.count { it.r < 0 }
             val p105 = selResolved.count { it.r in 1.0..1.5 }
