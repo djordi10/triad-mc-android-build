@@ -79,8 +79,11 @@ import agentic.triad.missioncontrol.ui.nav.View
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.put
+import agentic.triad.missioncontrol.ui.components.Verdict
 
 private fun row(vararg cells: Pair<String, Tone>) = cells.toList()
 
@@ -321,6 +324,32 @@ fun AnalyticsScreen(repo: MissionRepository) {
             wordTone = INFO,
             title = "Analytics",
         )
+
+        // ── the LIVE 24h equity curve — get_analytics.equity_curve (49 pts · 30-min steps) ──
+        // Distinct from the workbench's selection curve below (demo rowset): this one is the real
+        // ledger-derived cumulative R. Guarded: renders only when the tool answered with a series.
+        run {
+            val eqLive = guardDerive(emptyList<Double>()) {
+                analytics.field("equity_curve").list().mapNotNull { (it as? JsonPrimitive)?.doubleOrNull }
+            }
+            val pnl24 = guardDerive(null) { analytics.num("pnl_r_24h") } ?: eqLive.lastOrNull()
+            if (eqLive.size >= 2) {
+                McCard("Equity curve (24h)", tool = "get_analytics.equity_curve", sub = "cumulative R · 30-min steps") {
+                    Verdict(
+                        "${pnl24?.let { (if (it > 0) "+" else "") + fmt(it, 1) } ?: "—"}R over the last 24h",
+                        "Ledger-derived cumulative R, 49 points at 30-minute steps. The window anchors to the " +
+                            "newest ledger row.",
+                        when { (pnl24 ?: 0.0) > 0.0 -> GOOD; (pnl24 ?: 0.0) < 0.0 -> BAD; else -> NEUTRAL },
+                    )
+                    LineChart(eqLive)
+                    Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("-24h", color = agentic.triad.missioncontrol.ui.theme.Unk, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                        Text("now", color = agentic.triad.missioncontrol.ui.theme.Unk, fontFamily = FontFamily.Monospace, fontSize = 9.sp)
+                    }
+                }
+            }
+        }
+
         McCard("Analytics workbench", "selections re-aggregate every chart") {
             Row(Modifier.fillMaxWidth().padding(bottom = 2.dp)) {
                 Tag("demo rowset: live per-cohort feed lands with get_vr_scoreboard", WARN)
