@@ -595,7 +595,10 @@ private fun SymbolDetail(sym: String, scan: kotlinx.serialization.json.JsonObjec
 }
 
 // ── 23 · Suite Lab — compose → matrix + shadow + paper (interactive · SAVE via propose_action) ────────
-private val SUITE_LAB_TOOLS = listOf("get_shadow_bank", "get_books_scoreboard", "get_book_definitions")
+// get_proposals is the durable lab registry read-back (lab_save records ARE the registration —
+// appended at SAVE, no approval step). get_books_scoreboard is deliberately NOT polled: the server
+// tool still tool_timeouts (~30s) and nothing on this view renders it (the books read the registry).
+private val SUITE_LAB_TOOLS = listOf("get_shadow_bank", "get_book_definitions", "get_proposals")
 
 // the composer palette (the doc's GENS / FILS / ARMS)
 private val LAB_GENS = listOf(
@@ -678,6 +681,53 @@ private fun MatrixTable(shadowCoh: String?, paperCoh: String?) {
 private fun labState(shadow: Agg?): Pair<String, Tone> =
     if (shadow != null && shadow.res > 0) "MATRIX-BACKED · FWD" to GOOD else "REGISTERED · FWD n=0" to WARN
 
+// ── the durable registry read-back — lab_save records in the server's proposals inbox ────────────
+// The record IS the registration (appended at SAVE, append-only JSONL server-side). No approval
+// step exists and `disposition` is deliberately IGNORED: a lab save never waits on a human.
+private fun utcFromUs(us: Long): String = if (us <= 0) "—" else
+    java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.US)
+        .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+        .format(java.util.Date(us / 1000))
+
+/** Rebuild SavedLab entries from the server registry. The aggregates are recomputed from the same
+ *  MX snapshot math the SAVE used, so a registry entry renders identically on every device. */
+private fun registryLabs(d: Map<String, kotlinx.serialization.json.JsonElement?>): List<SavedLab> {
+    val arr = d["get_proposals"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+    return arr.mapNotNull { el ->
+        val o = el as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+        if (o.text("kind") != "other") return@mapNotNull null
+        val args = o.obj("args") ?: return@mapNotNull null
+        if (args.text("type") != "lab_save") return@mapNotNull null
+        val g = args.text("generator").ifBlank { return@mapNotNull null }
+        val pid = o.text("proposal_id").ifBlank { return@mapNotNull null }
+        val shadowCoh = genShadow(g)
+        val paperCoh = genPaper(g)
+        val sh = SuiteMx.agg(shadowCoh)
+        val pa = SuiteMx.agg(paperCoh)
+        SavedLab(
+            id = pid,
+            composition = args.text("composition").ifBlank { g },
+            savedUtc = utcFromUs(o.num("ts")?.toLong() ?: 0L),
+            known = sh != null && sh.res > 0,
+            paper = pa?.toS(), shadow = sh?.toS(),
+            shadowCoh = shadowCoh, paperCoh = paperCoh,
+            proposalId = pid,
+        )
+    }.sortedByDescending { it.savedUtc }
+}
+
+/** Registry entries (server truth) + device saves the registry does not carry. A device entry is
+ *  matched by proposal_id when it has one, else by composition (legacy saves filed before the id
+ *  was stored). Unmatched device saves render as DEVICE-ONLY, never silently dropped. */
+private fun mergedLabs(registry: List<SavedLab>): List<SavedLab> {
+    val pids = registry.mapNotNull { it.proposalId }.toSet()
+    val comps = registry.map { it.composition }.toSet()
+    val deviceOnly = LabStore.saved.filter { dl ->
+        (dl.proposalId == null || dl.proposalId !in pids) && dl.composition !in comps
+    }
+    return (registry + deviceOnly).sortedByDescending { it.savedUtc }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SuiteLabScreen(repo: MissionRepository) {
@@ -685,6 +735,10 @@ fun SuiteLabScreen(repo: MissionRepository) {
     LaunchedEffect(Unit) { LabStore.load(ctx) }
     val vm: ToolsViewModel = viewModel(factory = ToolsViewModel.Factory(repo, SUITE_LAB_TOOLS))
     val s by vm.state.collectAsState()
+
+    // the durable registry read-back — server truth merged with device-only saves
+    val labRegistry = registryLabs(s.data)
+    val allLabs = mergedLabs(labRegistry)
 
     var gen by remember { mutableStateOf<String?>(null) }
     val fils = remember { androidx.compose.runtime.mutableStateListOf<String>() }
@@ -751,11 +805,15 @@ fun SuiteLabScreen(repo: MissionRepository) {
             }
             saveResult = if (env.ok) {
                 val pid = (env.data as? kotlinx.serialization.json.JsonObject)?.get("proposal_id")
-                    ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } ?: "—"
-                true to "SAVED to this device + FILED · proposal_id $pid · ${compositionName()} pre-registered for triadctl. Forward clock starts now."
+                    ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                if (pid != null) LabStore.attachProposal(ctx, lab.id, pid)
+                true to "SAVED + REGISTERED · $pid · ${compositionName()}. The registry record IS " +
+                    "the save: durable on the server, readable from any device, no approval step. " +
+                    "Forward clock starts now."
             } else {
-                // the local book copy still holds it; only the authoritative registry didn't take it.
-                true to "SAVED to this device · authoritative registry pending (${env.error ?: "unavailable"}). The experiment is in your Lab books + Tables now."
+                // the local book copy still holds it; the registry append just did not land this try.
+                true to "SAVED to this device (registry append failed: ${env.error ?: "unavailable"}). " +
+                    "Shown as DEVICE-ONLY until a later SAVE lands; nothing needs approving."
             }
             saving = false
         }
@@ -767,13 +825,15 @@ fun SuiteLabScreen(repo: MissionRepository) {
             Stance("generator", gen ?: "—", if (gen != null) GOOD else UNK),
             Stance("filters", if (fils.isEmpty()) "none" else fils.size.toString(), NEUTRAL),
             Stance("arms", "both", INFO),
+            Stance("registered", labRegistry.size.toString(), if (labRegistry.isNotEmpty()) GOOD else UNK),
         ),
     ) {
         VerdictBanner(
             word = "Compose · preview · save",
             said = "Compose a generator × filters, preview where it lands across all 45 symbols, then save " +
                 "it into the shadow book (incl. rejected) and the paper book (accepted only, never on venue). " +
-                "A SAVE files a pre-registration: triadctl applies it, not the app.",
+                "A SAVE registers the experiment durably on the server: the record is the registration, " +
+                "no approval step, and the books read it back on every device.",
             wordTone = GOOD,
             title = "Lab",
         )
@@ -868,14 +928,14 @@ fun SuiteLabScreen(repo: MissionRepository) {
             }
         }
 
-        // ── the two destination books — one shared store (device copy), also shown in Tables ──
-        McCard("Shadow book", tool = "get_shadow_bank", sub = "WITHOUT LLM · incl. rejected") {
-            if (LabStore.saved.isEmpty()) Note("No experiments yet · compose above and SAVE.", UNK)
-            else LabStore.saved.forEach { SavedLabRow(it, showShadow = true) }
+        // ── the two destination books — the server registry merged with device-only saves ──
+        McCard("Shadow book", tool = "get_proposals", sub = "WITHOUT LLM · incl. rejected") {
+            if (allLabs.isEmpty()) Note("No experiments yet · compose above and SAVE.", UNK)
+            else allLabs.forEach { SavedLabRow(it, showShadow = true) }
         }
-        McCard("Paper book", tool = "get_books_scoreboard", sub = "WITH LLM · accepted, never on venue") {
-            if (LabStore.saved.isEmpty()) Note("No experiments yet · compose above and SAVE.", UNK)
-            else LabStore.saved.forEach { SavedLabRow(it, showShadow = false) }
+        McCard("Paper book", tool = "get_proposals", sub = "WITH LLM · accepted, never on venue") {
+            if (allLabs.isEmpty()) Note("No experiments yet · compose above and SAVE.", UNK)
+            else allLabs.forEach { SavedLabRow(it, showShadow = false) }
         }
 
         if (s.stale != null) Note("· ${s.stale}", WARN)
@@ -909,6 +969,9 @@ private fun SavedLabRow(lab: SavedLab, showShadow: Boolean) {
             fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
             modifier = Modifier.weight(1f),
         )
+        // provenance: on the server registry (durable, every device) vs this device only
+        Tag(if (lab.proposalId != null) "REG ✓" else "DEVICE", if (lab.proposalId != null) GOOD else WARN)
+        androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
         Tag(st, stTone)
     }
     Text(
@@ -985,7 +1048,8 @@ private fun SaveButton(enabled: Boolean, onClick: () -> Unit) {
 }
 
 // ── 24 · Suite Tables — saved lab experiments (matrix-backed · shadow + paper) ────────────────────────
-private val SUITE_TABLES_TOOLS = listOf("get_books_scoreboard")
+// The registry read-back only — get_books_scoreboard dropped (server tool_timeouts, unrendered).
+private val SUITE_TABLES_TOOLS = listOf("get_proposals")
 
 @Composable
 fun SuiteTablesScreen(repo: MissionRepository) {
@@ -994,10 +1058,15 @@ fun SuiteTablesScreen(repo: MissionRepository) {
     val ctx = LocalContext.current
     LaunchedEffect(Unit) { LabStore.load(ctx) }
 
+    // the durable registry read-back — server truth merged with device-only saves
+    val labRegistry = registryLabs(s.data)
+    val allLabs = mergedLabs(labRegistry)
+
     ViewScaffold(
         View.SUITE_TABLES,
         stance = listOf(
-            Stance("saved", LabStore.saved.size.toString(), if (LabStore.saved.isEmpty()) UNK else GOOD),
+            Stance("saved", allLabs.size.toString(), if (allLabs.isEmpty()) UNK else GOOD),
+            Stance("registered", labRegistry.size.toString(), if (labRegistry.isNotEmpty()) GOOD else UNK),
             Stance("basis", "gross · RR 2.5", INFO),
             Stance("arms", "paper + shadow", NEUTRAL),
         ),
@@ -1005,15 +1074,16 @@ fun SuiteTablesScreen(repo: MissionRepository) {
         VerdictBanner(
             word = "Saved experiments",
             said = "Every lab combo you SAVE lands here, matrix-backed, with both lenses: paper (accepted · " +
-                "WITH LLM) + shadow (incl. rejected · WITHOUT LLM). A SAVE is a pre-registration: the forward " +
-                "clock starts at save, before any forward data exists, so it's clean by construction. Cells " +
-                "grey (n*) until n≥50 per arm.",
+                "WITH LLM) + shadow (incl. rejected · WITHOUT LLM). Saves live in the server registry " +
+                "(REG ✓, durable, readable from any device, no approval step); DEVICE marks a save whose " +
+                "registry append has not landed yet. The forward clock starts at save, before any forward " +
+                "data exists, so it's clean by construction. Cells grey (n*) until n≥50 per arm.",
             wordTone = GOOD,
             title = "Tables",
         )
 
-        if (LabStore.saved.isEmpty()) {
-            McCard("Saved experiments", tool = "get_books_scoreboard") {
+        if (allLabs.isEmpty()) {
+            McCard("Saved experiments", tool = "get_proposals") {
                 Note(
                     "No saved lab experiments yet: go to Lab, compose a generator × filters, preview the " +
                         "with-vs-without-LLM calc, then SAVE. It appears here with both arms.",
@@ -1021,7 +1091,7 @@ fun SuiteTablesScreen(repo: MissionRepository) {
                 )
             }
         } else {
-            LabStore.saved.forEach { lab ->
+            allLabs.forEach { lab ->
                 McCard(lab.composition, sub = "saved ${lab.savedUtc}") {
                     val (st, stTone) = labState(lab.shadow?.toAgg())
                     androidx.compose.foundation.layout.Row(
@@ -1032,6 +1102,9 @@ fun SuiteTablesScreen(repo: MissionRepository) {
                             "both lenses", color = agentic.triad.missioncontrol.ui.theme.Ink2,
                             fontSize = 11.5.sp, modifier = Modifier.weight(1f),
                         )
+                        Tag(if (lab.proposalId != null) "REG ✓" else "DEVICE",
+                            if (lab.proposalId != null) GOOD else WARN)
+                        androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
                         Tag(st, stTone)
                     }
                     LabCalcTable(lab.paper?.toAgg(), lab.shadow?.toAgg())

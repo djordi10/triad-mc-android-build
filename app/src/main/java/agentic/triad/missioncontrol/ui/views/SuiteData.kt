@@ -82,6 +82,10 @@ data class SavedLab(
     val shadow: AggS?,  // WITHOUT LLM (incl rejected)
     val shadowCoh: String? = null, // cohort names — the per-symbol matrix is recomputed from these
     val paperCoh: String? = null,
+    // The server registry id (proposal_id of the lab_save record). The registry record IS the
+    // registration — appended at SAVE, no approval step, no human in the loop. null = the file
+    // call failed and this save exists on this device only (shown as DEVICE-ONLY).
+    val proposalId: String? = null,
 )
 
 fun Agg.toS() = AggS(n, res, wr, net, ev)
@@ -109,6 +113,19 @@ object LabStore {
 
     fun add(ctx: Context, lab: SavedLab) {
         saved.add(0, lab)
+        persist(ctx)
+    }
+
+    /** Stamp the server registry id onto a device save once the lab_save record is appended. */
+    fun attachProposal(ctx: Context, id: String, pid: String) {
+        val i = saved.indexOfFirst { it.id == id }
+        if (i >= 0) {
+            saved[i] = saved[i].copy(proposalId = pid)
+            persist(ctx)
+        }
+    }
+
+    private fun persist(ctx: Context) {
         runCatching {
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString(KEY, JSON.encodeToString(saved.toList())).apply()
