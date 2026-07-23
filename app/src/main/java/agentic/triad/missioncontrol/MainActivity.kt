@@ -30,11 +30,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as TriadApp
-        // Auto-update: DISABLED for local dev (kept reinstalling the v39 release over our from-source
-        // build + spamming the unknown-apps/notif dialogs). Re-enable by uncommenting.
-        // CoroutineScope(Dispatchers.IO).launch {
-        //     Updater.checkAndInstall(this@MainActivity, BuildConfig.VERSION_CODE)
-        // }
+        // Auto-update: check GitHub for a newer build on this app's release channel and self-install.
+        // Safe for local dev now — Updater's versionCode<=1 sentinel skips from-source builds, so it no
+        // longer reinstalls the published release over a working build; only CI builds (run_number) update.
+        CoroutineScope(Dispatchers.IO).launch {
+            Updater.checkAndInstall(this@MainActivity, BuildConfig.VERSION_CODE)
+        }
         // The checkup digest needs a channel + (API 33+) the runtime notification permission.
         Notifications.ensureChannel(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

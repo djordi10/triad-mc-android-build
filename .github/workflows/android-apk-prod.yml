@@ -1,22 +1,23 @@
-name: android-apk
+name: android-apk-prod
 
-# Builds the TRIAD Mission Control native Android app, uploads the debug APK as a CI artifact, AND
-# publishes it as a GitHub Release so the in-app auto-updater can fetch it. versionCode = run_number
-# so each build is strictly newer than the last.
+# The PROD release channel for the TRIAD Mission Control Android app. Manual (workflow_dispatch) so a
+# "real" build is deliberate, not every push. Same debug APK as dev for now (assembleRelease later),
+# versioned by run_number, but published under a `vN-prod` tag so prod-channel apps update only from
+# prod releases. NOT marked --latest, so the dev `vN` release stays GitHub's "latest" (only matters for
+# the one-time migration of channel-unaware old updaters).
 
 on:
-  push: {}
   workflow_dispatch: {}
 
 jobs:
   apk:
-    name: assemble debug APK (+ unit tests)
+    name: assemble PROD debug APK (+ unit tests)
     runs-on: ubuntu-latest
     permissions:
       contents: write          # needed to publish the Release
     env:
       VERSION_CODE: ${{ github.run_number }}
-      UPDATE_CHANNEL: dev
+      UPDATE_CHANNEL: prod
     steps:
       - uses: actions/checkout@v4
 
@@ -42,16 +43,16 @@ jobs:
       - name: Upload APK (CI artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: triad-mission-control-v5.11-debug
+          name: triad-mission-control-prod-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      - name: Publish Release (for in-app auto-update)
+      - name: Publish PROD Release (for in-app auto-update, prod channel)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ github.run_number }}" \
+          gh release create "v${{ github.run_number }}-prod" \
             app/build/outputs/apk/debug/app-debug.apk \
-            --title "build ${{ github.run_number }}" \
-            --notes "Automated build ${{ github.run_number }} (${{ github.sha }})." \
-            --latest
+            --title "prod build ${{ github.run_number }}" \
+            --notes "Automated PROD build ${{ github.run_number }} (${{ github.sha }})." \
+            --latest=false
