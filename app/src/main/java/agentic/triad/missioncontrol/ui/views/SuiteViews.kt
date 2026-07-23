@@ -71,8 +71,12 @@ import agentic.triad.missioncontrol.ui.nav.View
 private fun srow(vararg cells: Pair<String, Tone>) = cells.toList()
 
 // ── 21 · Suite Overview — the aggregate profitability answer ─────────────────────────────────────────
+// NOTE: get_bank_dedup is deliberately NOT polled here — the server-side tool currently
+// tool_timeouts at ~30s over the 2.86M-row bank, and nothing on this view renders it yet.
+// Polling it stalled every Overview refresh ~60s (timeout + one retry) for zero UI. Re-add
+// once the server aggregates it in SQL (same fix get_bank_priced needs, see wiring-diagnosis §8).
 private val SUITE_OVERVIEW_TOOLS = listOf(
-    "get_bank_priced", "get_take_rate", "get_pnl_summary", "get_bank_dedup", "get_decision_census",
+    "get_bank_priced", "get_take_rate", "get_pnl_summary", "get_decision_census",
 )
 
 /** One symbol's aggregate row across the two lenses (snapshot seed from the doc's `sec0` table). */

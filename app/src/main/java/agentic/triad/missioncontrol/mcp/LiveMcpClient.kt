@@ -172,6 +172,16 @@ class LiveMcpClient(
 
     companion object {
         private val JSON = Json { ignoreUnknownKeys = true; explicitNulls = false }
-        fun defaultClient(): HttpClient = HttpClient()
+
+        /** Heavy bank reads (get_bank_priced fetches 190k rows server-side) legitimately take
+         *  ~15s; OkHttp's default 10s read timeout was killing them into a silent null. 60s is
+         *  the server's own tool-timeout ceiling, so the client now always outlives the tool. */
+        fun defaultClient(): HttpClient = HttpClient {
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 60_000
+                connectTimeoutMillis = 15_000
+                socketTimeoutMillis = 60_000
+            }
+        }
     }
 }
